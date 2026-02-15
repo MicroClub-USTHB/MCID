@@ -39,8 +39,4 @@ async function bootstrap() {
   );
   console.log(`Swagger documentation: http://localhost:${port}/docs`);
 }
-<<<<<<< imad/serverRegistration
 void bootstrap();
-=======
-void bootstrap();
->>>>>>> main
