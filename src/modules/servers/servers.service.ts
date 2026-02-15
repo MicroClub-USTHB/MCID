@@ -3,6 +3,7 @@ import {
   NotFoundException,
   InternalServerErrorException,
   Logger,
+  HttpException,
 } from '@nestjs/common';
 import { DiscordService } from '../discord/discord.service';
 import { CreateServerDto } from './dto/create-server.dto';
