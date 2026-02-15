@@ -57,6 +57,7 @@ export class ServersService {
       `registerServer failed for guildId=${dto.guildId}`,
       error instanceof Error ? error.stack : String(error),
     );
+    if (error instanceof HttpException) throw error;
     throw new InternalServerErrorException('Failed to register server');
   }
   }
