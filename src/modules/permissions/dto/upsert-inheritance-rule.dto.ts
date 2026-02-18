@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsBoolean, IsIn, IsOptional, IsString } from 'class-validator';
+import { ArrayNotEmpty, IsArray, IsBoolean, IsIn, IsOptional, IsString, ValidateIf } from 'class-validator';
 
 export class UpsertInheritanceRuleDto {
   @ApiProperty({ example: '112233445566778899', description: 'Role ID from main server' })
@@ -20,8 +20,9 @@ export class UpsertInheritanceRuleDto {
     example: ['998877665544332211', '887766554433221100'],
     description: 'Required when targetScope = selected',
   })
-  @IsOptional()
+  @ValidateIf((o) => o.targetScope === 'selected')
   @IsArray()
+  @ArrayNotEmpty()
   @IsString({ each: true })
   targetServerIds?: string[];
 }
