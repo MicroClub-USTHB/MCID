@@ -7,6 +7,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { members } from './member.entity';
 import { permissions } from './permission.entity';
+import { index } from 'drizzle-orm/pg-core';
 
 export const memberGlobalPermissions = pgTable(
   'member_global_permissions',
@@ -21,5 +22,8 @@ export const memberGlobalPermissions = pgTable(
   },
   (t) => ({
     pk: primaryKey({ columns: [t.memberId, t.permissionId] }),
+    permissionIdIdx: index('member_global_permissions_permission_id_idx').on(
+      t.permissionId,
+    ),
   }),
 );

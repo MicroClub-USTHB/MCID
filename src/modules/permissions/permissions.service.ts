@@ -10,7 +10,7 @@ export class PermissionsService {
   async checkPermission(dto: CheckPermissionDto) {
     const memberId = dto.discordId?.trim();
     const serverId = dto.serverId?.trim();
-    const permissionName = dto.permission?.trim();
+    const permissionName = dto.permission?.trim().toUpperCase();
 
     if (!memberId || !serverId || !permissionName) {
       throw new BadRequestException(

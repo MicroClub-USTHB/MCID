@@ -32,7 +32,7 @@ export class PermissionsRepository {
     const [row] = await this.db
       .select({ id: permissions.id })
       .from(permissions)
-      .where(sql`lower(${permissions.name}) = lower(${permissionName})`)
+      .where(eq(permissions.name, permissionName))
       .limit(1);
 
     return row?.id ?? null;
