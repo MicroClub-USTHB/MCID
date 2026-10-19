@@ -125,10 +125,10 @@ function Parent() {
 - **advanced-init-once**: Initialize app once per app load
 - **advanced-use-latest**: `useLatest` for stable callback refs
 
-## MCDI-Specific Guidance
+## MCID-Specific Guidance
 
 1. **Server Components by default** — only add `'use client'` when needed (hooks, event handlers, browser APIs)
 2. **React Query for all API data** — never use raw `fetch` in client components; use the `apiClient` singleton
 3. **Zustand for client-only state** — auth, sidebar, UI preferences
 4. **Dynamic imports for feature pages** — lazy load heavy dashboard features
-5. **No barrel imports from large packages** — import specific Radix components directly
+5. **No barrel imports from large packages** — import specific Base UI components directly (`@base-ui/react/dialog`)

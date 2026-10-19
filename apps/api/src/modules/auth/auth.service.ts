@@ -24,6 +24,15 @@ import { SessionIssuanceService } from './services/session-issuance.service';
 import type { ClientInfo } from '../../common/utils/client-info.util';
 import { toAuthMemberResponse } from './dto/response.dto';
 
+/** A failed authorize check; `redirectUri` is set only once it has been validated. */
+export type AuthorizeFailure = {
+  ok: false;
+  error: string;
+  description: string;
+  redirectUri?: string;
+  state: string;
+};
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -68,28 +77,19 @@ export class AuthService {
   // ─── Authorization request ─────────────────────────────
 
   /**
-   * Handle GET /auth/authorize — validates the client's params, creates
-   * a short-lived auth request in the DB, and returns the request ID
-   * (to be stored in a cookie by the controller).
+   * The checks every authorize entry point shares: the project exists and is
+   * active, the redirect_uri is registered, and the project can reach the
+   * server. Errors only carry a `redirectUri` once it has been validated, so
+   * the caller never redirects to an address it cannot trust.
    */
-  async authorize(
+  private async validateClientRequest(
     clientId: string,
     redirectUri: string,
     serverId: string,
     state: string,
-  ): Promise<
-    | { ok: true; requestId: string }
-    | {
-        ok: false;
-        error: string;
-        description: string;
-        redirectUri?: string;
-        state: string;
-      }
-  > {
+  ): Promise<{ ok: true; projectId: string } | AuthorizeFailure> {
     const project = await this.projectsRepository.findOne(clientId);
     if (!project || !project.isActive) {
-      // Can't trust redirect_uri if the project is unknown or inactive
       return {
         ok: false,
         error: 'invalid_client',
@@ -103,7 +103,6 @@ export class AuthService {
       redirectUri,
     );
     if (!isAllowed) {
-      // Can't redirect to an unvalidated URI
       return {
         ok: false,
         error: 'invalid_redirect_uri',
@@ -112,7 +111,6 @@ export class AuthService {
       };
     }
 
-    // redirect_uri is validated — errors from here can safely redirect back
     const hasAccess = await this.projectsRepository.hasServerAccess(
       project.id,
       serverId,
@@ -127,11 +125,60 @@ export class AuthService {
       };
     }
 
+    return { ok: true, projectId: project.id };
+  }
+
+  /**
+   * `prompt=none` without an SSO session: validate the request like any other
+   * authorize call, then answer `login_required` to the registered
+   * redirect_uri. Never creates an auth request and never reaches Discord.
+   */
+  async silentLoginRequired(
+    clientId: string,
+    redirectUri: string,
+    serverId: string,
+    state: string,
+  ): Promise<AuthorizeFailure> {
+    const checked = await this.validateClientRequest(
+      clientId,
+      redirectUri,
+      serverId,
+      state,
+    );
+    if (!checked.ok) return checked;
+    return {
+      ok: false,
+      error: 'login_required',
+      description: 'No active MCID session',
+      redirectUri,
+      state,
+    };
+  }
+
+  /**
+   * Handle GET /auth/authorize — validates the client's params, creates
+   * a short-lived auth request in the DB, and returns the request ID
+   * (to be stored in a cookie by the controller).
+   */
+  async authorize(
+    clientId: string,
+    redirectUri: string,
+    serverId: string,
+    state: string,
+  ): Promise<{ ok: true; requestId: string } | AuthorizeFailure> {
+    const checked = await this.validateClientRequest(
+      clientId,
+      redirectUri,
+      serverId,
+      state,
+    );
+    if (!checked.ok) return checked;
+
     const expiresAt = new Date();
     expiresAt.setSeconds(expiresAt.getSeconds() + this.authRequestTtlSec);
 
     const authRequest = await this.authRequestRepository.create({
-      clientId: project.id,
+      clientId: checked.projectId,
       redirectUri,
       serverId,
       state,
@@ -161,7 +208,7 @@ export class AuthService {
 
   /**
    * Build the Discord OAuth URL with project context encoded in state.
-   * Called when the user clicks "Login with Discord" on the MCDI page.
+   * Called when the user clicks "Login with Discord" on the MCID page.
    * State is stored in DB for one-time use with 10-minute expiration.
    */
   async buildDiscordLoginUrl(
@@ -258,7 +305,7 @@ export class AuthService {
 
   /**
    * SSO-aware authorize: the caller already has a valid global SSO session
-   * (`mcdi_sso` cookie → memberId), so we skip the Discord OAuth bounce and
+   * (`mcid_sso` cookie → memberId), so we skip the Discord OAuth bounce and
    * jump straight to the project-access checks + callback-code issuance.
    *
    * Reuses the same validations as `authorize()` for the project/redirect/
@@ -272,55 +319,17 @@ export class AuthService {
     serverId: string,
     clientState: string,
     memberRoleIds: string[],
-  ): Promise<
-    | { ok: true; url: string }
-    | {
-        ok: false;
-        error: string;
-        description: string;
-        redirectUri?: string;
-        state: string;
-      }
-  > {
-    const project = await this.projectsRepository.findOne(clientId);
-    if (!project || !project.isActive) {
-      return {
-        ok: false,
-        error: 'invalid_client',
-        description: 'Unknown or inactive client_id',
-        state: clientState,
-      };
-    }
-
-    const isAllowed = await this.projectsRepository.isRedirectUriAllowed(
-      project.id,
+  ): Promise<{ ok: true; url: string } | AuthorizeFailure> {
+    const checked = await this.validateClientRequest(
+      clientId,
       redirectUri,
-    );
-    if (!isAllowed) {
-      return {
-        ok: false,
-        error: 'invalid_redirect_uri',
-        description: 'Redirect URI not allowed for this project',
-        state: clientState,
-      };
-    }
-
-    const hasAccess = await this.projectsRepository.hasServerAccess(
-      project.id,
       serverId,
+      clientState,
     );
-    if (!hasAccess) {
-      return {
-        ok: false,
-        error: 'access_denied',
-        description: 'Project does not have access to this server',
-        redirectUri,
-        state: clientState,
-      };
-    }
+    if (!checked.ok) return checked;
 
     const accessResult = await this.checkProjectRoleAccess(
-      project.id,
+      checked.projectId,
       memberRoleIds,
       redirectUri,
       clientState,
@@ -337,7 +346,7 @@ export class AuthService {
     }
 
     const { url } = await this.issueCallbackCode(
-      project.id,
+      checked.projectId,
       redirectUri,
       memberId,
       serverId,

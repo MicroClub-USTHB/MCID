@@ -4,7 +4,10 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus } from 'lucide-react';
 
-import { ApiKeyRevealPanel } from '@/features/projects/components/ApiKeyRevealModal';
+import {
+  ApiKeyRevealPanel,
+  type InboundWebhookRevealInfo,
+} from '@/features/projects/components/ApiKeyRevealModal';
 import { ProjectForm } from '@/features/projects/components/ProjectForm';
 import { RedirectUriStep } from '@/features/projects/components/RedirectUriStep';
 import { toCreateProjectDto } from '@/features/projects/api/mappers';
@@ -13,14 +16,15 @@ import {
   useUpdateRedirectUriMutation,
 } from '@/features/projects/api/mutations';
 import type { ProjectFormValues } from '@/features/projects/types';
-import { Button } from '@/shared/components/ui/button';
+import { McAlert } from '@/shared/components/ui/mc-alert';
+import { McButton } from '@/shared/components/ui/mc-button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/shared/components/ui/dialog';
+  McDialog,
+  McDialogContent,
+  McDialogDescription,
+  McDialogHeader,
+  McDialogTitle,
+} from '@/shared/components/ui/mc-dialog';
 
 type WizardStep = 'form' | 'key' | 'redirect-uri';
 
@@ -46,8 +50,9 @@ function CreateProjectDialog({
   const [step, setStep] = useState<WizardStep>('form');
   const [projectId, setProjectId] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState<string | null>(null);
+  const [createdWebhook, setCreatedWebhook] = useState<InboundWebhookRevealInfo | null>(null);
 
-  // Radix unmounts the dialog's *content* on close, but this component stays
+  // The dialog unmounts the dialog's *content* on close, but this component stays
   // mounted, so reset the flow from a render-phase prop diff (no effect) to
   // keep each open a fresh wizard.
   const [wasOpen, setWasOpen] = useState(open);
@@ -57,6 +62,7 @@ function CreateProjectDialog({
       setStep('form');
       setProjectId(null);
       setApiKey(null);
+      setCreatedWebhook(null);
     }
   }
 
@@ -65,6 +71,15 @@ function CreateProjectDialog({
       onSuccess: (response) => {
         setApiKey(response.data.apiKey);
         setProjectId(response.data.project.id);
+        if (response.data.inboundWebhook) {
+          setCreatedWebhook({
+            signingSecret: response.data.inboundWebhook.signingSecret,
+            submitUrl: response.data.inboundWebhook.submitUrl,
+            webhookName: response.data.inboundWebhook.webhook.name,
+          });
+        } else {
+          setCreatedWebhook(null);
+        }
         setStep('key');
       },
     });
@@ -87,33 +102,35 @@ function CreateProjectDialog({
   const redirectError = getMutationError(redirectMutation);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
+    <McDialog open={open} onOpenChange={onOpenChange}>
+      <McDialogContent className="max-h-[90vh] overflow-y-auto sm:w-[min(32rem,calc(100%-2rem))]">
+        <McDialogHeader>
           {step === 'form' && (
             <>
-              <DialogTitle>Create project</DialogTitle>
-              <DialogDescription>
+              <McDialogTitle>Create project</McDialogTitle>
+              <McDialogDescription>
                 Step 1 of 2 — create the project first, then set its redirect URI.
-              </DialogDescription>
+              </McDialogDescription>
             </>
           )}
           {step === 'key' && (
             <>
-              <DialogTitle>API key created</DialogTitle>
-              <DialogDescription>You&apos;ll set the redirect URI next.</DialogDescription>
+              <McDialogTitle>
+                {createdWebhook ? 'Credentials generated' : 'API key created'}
+              </McDialogTitle>
+              <McDialogDescription>You&apos;ll set the redirect URI next.</McDialogDescription>
             </>
           )}
           {step === 'redirect-uri' && (
             <>
-              <DialogTitle>Set redirect URI</DialogTitle>
-              <DialogDescription>Step 2 of 2 — done after this.</DialogDescription>
+              <McDialogTitle>Set redirect URI</McDialogTitle>
+              <McDialogDescription>Step 2 of 2 — done after this.</McDialogDescription>
             </>
           )}
-        </DialogHeader>
+        </McDialogHeader>
 
         {createError && step === 'form' && (
-          <p className="rounded-md bg-error/12 p-3 text-body text-error">{createError}</p>
+          <McAlert variant="destructive" title={createError} className="w-full max-w-none" />
         )}
 
         {step === 'form' && (
@@ -128,6 +145,7 @@ function CreateProjectDialog({
           <ApiKeyRevealPanel
             apiKey={apiKey}
             projectName="the project"
+            inboundWebhook={createdWebhook}
             onContinue={() => setStep('redirect-uri')}
           />
         )}
@@ -135,7 +153,7 @@ function CreateProjectDialog({
         {step === 'redirect-uri' && projectId && (
           <>
             {redirectError && (
-              <p className="rounded-md bg-error/12 p-3 text-body text-error">{redirectError}</p>
+              <McAlert variant="destructive" title={redirectError} className="w-full max-w-none" />
             )}
             <RedirectUriStep
               projectId={projectId}
@@ -144,8 +162,8 @@ function CreateProjectDialog({
             />
           </>
         )}
-      </DialogContent>
-    </Dialog>
+      </McDialogContent>
+    </McDialog>
   );
 }
 
@@ -154,10 +172,15 @@ function CreateProjectButton({ className }: { className?: string }) {
 
   return (
     <>
-      <Button type="button" onClick={() => setOpen(true)} className={className}>
-        <Plus aria-hidden="true" />
+      <McButton
+        type="button"
+        icon="leading"
+        iconDefinition={<Plus aria-hidden="true" />}
+        onClick={() => setOpen(true)}
+        className={className}
+      >
         Create project
-      </Button>
+      </McButton>
       <CreateProjectDialog open={open} onOpenChange={setOpen} />
     </>
   );

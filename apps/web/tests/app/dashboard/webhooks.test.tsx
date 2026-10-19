@@ -7,7 +7,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../setup';
 import { WebhooksView } from '@/app/dashboard/projects/[id]/webhooks/webhooks-view';
-import { useToastStore } from '@/shared/stores/toast';
 
 const API_URL = 'http://localhost:3000/api';
 
@@ -18,7 +17,7 @@ function projectDto(id: string, name: string) {
     description: null,
     isInternal: false,
     webhookUrl: null,
-    apiKeyPrefix: 'mcdi_live_abc',
+    apiKeyPrefix: 'mcid_live_abc',
     apiKeyCreatedAt: '2026-08-01T10:00:00.000Z',
     apiKeyLastUsedAt: null,
     isActive: true,
@@ -34,7 +33,7 @@ function webhookDto(id: string, name: string, usageCount: number) {
     channelId: '234567890123456789',
     channelName: 'deployments',
     serverId: '123456789012345678',
-    serverName: 'MicroClub',
+    serverName: 'Micro Club',
     createdAt: '2026-08-01T10:00:00.000Z',
     usageCount,
     lastUsedAt: null,
@@ -52,9 +51,7 @@ function withProjects(...projects: ReturnType<typeof projectDto>[]) {
   server.use(http.get(`${API_URL}/admin/projects`, () => HttpResponse.json(projects)));
 }
 
-afterEach(() => {
-  useToastStore.setState({ toasts: [] });
-});
+afterEach(() => {});
 
 describe('Webhooks page', () => {
   it("lists the project's webhooks and details the first one", async () => {
@@ -144,7 +141,7 @@ describe('Webhooks page', () => {
     await screen.findByRole('heading', { name: 'Deploys' });
 
     await userEvent.click(screen.getByRole('button', { name: 'Delete webhook' }));
-    await screen.findByRole('dialog');
+    await screen.findByRole('alertdialog');
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
     await waitFor(() =>

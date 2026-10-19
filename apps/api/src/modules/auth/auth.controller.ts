@@ -15,7 +15,7 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
-import { ADMIN_SESSION_COOKIE } from '@mcdi/contracts';
+import { ADMIN_SESSION_COOKIE } from '@mcid/contracts';
 import { Throttle } from '@nestjs/throttler';
 import {
   ApiTags,
@@ -33,7 +33,7 @@ import {
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
-import { AuthService } from './auth.service';
+import { AuthService, type AuthorizeFailure } from './auth.service';
 import { AdminAuthService } from './services/admin-auth.service';
 import { SsoService } from './services/sso.service';
 import { SessionLifecycleService } from './services/session-lifecycle.service';
@@ -91,7 +91,7 @@ export class AuthController {
   ) {
     this.apiPrefix = this.configService.get<string>('app.apiPrefix') || 'api';
     this.ssoCookieName =
-      this.configService.get<string>('app.ssoCookieName') || 'mcdi_sso';
+      this.configService.get<string>('app.ssoCookieName') || 'mcid_sso';
     this.ssoCookieDomain = this.configService.get<string | undefined>(
       'app.ssoCookieDomain',
     );
@@ -128,8 +128,28 @@ export class AuthController {
     ];
   }
 
+  /**
+   * Answer a failed authorize check: redirect the error back to the project
+   * when its redirect_uri was validated, otherwise a JSON 400 (there is
+   * nobody safe to send the browser to).
+   */
+  private sendAuthorizeFailure(res: Response, result: AuthorizeFailure) {
+    if (result.redirectUri) {
+      const url = new URL(result.redirectUri);
+      url.searchParams.set('error', result.error);
+      url.searchParams.set('error_description', result.description);
+      url.searchParams.set('state', result.state);
+      return res.redirect(url.toString());
+    }
+    return res.status(HttpStatus.BAD_REQUEST).json({
+      statusCode: 400,
+      error: result.error,
+      message: result.description,
+    });
+  }
+
   // ─── Authorization request ─────────────────────────────
-  // Platform redirects user here with query params. MCDI validates, stores
+  // Platform redirects user here with query params. MCID validates, stores
   // the request in DB, sets a cookie, and redirects to Discord OAuth.
 
   @Get('authorize')
@@ -138,13 +158,13 @@ export class AuthController {
     summary: 'Initiate authorization request (legacy / force re-auth)',
     description:
       'Always bounces through Discord OAuth, even if the browser already ' +
-      'holds a valid `mcdi_sso` cookie. Use this when you need fresh ' +
+      'holds a valid `mcid_sso` cookie. Use this when you need fresh ' +
       'Discord consent (step-up auth, admin operations) or to keep a ' +
       'pre-SSO integration unchanged. For the default login button, prefer ' +
       '`GET /auth/sso/authorize` — it skips the Discord screen for ' +
       'returning users.\n\n' +
       'The platform redirects the user here with `client_id`, ' +
-      '`redirect_uri`, `server_id`, and `state` as query parameters. MCDI ' +
+      '`redirect_uri`, `server_id`, and `state` as query parameters. MCID ' +
       'validates the params, creates a short-lived auth request in the DB, ' +
       'sets an httpOnly cookie with the request ID, and redirects to ' +
       'Discord OAuth.',
@@ -185,7 +205,7 @@ export class AuthController {
       });
     }
 
-    res.cookie('mcdi_auth_req', result.requestId, {
+    res.cookie('mcid_auth_req', result.requestId, {
       httpOnly: true,
       sameSite: 'lax',
       secure: this.configService.get<string>('app.nodeEnv') === 'production',
@@ -202,7 +222,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Redirect to Discord OAuth',
     description:
-      'Reads the auth request ID from the httpOnly `mcdi_auth_req` cookie ' +
+      'Reads the auth request ID from the httpOnly `mcid_auth_req` cookie ' +
       'set by GET /auth/authorize. Resolves the request, marks it as used, ' +
       'and redirects to Discord OAuth.',
   })
@@ -213,7 +233,7 @@ export class AuthController {
   async startDiscordAuth(@Req() req: Request, @Res() res: Response) {
     const requestId: string | undefined = (
       req.cookies as Record<string, string>
-    )?.mcdi_auth_req;
+    )?.mcid_auth_req;
 
     if (!requestId) {
       // No cookie — no way to know where to redirect
@@ -227,7 +247,7 @@ export class AuthController {
     // Atomic consume: marks as used and returns the row in one query.
     // If two requests race, only one gets the row back.
     const authRequest = await this.authService.consumeAuthRequest(requestId);
-    res.clearCookie('mcdi_auth_req');
+    res.clearCookie('mcid_auth_req');
 
     if (!authRequest) {
       // Consume failed — look up the original request for redirect info
@@ -261,7 +281,7 @@ export class AuthController {
 
   // ─── Discord callback ───────────────────────────────────
   // Discord redirects here after user authenticates.
-  // MCDI processes everything and redirects back to the platform with a callback code.
+  // MCID processes everything and redirects back to the platform with a callback code.
 
   @Get('discord/callback')
   @ApiExcludeEndpoint()
@@ -269,7 +289,7 @@ export class AuthController {
     summary: 'Discord OAuth callback (internal)',
     description:
       'Discord redirects here after user authorization. This endpoint is not called directly by platforms.\n\n' +
-      'MCDI processes the callback:\n' +
+      'MCID processes the callback:\n' +
       '1. Exchanges the Discord code for an access token\n' +
       '2. Fetches user profile & email\n' +
       '3. Upserts member in the database\n' +
@@ -439,7 +459,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Invalidate session token (project-scoped)',
     description:
-      'External platforms call this when their user logs out to invalidate the MCDI session token.\n\n' +
+      'External platforms call this when their user logs out to invalidate the MCID session token.\n\n' +
       'Requires a valid `X-API-Key` header. Only sessions belonging to the calling ' +
       'project are deleted — tokens from other projects are ignored.',
   })
@@ -480,7 +500,7 @@ export class AuthController {
 
   // ─── SSO (global browser session, cookie-based) ──────────────
   //
-  // GET  /auth/sso/session    → who is logged in via the mcdi_sso cookie?
+  // GET  /auth/sso/session    → who is logged in via the mcid_sso cookie?
   // GET  /auth/sso/authorize  → SSO-aware authorize; skips Discord when valid
   // POST /auth/sso/logout     → destroy SSO + every project session
   // GET  /auth/sso/sessions   → list project sessions under this SSO cookie
@@ -490,7 +510,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Get current SSO session status',
     description:
-      'Reads the `mcdi_sso` httpOnly cookie set after Discord login and ' +
+      'Reads the `mcid_sso` httpOnly cookie set after Discord login and ' +
       'returns the authenticated member. Returns 401 with ' +
       '`{ authenticated: false }` when the cookie is missing or expired.',
   })
@@ -528,20 +548,27 @@ export class AuthController {
   @ApiOperation({
     summary: 'Initiate authorization request (SSO-aware — recommended)',
     description:
-      'Recommended default for new "Login with MicroClub" buttons. Same ' +
+      'Recommended default for new "Login with Micro Club" buttons. Same ' +
       'query contract as `GET /auth/authorize`. If the caller has a valid ' +
-      '`mcdi_sso` cookie, the Discord OAuth bounce is skipped and the ' +
+      '`mcid_sso` cookie, the Discord OAuth bounce is skipped and the ' +
       "browser is redirected straight to the platform's redirect_uri with " +
       '`?code=...&state=...`. Otherwise this falls back to the existing ' +
       '`/auth/authorize` flow (Discord OAuth).\n\n' +
       'Use `GET /auth/authorize` instead when you need to force a fresh ' +
-      'Discord consent.',
+      'Discord consent.\n\n' +
+      'Add `prompt=none` for a silent login check from a project backend: ' +
+      'with a valid cookie it behaves as above, and without one it ' +
+      'redirects back to `redirect_uri` with `error=login_required` ' +
+      'instead of going to Discord. `client_id`, `redirect_uri` and ' +
+      '`server_id` are validated first, so an untrusted `redirect_uri` ' +
+      'still gets a 400 and never a redirect.',
   })
   @ApiResponse({
     status: 302,
     description:
-      'Redirects either to Discord OAuth (no SSO yet) or back to the ' +
-      'platform with a fresh callback code (SSO hit).',
+      'Redirects to Discord OAuth (no SSO yet), back to the platform with ' +
+      'a fresh callback code (SSO hit), or with `prompt=none` and no SSO, ' +
+      'back to the platform with `error=login_required`.',
   })
   async ssoAuthorize(
     @Query() dto: AuthorizeQueryDto,
@@ -572,24 +599,27 @@ export class AuthController {
 
       // SSO is valid but the project / server / role check failed. Bubble
       // the error back to the platform if we trust the redirect_uri.
-      if (result.redirectUri) {
-        const url = new URL(result.redirectUri);
-        url.searchParams.set('error', result.error);
-        url.searchParams.set('error_description', result.description);
-        url.searchParams.set('state', result.state);
-        return res.redirect(url.toString());
-      }
-      return res.status(HttpStatus.BAD_REQUEST).json({
-        statusCode: 400,
-        error: result.error,
-        message: result.description,
-      });
+      return this.sendAuthorizeFailure(res, result);
     }
 
-    // No SSO yet — clear any stale cookie and fall through to the existing
-    // /auth/authorize flow (Discord OAuth bounce). Keeps the SSO endpoint
-    // a drop-in replacement.
     if (ssoToken) this.clearSsoCookie(res);
+
+    // Silent check: tell the project nobody is signed in instead of sending
+    // the browser to Discord.
+    if (dto.prompt === 'none') {
+      return this.sendAuthorizeFailure(
+        res,
+        await this.authService.silentLoginRequired(
+          dto.client_id,
+          dto.redirect_uri,
+          dto.server_id,
+          dto.state,
+        ),
+      );
+    }
+
+    // No SSO yet: fall through to the existing /auth/authorize flow (Discord
+    // OAuth bounce). Keeps the SSO endpoint a drop-in replacement.
     return this.authorize(dto, res);
   }
 
@@ -599,7 +629,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Destroy the global SSO session (log out everywhere)',
     description:
-      'Reads the `mcdi_sso` httpOnly cookie, destroys the SSO session, ' +
+      'Reads the `mcid_sso` httpOnly cookie, destroys the SSO session, ' +
       'cascades to every project session for the same member, and clears ' +
       'the cookie. Idempotent — succeeds even if the cookie is missing.',
   })
@@ -623,7 +653,7 @@ export class AuthController {
     summary: 'List active project sessions under the current SSO session',
     description:
       'Returns one entry per active (non-expired) project session for the ' +
-      'member identified by the `mcdi_sso` cookie. Token material is never ' +
+      'member identified by the `mcid_sso` cookie. Token material is never ' +
       'returned. Returns 401 when the SSO cookie is missing or expired.',
   })
   @ApiOkResponse({ type: SsoProjectSessionListDto })
@@ -824,9 +854,9 @@ export class AuthController {
       'Returns a Discord authorization URL. ' +
       'The admin opens the URL, authenticates with Discord, ' +
       'and is redirected to the admin callback endpoint.\n\n' +
-      'A CLI (m-forge) can instead receive the result itself: pass a loopback ' +
+      'A CLI (mcid-cli) can instead receive the result itself: pass a loopback ' +
       '`redirect_uri` plus a PKCE S256 `code_challenge` (RFC 8252 / RFC 7636). ' +
-      'After Discord, MCDI redirects to that URL with `?code=&state=` ' +
+      'After Discord, MCID redirects to that URL with `?code=&state=` ' +
       '(or `?error=&state=`), and the CLI exchanges the code at ' +
       '`POST /auth/admin/token`.',
   })
@@ -865,8 +895,8 @@ export class AuthController {
   @ApiOperation({
     summary: 'Exchange a CLI login code for an admin session',
     description:
-      'Second half of the CLI admin login (m-forge). Exchanges the one-time code ' +
-      'MCDI redirected to the CLI with, plus the PKCE `codeVerifier` whose S256 ' +
+      'Second half of the CLI admin login (mcid-cli). Exchanges the one-time code ' +
+      'MCID redirected to the CLI with, plus the PKCE `codeVerifier` whose S256 ' +
       'challenge started the login, for a 24-hour admin session token. A code ' +
       'works once and expires quickly; every failure returns the same 401.',
   })

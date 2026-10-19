@@ -13,6 +13,8 @@ import { SessionGuard } from '../../common/guards/session.guard';
 
 const mockAuthService = {
   authorize: jest.fn(),
+  authorizeWithSso: jest.fn(),
+  silentLoginRequired: jest.fn(),
   consumeAuthRequest: jest.fn(),
   findAuthRequestById: jest.fn(),
   buildDiscordLoginUrl: jest.fn(),
@@ -80,7 +82,7 @@ describe('AuthController', () => {
           useValue: {
             get: (key: string) => {
               if (key === 'app.apiPrefix') return 'api';
-              if (key === 'app.ssoCookieName') return 'mcdi_sso';
+              if (key === 'app.ssoCookieName') return 'mcid_sso';
               if (key === 'app.ssoCookieDomain') return undefined;
               if (key === 'app.ssoTtlSec') return 60;
               return 'development';
@@ -120,7 +122,7 @@ describe('AuthController', () => {
       };
       await controller.authorize(dto, res as any);
       expect(res.cookie).toHaveBeenCalledWith(
-        'mcdi_auth_req',
+        'mcid_auth_req',
         'req-uuid-123',
         expect.objectContaining({ httpOnly: true, sameSite: 'lax' }),
       );
@@ -173,6 +175,117 @@ describe('AuthController', () => {
     });
   });
 
+  // ── ssoAuthorize ─────────────────────────────────────────────────────
+
+  describe('ssoAuthorize', () => {
+    const dto = {
+      client_id: 'project-uuid',
+      redirect_uri: 'http://localhost/callback',
+      server_id: '123456789',
+      state: 'csrf-token',
+    };
+    const req = (cookie?: string) =>
+      ({ cookies: cookie ? { mcid_sso: cookie } : {} }) as any;
+
+    it('with prompt=none and no SSO cookie redirects login_required and never starts Discord', async () => {
+      mockSsoService.resolveSession.mockResolvedValue(null);
+      mockAuthService.silentLoginRequired.mockResolvedValue({
+        ok: false,
+        error: 'login_required',
+        description: 'No active MCID session',
+        redirectUri: 'http://localhost/callback',
+        state: 'csrf-token',
+      });
+      const res = mockRes();
+      await controller.ssoAuthorize(
+        { ...dto, prompt: 'none' },
+        req(),
+        res as any,
+      );
+      expect(res.redirect).toHaveBeenCalledWith(
+        expect.stringContaining('error=login_required'),
+      );
+      expect(res.redirect).toHaveBeenCalledWith(
+        expect.stringContaining('state=csrf-token'),
+      );
+      expect(mockAuthService.authorize).not.toHaveBeenCalled();
+      expect(res.cookie).not.toHaveBeenCalled();
+    });
+
+    it('with prompt=none clears a stale SSO cookie', async () => {
+      mockSsoService.resolveSession.mockResolvedValue(null);
+      mockAuthService.silentLoginRequired.mockResolvedValue({
+        ok: false,
+        error: 'login_required',
+        description: 'No active MCID session',
+        redirectUri: 'http://localhost/callback',
+        state: 'csrf-token',
+      });
+      const res = mockRes();
+      await controller.ssoAuthorize(
+        { ...dto, prompt: 'none' },
+        req('stale'),
+        res as any,
+      );
+      expect(res.clearCookie).toHaveBeenCalledWith(
+        'mcid_sso',
+        expect.any(Object),
+      );
+    });
+
+    it('with prompt=none and an untrusted redirect_uri answers JSON 400, not a redirect', async () => {
+      mockSsoService.resolveSession.mockResolvedValue(null);
+      mockAuthService.silentLoginRequired.mockResolvedValue({
+        ok: false,
+        error: 'invalid_redirect_uri',
+        description: 'Redirect URI not allowed for this project',
+        state: 'csrf-token',
+      });
+      const res = mockRes();
+      await controller.ssoAuthorize(
+        { ...dto, prompt: 'none' },
+        req(),
+        res as any,
+      );
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.redirect).not.toHaveBeenCalled();
+    });
+
+    it('with prompt=none and a valid SSO cookie still redirects with the code', async () => {
+      mockSsoService.resolveSession.mockResolvedValue({
+        member: { id: 'm1' },
+        ssoSession: {},
+      });
+      mockSsoService.getMemberRoleIdsInServer.mockResolvedValue([]);
+      mockAuthService.authorizeWithSso.mockResolvedValue({
+        ok: true,
+        url: 'http://localhost/callback?code=abc&state=csrf-token',
+      });
+      const res = mockRes();
+      await controller.ssoAuthorize(
+        { ...dto, prompt: 'none' },
+        req('good'),
+        res as any,
+      );
+      expect(res.redirect).toHaveBeenCalledWith(
+        'http://localhost/callback?code=abc&state=csrf-token',
+      );
+      expect(mockAuthService.silentLoginRequired).not.toHaveBeenCalled();
+    });
+
+    it('without prompt, no SSO cookie falls through to the Discord flow as before', async () => {
+      mockSsoService.resolveSession.mockResolvedValue(null);
+      mockAuthService.authorize.mockResolvedValue({
+        ok: true,
+        requestId: 'req-1',
+      });
+      const res = mockRes();
+      await controller.ssoAuthorize(dto, req(), res as any);
+      expect(res.redirect).toHaveBeenCalledWith('/api/auth/discord');
+      expect(mockAuthService.silentLoginRequired).not.toHaveBeenCalled();
+    });
+  });
+
   // ── startDiscordAuth ─────────────────────────────────────────────────
 
   describe('startDiscordAuth', () => {
@@ -186,13 +299,13 @@ describe('AuthController', () => {
       mockAuthService.buildDiscordLoginUrl.mockResolvedValue({
         url: 'https://discord.com/oauth2/authorize?...',
       });
-      const req = { cookies: { mcdi_auth_req: 'req-uuid-123' } };
+      const req = { cookies: { mcid_auth_req: 'req-uuid-123' } };
       const res = mockRes();
       await controller.startDiscordAuth(req as any, res as any);
       expect(mockAuthService.consumeAuthRequest).toHaveBeenCalledWith(
         'req-uuid-123',
       );
-      expect(res.clearCookie).toHaveBeenCalledWith('mcdi_auth_req');
+      expect(res.clearCookie).toHaveBeenCalledWith('mcid_auth_req');
       expect(res.redirect).toHaveBeenCalledWith(
         'https://discord.com/oauth2/authorize?...',
       );
@@ -216,7 +329,7 @@ describe('AuthController', () => {
         redirectUri: 'http://localhost/callback',
         state: 'csrf-abc',
       });
-      const req = { cookies: { mcdi_auth_req: 'bad-uuid' } };
+      const req = { cookies: { mcid_auth_req: 'bad-uuid' } };
       const res = mockRes();
       await controller.startDiscordAuth(req as any, res as any);
       expect(res.redirect).toHaveBeenCalledWith(
@@ -225,13 +338,13 @@ describe('AuthController', () => {
       expect(res.redirect).toHaveBeenCalledWith(
         expect.stringContaining('state=csrf-abc'),
       );
-      expect(res.clearCookie).toHaveBeenCalledWith('mcdi_auth_req');
+      expect(res.clearCookie).toHaveBeenCalledWith('mcid_auth_req');
     });
 
     it('returns HTML error page when auth request is not found at all', async () => {
       mockAuthService.consumeAuthRequest.mockResolvedValue(null);
       mockAuthService.findAuthRequestById.mockResolvedValue(null);
-      const req = { cookies: { mcdi_auth_req: 'gone-uuid' } };
+      const req = { cookies: { mcid_auth_req: 'gone-uuid' } };
       const res = mockRes();
       await controller.startDiscordAuth(req as any, res as any);
       expect(res.status).toHaveBeenCalledWith(400);
@@ -251,7 +364,7 @@ describe('AuthController', () => {
       mockAuthService.buildDiscordLoginUrl.mockResolvedValue({
         url: 'https://discord.com/oauth2/authorize?state=xyz',
       });
-      const req = { cookies: { mcdi_auth_req: 'req-uuid' } };
+      const req = { cookies: { mcid_auth_req: 'req-uuid' } };
       const res = mockRes();
       await controller.startDiscordAuth(req as any, res as any);
       expect(mockAuthService.buildDiscordLoginUrl).toHaveBeenCalledWith(
@@ -325,7 +438,7 @@ describe('AuthController', () => {
     expect(res.redirect).toHaveBeenCalledWith('development');
   });
 
-  // ── admin CLI login (m-forge) ──────────────────────────────────────
+  // ── admin CLI login (mcid-cli) ──────────────────────────────────────
 
   describe('admin CLI login', () => {
     const CLI_TARGET =

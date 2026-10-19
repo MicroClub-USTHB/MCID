@@ -15,19 +15,19 @@ import {
   ProjectTable,
   type ProjectAction,
 } from '@/features/projects/components';
-import { Button } from '@/shared/components/ui/button';
 import { ConfirmDialog } from '@/shared/components/ui/confirm-dialog';
 import { EmptyState } from '@/shared/components/ui/empty-state';
-import { SearchInput } from '@/shared/components/ui/input';
-import { useCan } from '@/shared/lib/use-access';
+import { McButton } from '@/shared/components/ui/mc-button';
+import { McInput } from '@/shared/components/ui/mc-input';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/shared/components/ui/select';
-import { FolderKanban } from 'lucide-react';
+  McSelect,
+  McSelectContent,
+  McSelectItem,
+  McSelectTrigger,
+  McSelectValue,
+} from '@/shared/components/ui/mc-select';
+import { useCan } from '@/shared/lib/use-access';
+import { FolderKanban, Search } from 'lucide-react';
 
 type StatusFilter = 'all' | 'active' | 'inactive';
 
@@ -37,6 +37,12 @@ interface PendingAction {
 }
 
 const PAGE_SIZE = 10;
+
+const STATUS_ITEMS: { value: StatusFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Deactivated' },
+];
 
 function ProjectsView() {
   const router = useRouter();
@@ -71,7 +77,7 @@ function ProjectsView() {
     <EmptyState
       icon={<FolderKanban className="size-6" aria-hidden="true" />}
       title="No projects"
-      description="Create your first project to connect an application to MCDI."
+      description="Create your first project to connect an application to MCID."
       action={canWrite ? <CreateProjectButton /> : undefined}
     />
   );
@@ -101,16 +107,18 @@ function ProjectsView() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-hero">Projects</h1>
-          <p className="mt-1 text-body text-text-muted">
-            Applications that integrate with MCDI and what they can access.
+          <h1 className="header-xs font-bold text-foreground">Projects</h1>
+          <p className="mt-1 paragraph-sm text-muted-foreground">
+            Applications that integrate with MCID and what they can access.
           </p>
         </div>
         {canWrite ? <CreateProjectButton /> : null}
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <SearchInput
+        <McInput
+          type="search"
+          addonStart={<Search aria-hidden="true" />}
           placeholder="Search projects…"
           aria-label="Search projects"
           value={search}
@@ -118,37 +126,41 @@ function ProjectsView() {
             setSearch(event.target.value);
             setPageIndex(0);
           }}
-          className="max-w-xs"
+          className="w-full max-w-xs"
         />
-        <Select
+        <McSelect
+          items={STATUS_ITEMS}
           value={statusFilter}
           onValueChange={(value) => {
-            setStatusFilter(value as StatusFilter);
+            if (!value) return;
+            setStatusFilter(value);
             setPageIndex(0);
           }}
         >
-          <SelectTrigger aria-label="Filter by status" className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Deactivated</SelectItem>
-          </SelectContent>
-        </Select>
+          <McSelectTrigger aria-label="Filter by status" className="w-40">
+            <McSelectValue />
+          </McSelectTrigger>
+          <McSelectContent className="h-auto max-h-80 w-(--anchor-width)">
+            {STATUS_ITEMS.map((item) => (
+              <McSelectItem key={item.value} value={item.value}>
+                {item.label}
+              </McSelectItem>
+            ))}
+          </McSelectContent>
+        </McSelect>
       </div>
 
       {projectsQuery.isError && (
         <div className="flex flex-col gap-3 rounded-lg border border-border p-6">
-          <p className="text-body text-error">Failed to load projects.</p>
-          <Button
+          <p className="paragraph-sm text-error">Failed to load projects.</p>
+          <McButton
             type="button"
             variant="secondary"
             size="sm"
             onClick={() => void projectsQuery.refetch()}
           >
             Retry
-          </Button>
+          </McButton>
         </div>
       )}
 
