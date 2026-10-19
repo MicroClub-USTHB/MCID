@@ -4,6 +4,8 @@ import { MemberRepository } from '../../members/member.repository';
 import { SyncLogService } from './sync-log.service';
 import { PermissionCacheService } from '../../permissions/permission-cache.service';
 import { ServersRepository } from '../../servers/servers.repository';
+import { AdminAccessService } from '../../admin-access/admin-access.service';
+import { AuditService } from '../../audit/audit.service';
 
 const mockMemberRepo = {
   upsertMember: jest.fn(),
@@ -29,6 +31,29 @@ const mockServersRepo = {
   // null to exercise the "unregistered guild" skip path.
   findById: jest.fn().mockResolvedValue({ id: 'guild-1' }),
 };
+
+const mockAdminAccess = {
+  isRootRole: jest.fn((id: string) => id === 'root-1'),
+};
+
+const mockAudit = { logAction: jest.fn() };
+
+const rootGuild: any = {
+  id: 'guild-1',
+  roles: { cache: new Map([['root-1', { name: 'Executive' }]]) },
+};
+
+const memberWithRoles = (ids: string[]) =>
+  makeGuildMember({
+    roles: {
+      cache: {
+        keys: () => ids,
+        size: ids.length,
+        every: () => true,
+        has: () => true,
+      },
+    },
+  });
 
 const makeGuildMember = (overrides: Partial<any> = {}): any => ({
   id: 'user-1',
@@ -64,6 +89,8 @@ describe('MemberSyncService', () => {
         { provide: SyncLogService, useValue: mockSyncLog },
         { provide: PermissionCacheService, useValue: mockPermissionCache },
         { provide: ServersRepository, useValue: mockServersRepo },
+        { provide: AdminAccessService, useValue: mockAdminAccess },
+        { provide: AuditService, useValue: mockAudit },
       ],
     }).compile();
     service = module.get(MemberSyncService);
@@ -80,7 +107,7 @@ describe('MemberSyncService', () => {
     it('upserts member profile, membership, and roles', async () => {
       mockMemberRepo.upsertMember.mockResolvedValue(undefined);
       mockMemberRepo.upsertServerMembership.mockResolvedValue(undefined);
-      mockMemberRepo.replaceMemberRoles.mockResolvedValue(undefined);
+      mockMemberRepo.replaceMemberRoles.mockResolvedValue([]);
 
       const guild: any = { id: 'guild-1' };
       const member = makeGuildMember();
@@ -100,13 +127,116 @@ describe('MemberSyncService', () => {
     });
   });
 
+  // ── root role auditing ────────────────────────────────────────────────
+
+  describe('root role auditing', () => {
+    beforeEach(() => {
+      mockMemberRepo.upsertMember.mockResolvedValue(undefined);
+      mockMemberRepo.upsertServerMembership.mockResolvedValue(undefined);
+    });
+
+    it('records root_granted when a root role is gained', async () => {
+      mockMemberRepo.replaceMemberRoles.mockResolvedValue(['everyone']);
+      await service.processMember(
+        rootGuild,
+        memberWithRoles(['everyone', 'root-1']),
+        new Date(),
+      );
+      expect(mockAudit.logAction).toHaveBeenCalledTimes(1);
+      expect(mockAudit.logAction).toHaveBeenCalledWith({
+        actionType: 'access',
+        action: 'root_granted',
+        entityType: 'member',
+        entityId: 'user-1',
+        severity: 'warning',
+        details: {
+          roleId: 'root-1',
+          roleName: 'Executive',
+          serverId: 'guild-1',
+        },
+      });
+    });
+
+    it('records root_revoked when a root role is lost', async () => {
+      mockMemberRepo.replaceMemberRoles.mockResolvedValue([
+        'everyone',
+        'root-1',
+      ]);
+      await service.processMember(
+        rootGuild,
+        memberWithRoles(['everyone']),
+        new Date(),
+      );
+      expect(mockAudit.logAction).toHaveBeenCalledTimes(1);
+      expect(mockAudit.logAction).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'root_revoked' }),
+      );
+    });
+
+    it('records nothing when a root role is kept or only other roles change', async () => {
+      mockMemberRepo.replaceMemberRoles.mockResolvedValue([
+        'everyone',
+        'root-1',
+      ]);
+      await service.processMember(
+        rootGuild,
+        memberWithRoles(['everyone', 'root-1', 'mod']),
+        new Date(),
+      );
+      mockMemberRepo.replaceMemberRoles.mockResolvedValue(['everyone', 'mod']);
+      await service.processMember(
+        rootGuild,
+        memberWithRoles(['everyone']),
+        new Date(),
+      );
+      expect(mockAudit.logAction).not.toHaveBeenCalled();
+    });
+
+    it('seeds silently on a first sync (no previous roles)', async () => {
+      mockMemberRepo.replaceMemberRoles.mockResolvedValue([]);
+      await service.processMember(
+        rootGuild,
+        memberWithRoles(['everyone', 'root-1']),
+        new Date(),
+      );
+      expect(mockAudit.logAction).not.toHaveBeenCalled();
+    });
+
+    it('does not break the sync when auditing throws', async () => {
+      mockMemberRepo.replaceMemberRoles.mockResolvedValue(['everyone']);
+      mockAudit.logAction.mockImplementationOnce(() => {
+        throw new Error('audit down');
+      });
+      await expect(
+        service.processMember(
+          rootGuild,
+          memberWithRoles(['everyone', 'root-1']),
+          new Date(),
+        ),
+      ).resolves.toBeUndefined();
+    });
+
+    it('audits role changes from a gateway member update', async () => {
+      mockMemberRepo.replaceMemberRoles.mockResolvedValue(['everyone']);
+      mockSyncLog.recordEventChange.mockResolvedValue(undefined);
+      const oldMember = memberWithRoles(['everyone']);
+      const newMember = memberWithRoles(['everyone', 'root-1']);
+      newMember.roles.cache.every = () => false;
+      newMember.guild = rootGuild;
+      await service.handleMemberUpdate(oldMember, newMember);
+      expect(mockAudit.logAction).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'root_granted', entityId: 'user-1' }),
+      );
+    });
+  });
+
   // ── handleMemberAdd ───────────────────────────────────────────────────
 
   describe('handleMemberAdd', () => {
     it('processes the member and records an event change', async () => {
       mockMemberRepo.upsertMember.mockResolvedValue(undefined);
       mockMemberRepo.upsertServerMembership.mockResolvedValue(undefined);
-      mockMemberRepo.replaceMemberRoles.mockResolvedValue(undefined);
+      mockMemberRepo.replaceMemberRoles.mockResolvedValue([]);
       mockSyncLog.recordEventChange.mockResolvedValue(undefined);
 
       await service.handleMemberAdd(makeGuildMember());
@@ -164,7 +294,7 @@ describe('MemberSyncService', () => {
       const base = makeGuildMember();
       mockMemberRepo.upsertMember.mockResolvedValue(undefined);
       mockMemberRepo.upsertServerMembership.mockResolvedValue(undefined);
-      mockMemberRepo.replaceMemberRoles.mockResolvedValue(undefined);
+      mockMemberRepo.replaceMemberRoles.mockResolvedValue([]);
       mockSyncLog.recordEventChange.mockResolvedValue(undefined);
 
       const newer = makeGuildMember({
@@ -270,7 +400,7 @@ describe('MemberSyncService', () => {
 
       mockMemberRepo.upsertMember.mockResolvedValue(undefined);
       mockMemberRepo.upsertServerMembership.mockResolvedValue(undefined);
-      mockMemberRepo.replaceMemberRoles.mockResolvedValue(undefined);
+      mockMemberRepo.replaceMemberRoles.mockResolvedValue([]);
       mockMemberRepo.markInactiveForServer.mockResolvedValue(3);
 
       const buffer: any[] = [];

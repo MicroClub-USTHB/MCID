@@ -10,7 +10,7 @@ export type SyncLogStatus = (typeof SYNC_LOG_STATUSES)[number];
 /** `/admin/sync/status` also reports `never` for servers that were never synced. */
 export type SyncStatus = SyncLogStatus | 'never';
 
-export const SYNC_TYPES = ['full', 'incremental', 'manual'] as const;
+export const SYNC_TYPES = ['full', 'incremental', 'manual', 'reconnect'] as const;
 export type SyncType = (typeof SYNC_TYPES)[number];
 
 export const SYNC_ENTITY_TYPES = ['member', 'role', 'server'] as const;

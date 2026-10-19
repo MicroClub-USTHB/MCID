@@ -165,6 +165,53 @@ describe('SyncService', () => {
 
   // ── getSyncStatus ─────────────────────────────────────────────────────
 
+  describe('startupSyncAll', () => {
+    const servers = [
+      { id: 'other', name: 'Other', isMain: false },
+      { id: 'main', name: 'Main', isMain: true },
+      { id: 'busy', name: 'Busy', isMain: false },
+    ];
+
+    beforeEach(() => {
+      mockServersRepo.findAllActive.mockResolvedValue([...servers]);
+      mockDiscord.getGuildById.mockResolvedValue({ id: 'g' });
+      mockSyncRepo.getActiveLog.mockImplementation((id: string) =>
+        Promise.resolve(id === 'busy' ? { id: 99 } : null),
+      );
+      mockSyncRepo.createLog.mockResolvedValue({ id: 1 });
+    });
+
+    it('queues the main server first and skips servers with an active sync', async () => {
+      await service.startupSyncAll('reconnect');
+      expect(mockSyncRepo.createLog.mock.calls.map((c) => c[0])).toEqual([
+        'main',
+        'other',
+      ]);
+    });
+
+    it('records the trigger type in the sync log', async () => {
+      await service.startupSyncAll('reconnect');
+      expect(mockSyncRepo.createLog).toHaveBeenCalledWith(
+        'main',
+        'reconnect',
+        'queued',
+        expect.any(Date),
+        SyncTarget.ALL,
+      );
+    });
+
+    it("defaults to the 'full' type for the boot sync", async () => {
+      await service.startupSyncAll();
+      expect(mockSyncRepo.createLog).toHaveBeenCalledWith(
+        'main',
+        'full',
+        'queued',
+        expect.any(Date),
+        SyncTarget.ALL,
+      );
+    });
+  });
+
   describe('getSyncStatus', () => {
     it('delegates to SyncLogService.getSyncStatus', async () => {
       mockSyncLogService.getSyncStatus.mockResolvedValue(null);

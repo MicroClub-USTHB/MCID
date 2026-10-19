@@ -4,6 +4,8 @@ import { ServersRepository } from '../../servers/servers.repository';
 import { MemberRepository } from '../../members/member.repository';
 import { SyncLogService } from './sync-log.service';
 import { PermissionCacheService } from '../../permissions/permission-cache.service';
+import { AdminAccessService } from '../../admin-access/admin-access.service';
+import { AuditService } from '../../audit/audit.service';
 
 const mockServersRepo = {
   upsertRole: jest.fn(),
@@ -23,6 +25,12 @@ const mockPermissionCache = {
   invalidateServer: jest.fn(),
   clear: jest.fn(),
 };
+
+const mockAdminAccess = {
+  isRootRole: jest.fn((id: string) => id === 'root-1'),
+};
+
+const mockAudit = { logAction: jest.fn() };
 
 // Mirrors discord.js: `role.guild.roles.cache` holds every role in the guild,
 // so hierarchy level can be derived from the max `position`. Pass `siblings` to
@@ -57,6 +65,8 @@ describe('RoleSyncService', () => {
         { provide: MemberRepository, useValue: mockMemberRepo },
         { provide: SyncLogService, useValue: mockSyncLog },
         { provide: PermissionCacheService, useValue: mockPermissionCache },
+        { provide: AdminAccessService, useValue: mockAdminAccess },
+        { provide: AuditService, useValue: mockAudit },
       ],
     }).compile();
     service = module.get(RoleSyncService);
@@ -90,6 +100,24 @@ describe('RoleSyncService', () => {
         'added',
         expect.stringContaining('Moderator'),
       );
+      expect(mockAudit.logAction).not.toHaveBeenCalled();
+    });
+
+    it('records root_role_deleted when a root role is deleted', async () => {
+      mockServersRepo.deleteRole.mockResolvedValue(undefined);
+      mockSyncLog.recordEventChange.mockResolvedValue(undefined);
+
+      await service.handleRoleDelete(
+        makeRole({ id: 'root-1', name: 'Executive' }),
+      );
+      expect(mockAudit.logAction).toHaveBeenCalledWith({
+        actionType: 'access',
+        action: 'root_role_deleted',
+        entityType: 'role',
+        entityId: 'root-1',
+        severity: 'error',
+        details: { roleName: 'Executive', serverId: 'guild-1' },
+      });
     });
   });
 
