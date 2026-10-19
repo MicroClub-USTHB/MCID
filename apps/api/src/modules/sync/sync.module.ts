@@ -11,6 +11,7 @@ import { SyncLogService } from './services/sync-log.service';
 import { MemberSyncService } from './services/member-sync.service';
 import { RoleSyncService } from './services/role-sync.service';
 import { ServerSyncService } from './services/server-sync.service';
+import { AuditModule } from '../audit/audit.module';
 import { PermissionsModule } from '../permissions/permissions.module';
 
 @Module({
@@ -19,6 +20,7 @@ import { PermissionsModule } from '../permissions/permissions.module';
     DiscordModule,
     forwardRef(() => MembersModule),
     PermissionsModule,
+    AuditModule,
     forwardRef(() => ServersModule),
   ],
   controllers: [SyncController],

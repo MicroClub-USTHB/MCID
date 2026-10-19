@@ -11,12 +11,20 @@ import { DiscordService } from '../discord/discord.service';
 import { SyncService } from './sync.service';
 import { Client, Guild, GuildMember, User, Role } from 'discord.js';
 
+// A reconnect that loses the session fires shardReady more than once close
+// together when the connection flaps, so the catch-up waits this long and then
+// runs once. It reads the state of Discord at that moment, so it also covers
+// every reconnect inside the window.
+const RECONNECT_SYNC_DELAY_MS = 60_000;
+
 @Injectable()
 export class SyncListener
   implements OnModuleInit, OnModuleDestroy, OnApplicationBootstrap
 {
   private readonly logger = new Logger(SyncListener.name);
   private client: Client;
+  private readonly readyShards = new Set<number>();
+  private reconnectTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly discordService: DiscordService,
@@ -39,6 +47,10 @@ export class SyncListener
       this.handleGuildMemberUpdate.bind(this),
     );
     this.client.on('userUpdate', this.handleUserUpdate.bind(this));
+
+    // Gateway session events
+    this.client.on('shardReady', this.handleShardReady.bind(this));
+    this.client.on('shardResume', this.handleShardResume.bind(this));
 
     // Role events
     this.client.on('roleCreate', this.handleRoleCreate.bind(this));
@@ -72,6 +84,10 @@ export class SyncListener
     this.client.removeAllListeners('guildCreate');
     this.client.removeAllListeners('guildUpdate');
     this.client.removeAllListeners('guildDelete');
+    this.client.removeAllListeners('shardReady');
+    this.client.removeAllListeners('shardResume');
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
   }
 
   // ─── Startup ────────────────────────────────────────────────────
@@ -83,6 +99,43 @@ export class SyncListener
         err instanceof Error ? err.stack : String(err),
       );
     });
+  }
+
+  // ─── Gateway session events ─────────────────────────────────────
+
+  /**
+   * discord.js emits shardReady on every READY packet: the first connection
+   * and any reconnect where Discord could not resume the session (a resume
+   * emits shardResume instead). Events sent during that gap are gone, so every
+   * shardReady after the shard's first one schedules a catch-up sync. The first
+   * one is the boot, which scheduleStartupSync already covers.
+   */
+  private handleShardReady(shardId: number): void {
+    if (!this.readyShards.has(shardId)) {
+      this.readyShards.add(shardId);
+      return;
+    }
+    this.logger.warn(
+      `Shard ${shardId} started a new session after a disconnect, scheduling a catch-up sync`,
+    );
+    if (this.reconnectTimer) return;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.syncService.startupSyncAll('reconnect').catch((err: unknown) => {
+        this.logger.error(
+          'Reconnect sync failed',
+          err instanceof Error ? err.stack : String(err),
+        );
+      });
+    }, RECONNECT_SYNC_DELAY_MS);
+    this.reconnectTimer.unref?.();
+  }
+
+  // Discord replays the missed events on a resume, so nothing to catch up.
+  private handleShardResume(shardId: number, replayedEvents: number): void {
+    this.logger.debug(
+      `Shard ${shardId} resumed, ${replayedEvents} event(s) replayed`,
+    );
   }
 
   // ─── Guild (Server) Events ──────────────────────────────────────
