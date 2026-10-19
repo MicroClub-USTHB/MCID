@@ -3,6 +3,7 @@ import {
   and,
   desc,
   eq,
+  gt,
   gte,
   inArray,
   isNotNull,
@@ -18,6 +19,7 @@ import { DRIZZLE } from '../../database/database.module';
 import { DrizzleDB } from '../../database/database.constants';
 import * as schema from '../../database/entities';
 import {
+  inboundWebhookDrafts,
   inboundWebhookFiles,
   inboundWebhookRoles,
   inboundWebhookSettings,
@@ -30,8 +32,14 @@ import {
   serverMemberRoles,
   servers,
 } from '../../database/entities';
-import type { InboundWebhookSettingsRow } from '../../database/entities';
+import type {
+  InboundWebhookDraft,
+  InboundWebhookSettingsRow,
+} from '../../database/entities';
 import type { FormSchema } from '@mcid/form-schema';
+
+/** The draft is not open any more: submitted, expired, or past its expiry. */
+export class DraftNotOpenError extends Error {}
 
 export interface InboundWebhookRow {
   id: string;
@@ -475,6 +483,24 @@ export class InboundWebhooksRepository {
     fileIds: string[];
   }) {
     return this.db.transaction(async (tx) => {
+      // Claim the draft first. The conditional update is what makes a second
+      // submit of the same draft fail, even when two requests race.
+      if (data.draftId) {
+        const now = new Date();
+        const [claimed] = await tx
+          .update(inboundWebhookDrafts)
+          .set({ status: 'submitted', updatedAt: now })
+          .where(
+            and(
+              eq(inboundWebhookDrafts.id, data.draftId),
+              eq(inboundWebhookDrafts.status, 'open'),
+              gt(inboundWebhookDrafts.expiresAt, now),
+            ),
+          )
+          .returning({ id: inboundWebhookDrafts.id });
+        if (!claimed) throw new DraftNotOpenError();
+      }
+
       const [row] = await tx
         .insert(inboundWebhookSubmissions)
         .values({
@@ -562,5 +588,76 @@ export class InboundWebhooksRepository {
       .select()
       .from(inboundWebhookFiles)
       .where(inArray(inboundWebhookFiles.id, ids));
+  }
+
+  // ─── Drafts ─────────────────────────────────────────────────────────────
+
+  async insertDraft(data: {
+    webhookId: string;
+    projectId: string;
+    expiresAt: Date;
+  }): Promise<InboundWebhookDraft> {
+    const [row] = await this.db
+      .insert(inboundWebhookDrafts)
+      .values(data)
+      .returning();
+    return row;
+  }
+
+  async findDraft(id: string): Promise<InboundWebhookDraft | null> {
+    const [row] = await this.db
+      .select()
+      .from(inboundWebhookDrafts)
+      .where(eq(inboundWebhookDrafts.id, id));
+    return row ?? null;
+  }
+
+  /**
+   * Stores one step's accepted values and marks the step completed, only while
+   * the draft is open and unexpired. `jsonb_set` touches just this step's key,
+   * so two requests patching different steps cannot overwrite each other.
+   * `value` is undefined for a step whose condition is false: nothing to
+   * store, but the step still counts as done. Returns null when the draft was
+   * not open.
+   */
+  async saveDraftStep(
+    id: string,
+    stepKey: string,
+    value: Record<string, unknown> | undefined,
+  ): Promise<InboundWebhookDraft | null> {
+    const now = new Date();
+    const data =
+      value === undefined
+        ? inboundWebhookDrafts.data
+        : sql`jsonb_set(${inboundWebhookDrafts.data}, ARRAY[${stepKey}]::text[], ${JSON.stringify(value)}::jsonb, true)`;
+    const [row] = await this.db
+      .update(inboundWebhookDrafts)
+      .set({
+        data,
+        completedSteps: sql`CASE WHEN ${inboundWebhookDrafts.completedSteps} ? ${stepKey} THEN ${inboundWebhookDrafts.completedSteps} ELSE ${inboundWebhookDrafts.completedSteps} || to_jsonb(${stepKey}::text) END`,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(inboundWebhookDrafts.id, id),
+          eq(inboundWebhookDrafts.status, 'open'),
+          gt(inboundWebhookDrafts.expiresAt, now),
+        ),
+      )
+      .returning();
+    return row ?? null;
+  }
+
+  /** Marks an open draft whose time ran out. No-op for any other status. */
+  async expireDraft(id: string): Promise<void> {
+    await this.db
+      .update(inboundWebhookDrafts)
+      .set({ status: 'expired', updatedAt: new Date() })
+      .where(
+        and(
+          eq(inboundWebhookDrafts.id, id),
+          eq(inboundWebhookDrafts.status, 'open'),
+        ),
+      );
   }
 }
