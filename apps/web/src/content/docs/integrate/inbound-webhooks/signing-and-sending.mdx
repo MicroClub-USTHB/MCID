@@ -199,6 +199,32 @@ Replay protection and the rate limit rely on Redis. If Redis is unreachable, MCI
 
 The tolerance is 300 seconds by default. An operator can change it with the `INBOUND_WEBHOOK_SIGNATURE_TOLERANCE_S` setting of the API. Keep your server's clock in sync, because a clock that drifts by more than the tolerance makes every request fail with `STALE_TIMESTAMP`.
 
+## Sending a form one step at a time
+
+A webhook whose schema has `steps` can also be filled over several requests, for a wizard that saves each page as it goes. A draft holds the steps sent so far. Three calls use the same API key, origin check and signature as `/submit`:
+
+```http
+POST  /api/inbound-webhooks/{id}/drafts
+PATCH /api/inbound-webhooks/{id}/drafts/{draftId}/{stepKey}
+POST  /api/inbound-webhooks/{id}/drafts/{draftId}/submit
+```
+
+| Call               | Body                                 | Answer                                                                |
+| ------------------ | ------------------------------------ | --------------------------------------------------------------------- |
+| `POST .../drafts`  | None. The signature covers `""`.     | `201` with `{ "draftId": "...", "expiresAt": "..." }`.                |
+| `PATCH .../{step}` | The step's fields, as a JSON object. | `200` with `{ "draftId", "stepKey", "completedSteps", "expiresAt" }`. |
+| `POST .../submit`  | None. The signature covers `""`.     | `201` with `{ "id": "...", "receivedAt": "..." }`.                    |
+
+- **A step is checked on its own.** Only the fields of that step are validated, and every error in it comes back at once as a 422. Its conditions can read the steps already saved. A step that does not apply because of its `condition` is accepted and ignored.
+- **Sending a step again replaces it.** This is how a caller resumes or corrects: it keeps the `draftId` and sends the step it wants to change. `completedSteps` in each answer lists what is saved.
+- **The submit checks everything.** The saved steps are validated as one payload, with conditions resolved across steps, so a step that was never sent fails its required fields and an answer changed later is rechecked. A 422 leaves the draft open.
+- **A draft is submitted once.** A second submit, or a patch after the submit, answers 409.
+- **A draft expires.** It lasts 24 hours from the moment it was opened, and an operator can change that with `INBOUND_WEBHOOK_DRAFT_TTL_H`. Sending to an expired draft answers 410, and the caller opens a new one.
+- **A draft belongs to one webhook and one project.** An unknown draft, or one of another webhook, answers 404.
+- A webhook with only `fields` has no steps and no drafts: `POST .../drafts` answers 400, so send the payload to `/submit`.
+
+Each of these calls counts toward the rate limit below, like a `/submit`.
+
 ## Origin allowlist
 
 An admin can restrict a webhook to specific origins, for example `https://forms.example.com`. MCID then compares the request's `Origin` header with the list, exactly. A request with another origin, or none, gets a 403:
