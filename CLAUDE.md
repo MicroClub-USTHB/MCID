@@ -27,11 +27,11 @@ pnpm build
 pnpm lint           # NOTE: the API lint script runs eslint --fix
 pnpm typecheck
 pnpm test           # Jest (api) + Vitest (web, cli)
-pnpm test:e2e       # API e2e, needs Postgres
+pnpm test:e2e       # API e2e, needs Postgres (and Redis for admin-access-cache.e2e-spec.ts)
 pnpm turbo run test --filter=@mcid/web
 ```
 
-CI (`.github/workflows/ci.yml`) runs `pnpm turbo run lint typecheck`, `test:ci` (with coverage), `build`, then API e2e against Postgres 16.
+CI (`.github/workflows/ci.yml`) runs `pnpm turbo run lint typecheck`, `test:ci` (with coverage), `build`, then API e2e against Postgres 16 and Redis 7.
 
 ### API (`pnpm --filter @mcid/api run <script>` or from `apps/api`)
 
