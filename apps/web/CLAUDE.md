@@ -8,7 +8,7 @@
 
 | Layer | Technology | Version |
 |---|---|---|
-| Framework | Next.js (App Router) | 16.2.2 |
+| Framework | Next.js (App Router) | 16.4.2 |
 | Language | TypeScript (strict mode) | ^5 |
 | UI | Tailwind CSS v4 (CSS-based `@theme`) + mcoli-ui `primary` theme | ^4 |
 | State (server) | TanStack React Query | ^5 |
