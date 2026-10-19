@@ -161,6 +161,8 @@ There are **two entry points** to start a user login. They share the same callba
 | `GET /api/auth/sso/authorize` | SSO-aware: skips Discord if the browser already has a valid `mcid_sso` cookie. | Default "Login with Micro Club" button. Returning users get instant logins across every MCID project. |
 | `GET /api/auth/authorize` | Legacy: always bounces through Discord. | Step-up / "force re-auth" — admin actions, sensitive changes — or unchanged behavior for pre-SSO integrations. |
 
+Add `prompt=none` to `GET /api/auth/sso/authorize` for a silent check from a project backend: with a valid cookie you get the usual `code`, without one MCID redirects back with `error=login_required` instead of going to Discord. The client, `redirect_uri` and server checks run first, so an untrusted `redirect_uri` still gets a 400. `GET /api/auth/authorize` ignores `prompt`.
+
 Typical flow (both entry points):
 
 1. The frontend redirects the user to MCID
