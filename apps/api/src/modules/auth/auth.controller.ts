@@ -33,7 +33,7 @@ import {
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
-import { AuthService } from './auth.service';
+import { AuthService, type AuthorizeFailure } from './auth.service';
 import { AdminAuthService } from './services/admin-auth.service';
 import { SsoService } from './services/sso.service';
 import { SessionLifecycleService } from './services/session-lifecycle.service';
@@ -126,6 +126,26 @@ export class AuthController {
     return (req.cookies as Record<string, string> | undefined)?.[
       this.ssoCookieName
     ];
+  }
+
+  /**
+   * Answer a failed authorize check: redirect the error back to the project
+   * when its redirect_uri was validated, otherwise a JSON 400 (there is
+   * nobody safe to send the browser to).
+   */
+  private sendAuthorizeFailure(res: Response, result: AuthorizeFailure) {
+    if (result.redirectUri) {
+      const url = new URL(result.redirectUri);
+      url.searchParams.set('error', result.error);
+      url.searchParams.set('error_description', result.description);
+      url.searchParams.set('state', result.state);
+      return res.redirect(url.toString());
+    }
+    return res.status(HttpStatus.BAD_REQUEST).json({
+      statusCode: 400,
+      error: result.error,
+      message: result.description,
+    });
   }
 
   // ─── Authorization request ─────────────────────────────
@@ -535,13 +555,20 @@ export class AuthController {
       '`?code=...&state=...`. Otherwise this falls back to the existing ' +
       '`/auth/authorize` flow (Discord OAuth).\n\n' +
       'Use `GET /auth/authorize` instead when you need to force a fresh ' +
-      'Discord consent.',
+      'Discord consent.\n\n' +
+      'Add `prompt=none` for a silent login check from a project backend: ' +
+      'with a valid cookie it behaves as above, and without one it ' +
+      'redirects back to `redirect_uri` with `error=login_required` ' +
+      'instead of going to Discord. `client_id`, `redirect_uri` and ' +
+      '`server_id` are validated first, so an untrusted `redirect_uri` ' +
+      'still gets a 400 and never a redirect.',
   })
   @ApiResponse({
     status: 302,
     description:
-      'Redirects either to Discord OAuth (no SSO yet) or back to the ' +
-      'platform with a fresh callback code (SSO hit).',
+      'Redirects to Discord OAuth (no SSO yet), back to the platform with ' +
+      'a fresh callback code (SSO hit), or with `prompt=none` and no SSO, ' +
+      'back to the platform with `error=login_required`.',
   })
   async ssoAuthorize(
     @Query() dto: AuthorizeQueryDto,
@@ -572,24 +599,27 @@ export class AuthController {
 
       // SSO is valid but the project / server / role check failed. Bubble
       // the error back to the platform if we trust the redirect_uri.
-      if (result.redirectUri) {
-        const url = new URL(result.redirectUri);
-        url.searchParams.set('error', result.error);
-        url.searchParams.set('error_description', result.description);
-        url.searchParams.set('state', result.state);
-        return res.redirect(url.toString());
-      }
-      return res.status(HttpStatus.BAD_REQUEST).json({
-        statusCode: 400,
-        error: result.error,
-        message: result.description,
-      });
+      return this.sendAuthorizeFailure(res, result);
     }
 
-    // No SSO yet — clear any stale cookie and fall through to the existing
-    // /auth/authorize flow (Discord OAuth bounce). Keeps the SSO endpoint
-    // a drop-in replacement.
     if (ssoToken) this.clearSsoCookie(res);
+
+    // Silent check: tell the project nobody is signed in instead of sending
+    // the browser to Discord.
+    if (dto.prompt === 'none') {
+      return this.sendAuthorizeFailure(
+        res,
+        await this.authService.silentLoginRequired(
+          dto.client_id,
+          dto.redirect_uri,
+          dto.server_id,
+          dto.state,
+        ),
+      );
+    }
+
+    // No SSO yet: fall through to the existing /auth/authorize flow (Discord
+    // OAuth bounce). Keeps the SSO endpoint a drop-in replacement.
     return this.authorize(dto, res);
   }
 
