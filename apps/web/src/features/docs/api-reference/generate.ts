@@ -1,7 +1,7 @@
 import GithubSlugger from 'github-slugger';
 
 import { audienceOf, type Audience } from '@/features/docs/api-reference/audience';
-import { attributeText, cellText, mdxText } from '@/features/docs/api-reference/mdx-text';
+import { attributeText, cellText, linkText, mdxText } from '@/features/docs/api-reference/mdx-text';
 import type {
   ApiPage,
   OpenApiSpec,
@@ -307,10 +307,7 @@ function overviewPage(
         '| Method | Path | Summary |',
         '| --- | --- | --- |',
         ...operations.map(({ path, method, operation }) => {
-          const summary = cellText(operation.summary ?? `${method.toUpperCase()} ${path}`).replace(
-            /[[\]]/g,
-            '\\$&'
-          );
+          const summary = linkText(operation.summary ?? `${method.toUpperCase()} ${path}`);
           return `| ${code(method.toUpperCase())} | ${code(path)} | [${summary}](/docs/api-reference/${page.slug}#${page.anchors.get(operation.operationId)}) |`;
         }),
         '',
