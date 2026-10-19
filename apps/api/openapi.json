@@ -7553,6 +7553,18 @@
               "example": "random_csrf_token_abc123",
               "type": "string"
             }
+          },
+          {
+            "description": "Silent login check, only honoured by `GET /auth/sso/authorize`. With `none`, a browser without a valid `mcid_sso` cookie is redirected back with `error=login_required` instead of being sent to Discord.",
+            "in": "query",
+            "name": "prompt",
+            "required": false,
+            "schema": {
+              "enum": [
+                "none"
+              ],
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -7788,7 +7800,7 @@
     },
     "/api/auth/sso/authorize": {
       "get": {
-        "description": "Recommended default for new \"Login with Micro Club\" buttons. Same query contract as `GET /auth/authorize`. If the caller has a valid `mcid_sso` cookie, the Discord OAuth bounce is skipped and the browser is redirected straight to the platform's redirect_uri with `?code=...&state=...`. Otherwise this falls back to the existing `/auth/authorize` flow (Discord OAuth).\n\nUse `GET /auth/authorize` instead when you need to force a fresh Discord consent.",
+        "description": "Recommended default for new \"Login with Micro Club\" buttons. Same query contract as `GET /auth/authorize`. If the caller has a valid `mcid_sso` cookie, the Discord OAuth bounce is skipped and the browser is redirected straight to the platform's redirect_uri with `?code=...&state=...`. Otherwise this falls back to the existing `/auth/authorize` flow (Discord OAuth).\n\nUse `GET /auth/authorize` instead when you need to force a fresh Discord consent.\n\nAdd `prompt=none` for a silent login check from a project backend: with a valid cookie it behaves as above, and without one it redirects back to `redirect_uri` with `error=login_required` instead of going to Discord. `client_id`, `redirect_uri` and `server_id` are validated first, so an untrusted `redirect_uri` still gets a 400 and never a redirect.",
         "operationId": "AuthController_ssoAuthorize",
         "parameters": [
           {
@@ -7831,6 +7843,18 @@
               "example": "random_csrf_token_abc123",
               "type": "string"
             }
+          },
+          {
+            "description": "Silent login check, only honoured by `GET /auth/sso/authorize`. With `none`, a browser without a valid `mcid_sso` cookie is redirected back with `error=login_required` instead of being sent to Discord.",
+            "in": "query",
+            "name": "prompt",
+            "required": false,
+            "schema": {
+              "enum": [
+                "none"
+              ],
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -7845,7 +7869,7 @@
             "description": ""
           },
           "302": {
-            "description": "Redirects either to Discord OAuth (no SSO yet) or back to the platform with a fresh callback code (SSO hit)."
+            "description": "Redirects to Discord OAuth (no SSO yet), back to the platform with a fresh callback code (SSO hit), or with `prompt=none` and no SSO, back to the platform with `error=login_required`."
           }
         },
         "summary": "Initiate authorization request (SSO-aware — recommended)",

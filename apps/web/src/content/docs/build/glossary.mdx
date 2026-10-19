@@ -28,6 +28,7 @@ The words MCID uses, in alphabetical order. Where a term has a page of its own, 
 | Server (guild) | A Discord server that MCID knows about. Discord calls it a guild. |
 | Session | A signed-in period. A project session belongs to one project, an admin session to the admin panel, and an SSO session to a browser. |
 | Signing secret | The `whsec_` secret that signs requests to one inbound webhook. It is shown once and stored encrypted. |
+| Silent login | An SSO check with `prompt=none`: a project backend asks whether the browser already has an MCID session, and MCID answers with a code or `login_required`, never the Discord screen. See [Sign in without a click](/docs/integrate/sso#sign-in-without-a-click). |
 | Slug | A short lowercase name, such as `recruitment-2026`, unique within a project, that names an inbound webhook. |
 | SSO | Single sign-on. After one Discord login, the `mcid_sso` cookie lets a member sign in to other projects without the Discord screen. See [Login with Micro Club](/docs/integrate/sso). |
 | Step | A part of an inbound webhook schema that is a form, holding its own fields. A flat schema has no steps. |
