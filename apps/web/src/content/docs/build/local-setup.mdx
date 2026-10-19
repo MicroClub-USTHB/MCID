@@ -254,6 +254,7 @@ The API reads `apps/api/.env`. Four of the values below (`PERMISSION_CACHE_TTL_M
 | `INBOUND_WEBHOOK_ENCRYPTION_KEY` | production | empty | 64 hex characters, a different key. Encrypts inbound webhook signing secrets. It is needed in development too, to create a webhook. There is no key rotation. |
 | `INBOUND_WEBHOOK_SIGNATURE_TOLERANCE_S` | no | `300` | How far a signature's timestamp may be from the server's clock, in seconds. |
 | `INBOUND_WEBHOOK_RATE_LIMIT` | no | `120` | Submissions a minute for each webhook and for each project. |
+| `INBOUND_WEBHOOK_DRAFT_TTL_H` | no | `24` | How many hours a multi-step draft stays open after it is created. |
 
 ### Production deployment only
 
