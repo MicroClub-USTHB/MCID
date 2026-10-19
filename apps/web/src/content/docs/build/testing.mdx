@@ -9,7 +9,7 @@ This page explains how MCID is tested, which command runs what, and what to test
 | Layer | Tool | Where it lives | Speed | Needs |
 | --- | --- | --- | --- | --- |
 | API unit | Jest | `apps/api/src/**/*.spec.ts`, next to the file | seconds | nothing |
-| API end to end | Jest and Supertest | `apps/api/test/*.e2e-spec.ts` | about 90 seconds | PostgreSQL |
+| API end to end | Jest and Supertest | `apps/api/test/*.e2e-spec.ts` | about 90 seconds | PostgreSQL, and Redis for the admin access cache spec |
 | Web unit and component | Vitest, React Testing Library, MSW | `apps/web/tests/**` | about a minute | nothing |
 | Web browser | Playwright | `apps/web/e2e` | slow | a running panel and a real admin login |
 
@@ -142,7 +142,7 @@ On every pull request to `dev` or `main`, and on pushes to them, the workflow in
 2. `pnpm turbo run test:ci`, the unit tests of both apps, with coverage
 3. `pnpm turbo run build`
 4. `pnpm docs:api`, which fails when `openapi.json` or the generated reference pages are out of date
-5. In a second job against PostgreSQL 16: the migrations are applied twice to check they can be re-applied, the database is reset and migrated, and `pnpm turbo run test:e2e --filter=@mcid/api` runs
+5. In a second job against PostgreSQL 16 and Redis 7 (`admin-access-cache.e2e-spec.ts` fails without a real Redis, on purpose): the migrations are applied twice to check they can be re-applied, the database is reset and migrated, and `pnpm turbo run test:e2e --filter=@mcid/api` runs
 
 The workflow uses Node 24.
 
