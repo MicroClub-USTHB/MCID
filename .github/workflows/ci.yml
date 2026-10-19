@@ -96,6 +96,18 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      # The admin access cache e2e primes Redis and asserts the entry exists,
+      # so it fails without a real server (the API falls back to the database).
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
