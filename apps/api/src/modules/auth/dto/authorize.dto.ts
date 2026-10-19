@@ -1,5 +1,11 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsUUID } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsString,
+  IsNotEmpty,
+  IsUUID,
+  IsOptional,
+  IsIn,
+} from 'class-validator';
 
 export class AuthorizeQueryDto {
   @ApiProperty({
@@ -34,4 +40,15 @@ export class AuthorizeQueryDto {
   @IsString()
   @IsNotEmpty()
   state: string;
+
+  @ApiPropertyOptional({
+    enum: ['none'],
+    description:
+      'Silent login check, only honoured by `GET /auth/sso/authorize`. With ' +
+      '`none`, a browser without a valid `mcid_sso` cookie is redirected back ' +
+      'with `error=login_required` instead of being sent to Discord.',
+  })
+  @IsOptional()
+  @IsIn(['none'])
+  prompt?: 'none';
 }

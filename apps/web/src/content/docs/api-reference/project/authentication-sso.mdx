@@ -10,6 +10,8 @@ Recommended default for new "Login with Micro Club" buttons. Same query contract
 
 Use `GET /auth/authorize` instead when you need to force a fresh Discord consent.
 
+Add `prompt=none` for a silent login check from a project backend: with a valid cookie it behaves as above, and without one it redirects back to `redirect_uri` with `error=login_required` instead of going to Discord. `client_id`, `redirect_uri` and `server_id` are validated first, so an untrusted `redirect_uri` still gets a 400 and never a redirect.
+
 **Authentication:** None, this endpoint is public.
 
 **Parameters**
@@ -20,13 +22,14 @@ Use `GET /auth/authorize` instead when you need to force a fresh Discord consent
 | `redirect_uri` | query | `string` | yes | URI to redirect back to after authentication. Must be whitelisted for the project. |
 | `server_id` | query | `string` | yes | Discord server ID to verify membership against |
 | `state` | query | `string` | yes | Opaque state value passed through to the redirect. Use for CSRF protection. |
+| `prompt` | query | `"none"` | no | Silent login check, only honoured by `GET /auth/sso/authorize`. With `none`, a browser without a valid `mcid_sso` cookie is redirected back with `error=login_required` instead of being sent to Discord. |
 
 **Responses**
 
 | Status | Description | Body |
 | --- | --- | --- |
 | `200` |  | `object` |
-| `302` | Redirects either to Discord OAuth (no SSO yet) or back to the platform with a fresh callback code (SSO hit). |  |
+| `302` | Redirects to Discord OAuth (no SSO yet), back to the platform with a fresh callback code (SSO hit), or with `prompt=none` and no SSO, back to the platform with `error=login_required`. |  |
 
 <SwaggerLink tag="Authentication (SSO)" operationId="AuthController_ssoAuthorize" />
 
