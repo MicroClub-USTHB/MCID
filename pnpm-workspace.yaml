@@ -3,8 +3,8 @@ packages:
   - packages/*
 
 overrides:
-  minimatch: 5.1.6
-  undici: '>=6.27.0 <7.0.0'
+  minimatch: 5.1.9
+  undici: '>=6.28.1 <7.0.0'
   # jsdom 29 (web tests) needs undici 7; the <7 pin above is for the API's dependency tree
   jsdom>undici: '^7.25.0'
   ws: '>=8.21.0'
@@ -12,7 +12,23 @@ overrides:
   # msw (web tests) matches routes like `(.*)/x`, which path-to-regexp 8 rejects
   msw>path-to-regexp: '^6.3.0'
   lodash: '>=4.17.21'
-  multer: '>=2.2.0'
+  multer: '>=2.4.0'
   form-data: '>=4.0.6'
   picomatch: '>=4.0.4'
-  js-yaml: '>=4.2.0'
+  js-yaml: '>=4.3.2'
+  fast-uri: '>=3.1.8'
+  handlebars: '>=4.7.10'
+  proxy-addr: '>=2.0.8'
+  qs: '>=6.16.0'
+  body-parser: '>=2.3.0'
+  piscina: '>=4.9.4 <5'
+  browserslist: '>=4.28.7 <5'
+  baseline-browser-mapping: '>=2.11.0'
+  '@humanfs/node': '>=0.16.8'
+  '@xhmikosr/decompress': '>=10.2.2'
+  file-type: '>=21.3.2 <22'
+  tsx>esbuild: '>=0.28.1'
+  tsup>esbuild: '>=0.28.1'
+  '@esbuild-kit/core-utils>esbuild': '>=0.25.0'
+  '@angular-devkit/core>ajv': '>=8.18.0'
+  http-cache-semantics: '>=4.3.0'
