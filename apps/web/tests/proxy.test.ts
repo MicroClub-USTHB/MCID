@@ -7,7 +7,7 @@ const matcher = new RegExp(`^${config.matcher[0]}$`);
 
 describe('proxy matcher', () => {
   it.each([
-    '/landing/admin-panel.webp',
+    '/landing/admin-panel-light.webp',
     '/images/logo.svg',
     '/photo.png',
     '/photo.jpg',
@@ -45,7 +45,7 @@ describe('proxy', () => {
   });
 
   it('lets a logged-out visitor read the docs', () => {
-    for (const path of ['/docs', '/docs/start-here/what-is-mcdi', '/docs/build/contributing']) {
+    for (const path of ['/docs', '/docs/start-here/what-is-mcid', '/docs/build/contributing']) {
       const response = proxy(new NextRequest(`http://localhost:3002${path}`));
       expect(response.headers.get('location'), path).toBeNull();
     }

@@ -157,6 +157,72 @@ describe('AuthService', () => {
 
   // ── authorize ──────────────────────────────────────────────────────────
 
+  describe('silentLoginRequired', () => {
+    it('rejects an unknown client without a redirect', async () => {
+      mockProjectsRepo.findOne.mockResolvedValue(null);
+      const result = await service.silentLoginRequired(
+        'bad-id',
+        'http://localhost/cb',
+        's1',
+        'state',
+      );
+      expect(result).toMatchObject({ ok: false, error: 'invalid_client' });
+      expect((result as any).redirectUri).toBeUndefined();
+    });
+
+    it('rejects an unregistered redirect_uri without a redirect', async () => {
+      mockProjectsRepo.findOne.mockResolvedValue(fakeProject());
+      mockProjectsRepo.isRedirectUriAllowed.mockResolvedValue(false);
+      const result = await service.silentLoginRequired(
+        'proj-1',
+        'http://evil.com',
+        's1',
+        'state',
+      );
+      expect(result).toMatchObject({
+        ok: false,
+        error: 'invalid_redirect_uri',
+      });
+      expect((result as any).redirectUri).toBeUndefined();
+    });
+
+    it('keeps access_denied when the project has no access to the server', async () => {
+      mockProjectsRepo.findOne.mockResolvedValue(fakeProject());
+      mockProjectsRepo.isRedirectUriAllowed.mockResolvedValue(true);
+      mockProjectsRepo.hasServerAccess.mockResolvedValue(false);
+      const result = await service.silentLoginRequired(
+        'proj-1',
+        'http://localhost/cb',
+        's1',
+        'state',
+      );
+      expect(result).toMatchObject({
+        ok: false,
+        error: 'access_denied',
+        redirectUri: 'http://localhost/cb',
+      });
+    });
+
+    it('answers login_required to the validated redirect_uri and creates no auth request', async () => {
+      mockProjectsRepo.findOne.mockResolvedValue(fakeProject());
+      mockProjectsRepo.isRedirectUriAllowed.mockResolvedValue(true);
+      mockProjectsRepo.hasServerAccess.mockResolvedValue(true);
+      const result = await service.silentLoginRequired(
+        'proj-1',
+        'http://localhost/cb',
+        's1',
+        'csrf-token',
+      );
+      expect(result).toMatchObject({
+        ok: false,
+        error: 'login_required',
+        redirectUri: 'http://localhost/cb',
+        state: 'csrf-token',
+      });
+      expect(mockAuthRequestRepo.create).not.toHaveBeenCalled();
+    });
+  });
+
   describe('authorize', () => {
     it('returns error when client_id is not found', async () => {
       mockProjectsRepo.findOne.mockResolvedValue(null);

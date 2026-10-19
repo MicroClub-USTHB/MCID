@@ -9,8 +9,8 @@ import {
   INBOUND_SCHEMA_PROPERTIES,
   INBOUND_STEP_PROPERTIES,
   INBOUND_WEBHOOK_TEMPLATES,
-} from '@mcdi/contracts';
-import type { InboundSchemaProperty } from '@mcdi/contracts';
+} from '@mcid/contracts';
+import type { InboundSchemaProperty } from '@mcid/contracts';
 
 import { DocTable } from '@/features/docs/components/doc-table';
 
@@ -19,7 +19,7 @@ interface Table {
   rows: string[][];
 }
 
-const CODE = 'rounded-sm bg-surface-active px-1.5 py-0.5 font-mono text-code text-text-primary';
+const CODE = 'rounded-sm bg-secondary px-1.5 py-0.5 font-mono text-xs text-foreground';
 
 const properties = (list: InboundSchemaProperty[]): Table => ({
   head: ['Property', 'Meaning'],
@@ -55,7 +55,7 @@ const TABLES = {
 export type InboundContractName = keyof typeof TABLES;
 
 /**
- * A table of what an inbound webhook schema may contain, read from `@mcdi/contracts` so the
+ * A table of what an inbound webhook schema may contain, read from `@mcid/contracts` so the
  * docs cannot drift from the catalog the admin editor and the API tests rely on.
  */
 export function InboundContract({ name }: { name: InboundContractName }) {

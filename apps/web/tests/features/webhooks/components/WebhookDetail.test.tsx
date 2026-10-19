@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { server } from '../../../setup';
 import { WebhookDetail } from '@/features/webhooks/components';
 import type { WebhookView } from '@/features/webhooks';
-import { useToastStore } from '@/shared/stores/toast';
+import { shownToasts } from '../../../helpers/toasts';
 
 const API_URL = 'http://localhost:3000/api';
 
@@ -18,7 +18,7 @@ const webhook: WebhookView = {
   channelId: '234567890123456789',
   channelLabel: '#deployments',
   serverId: '123456789012345678',
-  serverLabel: 'MicroClub',
+  serverLabel: 'Micro Club',
   usageCount: 1234,
   lastUsedLabel: 'Aug 15, 2026, 9:30 AM',
   createdAtLabel: 'Aug 1, 2026, 10:00 AM',
@@ -32,12 +32,10 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 function toasts() {
-  return useToastStore.getState().toasts;
+  return shownToasts;
 }
 
-afterEach(() => {
-  useToastStore.setState({ toasts: [] });
-});
+afterEach(() => {});
 
 describe('WebhookDetail', () => {
   it('shows the usage stats and where the webhook posts', () => {
@@ -47,7 +45,7 @@ describe('WebhookDetail', () => {
     expect(screen.getByText((1234).toLocaleString())).toBeInTheDocument();
     expect(screen.getByText('Aug 15, 2026, 9:30 AM')).toBeInTheDocument();
     expect(screen.getByText('#deployments')).toBeInTheDocument();
-    expect(screen.getByText('MicroClub')).toBeInTheDocument();
+    expect(screen.getByText('Micro Club')).toBeInTheDocument();
   });
 
   it('asks for confirmation and sends nothing when cancelled', async () => {
@@ -61,11 +59,11 @@ describe('WebhookDetail', () => {
     render(<WebhookDetail webhook={webhook} onDeleted={vi.fn()} />, { wrapper });
 
     await userEvent.click(screen.getByRole('button', { name: 'Delete webhook' }));
-    const dialog = await screen.findByRole('dialog');
+    const dialog = await screen.findByRole('alertdialog');
     expect(dialog).toHaveTextContent('Deploy notifications');
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
     expect(deleted).not.toHaveBeenCalled();
   });
 
@@ -77,7 +75,7 @@ describe('WebhookDetail', () => {
     render(<WebhookDetail webhook={webhook} onDeleted={onDeleted} />, { wrapper });
 
     await userEvent.click(screen.getByRole('button', { name: 'Delete webhook' }));
-    await screen.findByRole('dialog');
+    await screen.findByRole('alertdialog');
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => expect(onDeleted).toHaveBeenCalled());
@@ -99,7 +97,7 @@ describe('WebhookDetail', () => {
     render(<WebhookDetail webhook={webhook} onDeleted={onDeleted} />, { wrapper });
 
     await userEvent.click(screen.getByRole('button', { name: 'Delete webhook' }));
-    await screen.findByRole('dialog');
+    await screen.findByRole('alertdialog');
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
     await waitFor(() =>

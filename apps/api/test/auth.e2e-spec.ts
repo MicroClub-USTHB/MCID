@@ -101,7 +101,7 @@ describeIf('/api/auth (e2e)', () => {
       expect(res.headers.location).toBe('/api/auth/discord');
       expect(res.headers['set-cookie']).toBeDefined();
       const cookie = (res.headers['set-cookie'] as unknown as string[]).find(
-        (c: string) => c.startsWith('mcdi_auth_req='),
+        (c: string) => c.startsWith('mcid_auth_req='),
       );
       expect(cookie).toBeDefined();
       expect(cookie).toContain('HttpOnly');
@@ -658,7 +658,7 @@ describeIf('/api/auth (e2e)', () => {
 
       const cookies = authorizeRes.headers['set-cookie'] as unknown as string[];
       const authCookie = cookies.find((c: string) =>
-        c.startsWith('mcdi_auth_req='),
+        c.startsWith('mcid_auth_req='),
       )!;
 
       // Step 2: GET /auth/discord with cookie → redirects to Discord OAuth URL
@@ -763,7 +763,7 @@ describeIf('/api/auth (e2e)', () => {
 
         const res = await request(app.getHttpServer())
           .get('/api/auth/sso/session')
-          .set('Cookie', [`mcdi_sso=${rawToken}`])
+          .set('Cookie', [`mcid_sso=${rawToken}`])
           .expect(200);
 
         expect(res.body).toMatchObject({
@@ -780,13 +780,13 @@ describeIf('/api/auth (e2e)', () => {
       it('clears a stale cookie and reports unauthenticated', async () => {
         const res = await request(app.getHttpServer())
           .get('/api/auth/sso/session')
-          .set('Cookie', ['mcdi_sso=stale-token'])
+          .set('Cookie', ['mcid_sso=stale-token'])
           .expect(401);
 
         const setCookie = (res.headers['set-cookie'] as unknown as string[])
           ?.join(';')
           .toLowerCase();
-        expect(setCookie).toContain('mcdi_sso=');
+        expect(setCookie).toContain('mcid_sso=');
         expect(setCookie).toContain('expires=');
       });
     });
@@ -808,7 +808,7 @@ describeIf('/api/auth (e2e)', () => {
             server_id: serverId,
             state: 'csrf-sso',
           })
-          .set('Cookie', [`mcdi_sso=${rawToken}`])
+          .set('Cookie', [`mcid_sso=${rawToken}`])
           .expect(302);
 
         // Lands directly on the platform's redirect_uri carrying ?code=&state=,
@@ -839,9 +839,105 @@ describeIf('/api/auth (e2e)', () => {
         // Same handoff as the existing /auth/authorize flow.
         expect(res.headers.location).toBe('/api/auth/discord');
         const cookie = (res.headers['set-cookie'] as unknown as string[]).find(
-          (c) => c.startsWith('mcdi_auth_req='),
+          (c) => c.startsWith('mcid_auth_req='),
         );
         expect(cookie).toBeDefined();
+      });
+    });
+
+    describe('GET /api/auth/sso/authorize?prompt=none', () => {
+      const query = (clientId: string, serverId: string) => ({
+        client_id: clientId,
+        redirect_uri: 'http://localhost:4000/callback',
+        server_id: serverId,
+        state: 'csrf-silent',
+        prompt: 'none',
+      });
+
+      it('with a valid SSO cookie redirects with a code that the backend can exchange', async () => {
+        const { memberId, serverId } = await seedAdminContext(db);
+        const project = await seedTestProject(db, serverId, {
+          name: 'Silent Hit',
+        });
+        const rawToken = 'sso-silent-hit-token';
+        await seedSsoSession(memberId, rawToken);
+
+        const res = await request(app.getHttpServer())
+          .get('/api/auth/sso/authorize')
+          .query(query(project.id, serverId))
+          .set('Cookie', [`mcid_sso=${rawToken}`])
+          .expect(302);
+
+        const location = new URL(res.headers.location);
+        expect(location.origin + location.pathname).toBe(
+          'http://localhost:4000/callback',
+        );
+        expect(location.searchParams.get('state')).toBe('csrf-silent');
+        const code = location.searchParams.get('code');
+        expect(code).toBeTruthy();
+
+        const exchanged = await request(app.getHttpServer())
+          .post('/api/auth/token')
+          .set('X-API-Key', project.apiKey)
+          .send({
+            clientId: project.id,
+            code,
+            redirectUri: 'http://localhost:4000/callback',
+          })
+          .expect(200);
+        expect(exchanged.body.member.id).toBe(memberId);
+      });
+
+      it('without an SSO cookie redirects login_required and never to Discord', async () => {
+        const { serverId } = await seedAdminContext(db);
+        const project = await seedTestProject(db, serverId, {
+          name: 'Silent Miss',
+        });
+
+        const res = await request(app.getHttpServer())
+          .get('/api/auth/sso/authorize')
+          .query(query(project.id, serverId))
+          .expect(302);
+
+        const location = new URL(res.headers.location);
+        expect(location.origin + location.pathname).toBe(
+          'http://localhost:4000/callback',
+        );
+        expect(location.searchParams.get('error')).toBe('login_required');
+        expect(location.searchParams.get('state')).toBe('csrf-silent');
+        expect(location.searchParams.get('code')).toBeNull();
+        const cookies = (res.headers['set-cookie'] ??
+          []) as unknown as string[];
+        expect(cookies.some((c) => c.startsWith('mcid_auth_req='))).toBe(false);
+      });
+
+      it('answers a JSON 400 for an unregistered redirect_uri instead of redirecting', async () => {
+        const { serverId } = await seedAdminContext(db);
+        const project = await seedTestProject(db, serverId, {
+          name: 'Silent Evil',
+        });
+
+        const res = await request(app.getHttpServer())
+          .get('/api/auth/sso/authorize')
+          .query({
+            ...query(project.id, serverId),
+            redirect_uri: 'http://evil.example.com/callback',
+          })
+          .expect(400);
+        expect(res.body.error).toBe('invalid_redirect_uri');
+        expect(res.headers.location).toBeUndefined();
+      });
+
+      it('rejects an unknown prompt value with 400', async () => {
+        const { serverId } = await seedAdminContext(db);
+        const project = await seedTestProject(db, serverId, {
+          name: 'Silent Bad Prompt',
+        });
+
+        await request(app.getHttpServer())
+          .get('/api/auth/sso/authorize')
+          .query({ ...query(project.id, serverId), prompt: 'login' })
+          .expect(400);
       });
     });
 
@@ -865,7 +961,7 @@ describeIf('/api/auth (e2e)', () => {
 
         const res = await request(app.getHttpServer())
           .get('/api/auth/sso/sessions')
-          .set('Cookie', [`mcdi_sso=${rawToken}`])
+          .set('Cookie', [`mcid_sso=${rawToken}`])
           .expect(200);
 
         expect(Array.isArray(res.body.sessions)).toBe(true);
@@ -910,13 +1006,13 @@ describeIf('/api/auth (e2e)', () => {
 
         const res = await request(app.getHttpServer())
           .post('/api/auth/sso/logout')
-          .set('Cookie', [`mcdi_sso=${rawToken}`])
+          .set('Cookie', [`mcid_sso=${rawToken}`])
           .expect(204);
 
         const setCookie = (res.headers['set-cookie'] as unknown as string[])
           ?.join(';')
           .toLowerCase();
-        expect(setCookie).toContain('mcdi_sso=');
+        expect(setCookie).toContain('mcid_sso=');
 
         // SSO row is gone
         const remainingSso = await db
@@ -935,7 +1031,7 @@ describeIf('/api/auth (e2e)', () => {
         // The SSO endpoint now rejects the same cookie
         await request(app.getHttpServer())
           .get('/api/auth/sso/session')
-          .set('Cookie', [`mcdi_sso=${rawToken}`])
+          .set('Cookie', [`mcid_sso=${rawToken}`])
           .expect(401);
       });
 

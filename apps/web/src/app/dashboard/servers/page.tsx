@@ -10,9 +10,9 @@ export default function ServersPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-hero">Servers</h1>
-        <p className="mt-1 text-body text-text-muted">
-          Manage the Discord servers MCDI syncs and enforces permissions for.
+        <h1 className="header-xs font-bold">Servers</h1>
+        <p className="mt-1 paragraph-sm text-muted-foreground">
+          Manage the Discord servers MCID syncs and enforces permissions for.
         </p>
       </div>
       <ServersView />
