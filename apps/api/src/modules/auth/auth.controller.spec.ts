@@ -13,6 +13,8 @@ import { SessionGuard } from '../../common/guards/session.guard';
 
 const mockAuthService = {
   authorize: jest.fn(),
+  authorizeWithSso: jest.fn(),
+  silentLoginRequired: jest.fn(),
   consumeAuthRequest: jest.fn(),
   findAuthRequestById: jest.fn(),
   buildDiscordLoginUrl: jest.fn(),
@@ -170,6 +172,117 @@ describe('AuthController', () => {
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({ error: 'invalid_client' }),
       );
+    });
+  });
+
+  // ── ssoAuthorize ─────────────────────────────────────────────────────
+
+  describe('ssoAuthorize', () => {
+    const dto = {
+      client_id: 'project-uuid',
+      redirect_uri: 'http://localhost/callback',
+      server_id: '123456789',
+      state: 'csrf-token',
+    };
+    const req = (cookie?: string) =>
+      ({ cookies: cookie ? { mcid_sso: cookie } : {} }) as any;
+
+    it('with prompt=none and no SSO cookie redirects login_required and never starts Discord', async () => {
+      mockSsoService.resolveSession.mockResolvedValue(null);
+      mockAuthService.silentLoginRequired.mockResolvedValue({
+        ok: false,
+        error: 'login_required',
+        description: 'No active MCID session',
+        redirectUri: 'http://localhost/callback',
+        state: 'csrf-token',
+      });
+      const res = mockRes();
+      await controller.ssoAuthorize(
+        { ...dto, prompt: 'none' },
+        req(),
+        res as any,
+      );
+      expect(res.redirect).toHaveBeenCalledWith(
+        expect.stringContaining('error=login_required'),
+      );
+      expect(res.redirect).toHaveBeenCalledWith(
+        expect.stringContaining('state=csrf-token'),
+      );
+      expect(mockAuthService.authorize).not.toHaveBeenCalled();
+      expect(res.cookie).not.toHaveBeenCalled();
+    });
+
+    it('with prompt=none clears a stale SSO cookie', async () => {
+      mockSsoService.resolveSession.mockResolvedValue(null);
+      mockAuthService.silentLoginRequired.mockResolvedValue({
+        ok: false,
+        error: 'login_required',
+        description: 'No active MCID session',
+        redirectUri: 'http://localhost/callback',
+        state: 'csrf-token',
+      });
+      const res = mockRes();
+      await controller.ssoAuthorize(
+        { ...dto, prompt: 'none' },
+        req('stale'),
+        res as any,
+      );
+      expect(res.clearCookie).toHaveBeenCalledWith(
+        'mcid_sso',
+        expect.any(Object),
+      );
+    });
+
+    it('with prompt=none and an untrusted redirect_uri answers JSON 400, not a redirect', async () => {
+      mockSsoService.resolveSession.mockResolvedValue(null);
+      mockAuthService.silentLoginRequired.mockResolvedValue({
+        ok: false,
+        error: 'invalid_redirect_uri',
+        description: 'Redirect URI not allowed for this project',
+        state: 'csrf-token',
+      });
+      const res = mockRes();
+      await controller.ssoAuthorize(
+        { ...dto, prompt: 'none' },
+        req(),
+        res as any,
+      );
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.redirect).not.toHaveBeenCalled();
+    });
+
+    it('with prompt=none and a valid SSO cookie still redirects with the code', async () => {
+      mockSsoService.resolveSession.mockResolvedValue({
+        member: { id: 'm1' },
+        ssoSession: {},
+      });
+      mockSsoService.getMemberRoleIdsInServer.mockResolvedValue([]);
+      mockAuthService.authorizeWithSso.mockResolvedValue({
+        ok: true,
+        url: 'http://localhost/callback?code=abc&state=csrf-token',
+      });
+      const res = mockRes();
+      await controller.ssoAuthorize(
+        { ...dto, prompt: 'none' },
+        req('good'),
+        res as any,
+      );
+      expect(res.redirect).toHaveBeenCalledWith(
+        'http://localhost/callback?code=abc&state=csrf-token',
+      );
+      expect(mockAuthService.silentLoginRequired).not.toHaveBeenCalled();
+    });
+
+    it('without prompt, no SSO cookie falls through to the Discord flow as before', async () => {
+      mockSsoService.resolveSession.mockResolvedValue(null);
+      mockAuthService.authorize.mockResolvedValue({
+        ok: true,
+        requestId: 'req-1',
+      });
+      const res = mockRes();
+      await controller.ssoAuthorize(dto, req(), res as any);
+      expect(res.redirect).toHaveBeenCalledWith('/api/auth/discord');
+      expect(mockAuthService.silentLoginRequired).not.toHaveBeenCalled();
     });
   });
 

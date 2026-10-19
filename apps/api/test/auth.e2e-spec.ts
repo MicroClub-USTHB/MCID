@@ -845,6 +845,102 @@ describeIf('/api/auth (e2e)', () => {
       });
     });
 
+    describe('GET /api/auth/sso/authorize?prompt=none', () => {
+      const query = (clientId: string, serverId: string) => ({
+        client_id: clientId,
+        redirect_uri: 'http://localhost:4000/callback',
+        server_id: serverId,
+        state: 'csrf-silent',
+        prompt: 'none',
+      });
+
+      it('with a valid SSO cookie redirects with a code that the backend can exchange', async () => {
+        const { memberId, serverId } = await seedAdminContext(db);
+        const project = await seedTestProject(db, serverId, {
+          name: 'Silent Hit',
+        });
+        const rawToken = 'sso-silent-hit-token';
+        await seedSsoSession(memberId, rawToken);
+
+        const res = await request(app.getHttpServer())
+          .get('/api/auth/sso/authorize')
+          .query(query(project.id, serverId))
+          .set('Cookie', [`mcid_sso=${rawToken}`])
+          .expect(302);
+
+        const location = new URL(res.headers.location);
+        expect(location.origin + location.pathname).toBe(
+          'http://localhost:4000/callback',
+        );
+        expect(location.searchParams.get('state')).toBe('csrf-silent');
+        const code = location.searchParams.get('code');
+        expect(code).toBeTruthy();
+
+        const exchanged = await request(app.getHttpServer())
+          .post('/api/auth/token')
+          .set('X-API-Key', project.apiKey)
+          .send({
+            clientId: project.id,
+            code,
+            redirectUri: 'http://localhost:4000/callback',
+          })
+          .expect(200);
+        expect(exchanged.body.member.id).toBe(memberId);
+      });
+
+      it('without an SSO cookie redirects login_required and never to Discord', async () => {
+        const { serverId } = await seedAdminContext(db);
+        const project = await seedTestProject(db, serverId, {
+          name: 'Silent Miss',
+        });
+
+        const res = await request(app.getHttpServer())
+          .get('/api/auth/sso/authorize')
+          .query(query(project.id, serverId))
+          .expect(302);
+
+        const location = new URL(res.headers.location);
+        expect(location.origin + location.pathname).toBe(
+          'http://localhost:4000/callback',
+        );
+        expect(location.searchParams.get('error')).toBe('login_required');
+        expect(location.searchParams.get('state')).toBe('csrf-silent');
+        expect(location.searchParams.get('code')).toBeNull();
+        const cookies = (res.headers['set-cookie'] ??
+          []) as unknown as string[];
+        expect(cookies.some((c) => c.startsWith('mcid_auth_req='))).toBe(false);
+      });
+
+      it('answers a JSON 400 for an unregistered redirect_uri instead of redirecting', async () => {
+        const { serverId } = await seedAdminContext(db);
+        const project = await seedTestProject(db, serverId, {
+          name: 'Silent Evil',
+        });
+
+        const res = await request(app.getHttpServer())
+          .get('/api/auth/sso/authorize')
+          .query({
+            ...query(project.id, serverId),
+            redirect_uri: 'http://evil.example.com/callback',
+          })
+          .expect(400);
+        expect(res.body.error).toBe('invalid_redirect_uri');
+        expect(res.headers.location).toBeUndefined();
+      });
+
+      it('rejects an unknown prompt value with 400', async () => {
+        const { serverId } = await seedAdminContext(db);
+        const project = await seedTestProject(db, serverId, {
+          name: 'Silent Bad Prompt',
+        });
+
+        await request(app.getHttpServer())
+          .get('/api/auth/sso/authorize')
+          .query({ ...query(project.id, serverId), prompt: 'login' })
+          .expect(400);
+      });
+    });
+
     describe('GET /api/auth/sso/sessions', () => {
       it('lists active project sessions under the SSO cookie, hiding tokens', async () => {
         const { memberId, serverId } = await seedAdminContext(db);
