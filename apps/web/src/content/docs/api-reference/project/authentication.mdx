@@ -20,6 +20,7 @@ The platform redirects the user here with `client_id`, `redirect_uri`, `server_i
 | `redirect_uri` | query | `string` | yes | URI to redirect back to after authentication. Must be whitelisted for the project. |
 | `server_id` | query | `string` | yes | Discord server ID to verify membership against |
 | `state` | query | `string` | yes | Opaque state value passed through to the redirect. Use for CSRF protection. |
+| `prompt` | query | `"none"` | no | Silent login check, only honoured by `GET /auth/sso/authorize`. With `none`, a browser without a valid `mcid_sso` cookie is redirected back with `error=login_required` instead of being sent to Discord. |
 
 **Responses**
 

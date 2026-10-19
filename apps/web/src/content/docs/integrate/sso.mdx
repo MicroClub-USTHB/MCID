@@ -35,6 +35,8 @@ Both take the same query parameters:
 
 All four are required. Leaving one out is a 400 that lists what is missing.
 
+`GET /api/auth/sso/authorize` also takes an optional `prompt`. Its only value is `none`, which turns the request into a silent check, see [Sign in without a click](#sign-in-without-a-click). `GET /api/auth/authorize` ignores it, because that entry point always goes through Discord.
+
 ```ts
 const params = new URLSearchParams({
   client_id: PROJECT_ID,
@@ -71,12 +73,13 @@ HTTP/1.1 302 Found
 Location: http://localhost:4000/callback?error=access_denied&error_description=Project+does+not+have+access+to+this+server&state=s1
 ```
 
-| `error`                | Meaning                                                                              |
-| ---------------------- | ------------------------------------------------------------------------------------ |
-| `invalid_client`       | The `client_id` is unknown or the project is inactive.                               |
-| `invalid_redirect_uri` | The `redirect_uri` is not registered for the project.                                |
-| `access_denied`        | The project has no access to that server.                                            |
-| `insufficient_roles`   | The project limits who may sign in, and the member holds none of the accepted roles. |
+| `error`                | Meaning                                                                                |
+| ---------------------- | -------------------------------------------------------------------------------------- |
+| `invalid_client`       | The `client_id` is unknown or the project is inactive.                                 |
+| `invalid_redirect_uri` | The `redirect_uri` is not registered for the project.                                  |
+| `access_denied`        | The project has no access to that server.                                              |
+| `insufficient_roles`   | The project limits who may sign in, and the member holds none of the accepted roles.   |
+| `login_required`       | Only with `prompt=none`: the browser has no valid SSO session, so nobody is signed in. |
 
 MCID never redirects to an address it cannot trust. When `client_id` or `redirect_uri` is the problem there is nobody safe to send the member to, so it answers with a JSON 400 instead:
 
@@ -87,6 +90,35 @@ MCID never redirects to an address it cannot trust. When `client_id` or `redirec
   "message": "Redirect URI not allowed for this project"
 }
 ```
+
+## Sign in without a click
+
+A member who already signed in on another MCID project has a valid `mcid_sso` cookie. Your project can find that out on the first visit, with no login button, by adding `prompt=none` to the SSO entry point:
+
+```http
+GET /api/auth/sso/authorize?client_id=...&redirect_uri=...&server_id=...&state=...&prompt=none
+```
+
+MCID checks the request like any other, then answers in one of two ways:
+
+| The browser has            | MCID redirects to your `redirect_uri` with                                       |
+| -------------------------- | -------------------------------------------------------------------------------- |
+| A valid `mcid_sso` cookie  | `code` and `state`, exactly like a normal SSO login. Exchange the code as usual. |
+| No valid `mcid_sso` cookie | `error=login_required` and `state`. MCID never sends the browser to Discord.     |
+
+The checks run first, so a bad `client_id`, an unregistered `redirect_uri` or a wrong `server_id` fails exactly as before: a JSON 400 when MCID cannot trust the address, an `error` redirect otherwise. An unknown `prompt` value is a 400.
+
+Your **backend** starts this, not your page, because it holds the API key and the `state` for the code exchange:
+
+1. A request arrives and your backend has no session for the visitor.
+2. If the visitor does not carry your "already checked" cookie, the backend stores a `state`, then redirects to the URL above.
+3. On `code`, the backend exchanges it with `POST /api/auth/token` and sets its own session cookie.
+4. On `error=login_required`, the backend sets a short-lived "already checked" cookie (a few minutes is enough) and renders the page with the normal login button. The cookie is what stops a redirect loop.
+5. The login button still points at `/api/auth/sso/authorize` without `prompt`, so a click takes the member through Discord.
+
+Do not run this on every page of a public site for every visitor you have not checked yet, and always set the "already checked" cookie. Without it, each page load is a redirect round trip.
+
+A site with no backend of its own cannot do this directly, because the code exchange needs the API key. Put a small serverless function in front that holds the key and runs steps 1 to 4, and the site becomes the same case as a project with a backend. A hidden iframe does not work: the `mcid_sso` cookie is `SameSite=Lax`, so the browser does not send it from a frame on another site.
 
 ## Exchange the code
 
@@ -212,19 +244,19 @@ These read the `mcid_sso` cookie, so the browser calls them with `credentials: '
 
 ## Every endpoint at a glance
 
-| Endpoint                         | Authenticated by            | Called by    | Purpose                                                  |
-| -------------------------------- | --------------------------- | ------------ | -------------------------------------------------------- |
-| `GET /api/auth/sso/authorize`    | `mcid_sso` cookie, optional | Browser      | SSO-aware login, skips Discord when the cookie is valid. |
-| `GET /api/auth/authorize`        | none                        | Browser      | Login that always goes through Discord.                  |
-| `GET /api/auth/discord/callback` | none                        | Discord      | Internal. Both entry points end here.                    |
-| `POST /api/auth/token`           | API key                     | Your backend | Exchange the one-time code for a session.                |
-| `POST /api/auth/token/refresh`   | session token as Bearer     | Your backend | Rotate the session and refresh tokens.                   |
-| `POST /api/auth/validate`        | API key                     | Your backend | Check a token and get the member's current roles.        |
-| `POST /api/auth/logout`          | API key                     | Your backend | End one session of your project.                         |
-| `POST /api/auth/logout-all`      | API key                     | Your backend | End all of a member's sessions on your project.          |
-| `GET /api/auth/sso/session`      | `mcid_sso` cookie           | Browser      | Who is signed in.                                        |
-| `GET /api/auth/sso/sessions`     | `mcid_sso` cookie           | Browser      | The project sessions under the cookie.                   |
-| `POST /api/auth/sso/logout`      | `mcid_sso` cookie           | Browser      | Log out of every project at once.                        |
+| Endpoint                         | Authenticated by            | Called by    | Purpose                                                                                     |
+| -------------------------------- | --------------------------- | ------------ | ------------------------------------------------------------------------------------------- |
+| `GET /api/auth/sso/authorize`    | `mcid_sso` cookie, optional | Browser      | SSO-aware login, skips Discord when the cookie is valid. With `prompt=none` it only checks. |
+| `GET /api/auth/authorize`        | none                        | Browser      | Login that always goes through Discord.                                                     |
+| `GET /api/auth/discord/callback` | none                        | Discord      | Internal. Both entry points end here.                                                       |
+| `POST /api/auth/token`           | API key                     | Your backend | Exchange the one-time code for a session.                                                   |
+| `POST /api/auth/token/refresh`   | session token as Bearer     | Your backend | Rotate the session and refresh tokens.                                                      |
+| `POST /api/auth/validate`        | API key                     | Your backend | Check a token and get the member's current roles.                                           |
+| `POST /api/auth/logout`          | API key                     | Your backend | End one session of your project.                                                            |
+| `POST /api/auth/logout-all`      | API key                     | Your backend | End all of a member's sessions on your project.                                             |
+| `GET /api/auth/sso/session`      | `mcid_sso` cookie           | Browser      | Who is signed in.                                                                           |
+| `GET /api/auth/sso/sessions`     | `mcid_sso` cookie           | Browser      | The project sessions under the cookie.                                                      |
+| `POST /api/auth/sso/logout`      | `mcid_sso` cookie           | Browser      | Log out of every project at once.                                                           |
 
 ## Move an existing integration to SSO
 
@@ -233,6 +265,7 @@ You do not have to. `GET /api/auth/authorize` is unchanged and keeps working.
 1. Change the login button's address from `/api/auth/authorize` to `/api/auth/sso/authorize`. The callback, exchange, validate, refresh and logout calls stay exactly the same.
 2. Optionally add a "Log out everywhere" button that calls `POST /api/auth/sso/logout`.
 3. Optionally show the signed-in member with `GET /api/auth/sso/session`.
+4. Optionally sign members in without a click, from your backend, with `prompt=none`. See [Sign in without a click](#sign-in-without-a-click).
 
 A login through `/api/auth/authorize` still sets the SSO cookie, so the member's next login through `/api/auth/sso/authorize` can skip Discord.
 
@@ -241,6 +274,7 @@ A login through `/api/auth/authorize` still sets the SSO cookie, so the member's
 - The API key is backend only. The browser only ever holds the session token or the cookie.
 - Register every `redirect_uri` you use. A project may have several, and the match is exact.
 - Check `state` on every callback.
+- With `prompt=none`, set an "already checked" cookie after `login_required`, so a signed-out visitor is not redirected on every page.
 - Tokens are stored as SHA-256 hashes, so a database leak does not give out usable tokens.
 
 The full request and response fields are in the [Authentication reference](/docs/api-reference/project/authentication) and the [SSO reference](/docs/api-reference/project/authentication-sso).
