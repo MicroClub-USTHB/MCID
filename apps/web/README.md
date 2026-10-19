@@ -33,7 +33,7 @@ MCID (Micro Club Identity) is a full-stack platform that serves as the identity 
 
 | Layer | Technology | Version |
 |---|---|---|
-| Framework | Next.js (App Router) | 16.2.2 |
+| Framework | Next.js (App Router) | 16.4.2 |
 | Language | TypeScript (strict mode) | 5.x |
 | Styling | Tailwind CSS (CSS-based `@theme`) | 4.x |
 | Server state | TanStack React Query | 5.x |

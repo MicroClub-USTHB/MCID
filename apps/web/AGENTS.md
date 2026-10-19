@@ -16,7 +16,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 | Layer | Stack |
 |---|---|
-| Framework | Next.js 16.2.2 (App Router, deployed on Vercel) |
+| Framework | Next.js 16.4.2 (App Router, deployed on Vercel) |
 | Language | TypeScript 5 (strict mode, `noUncheckedIndexedAccess`) |
 | Styling | Tailwind CSS v4 (CSS-based `@theme`, no JS config) |
 | Server State | TanStack React Query v5 |
