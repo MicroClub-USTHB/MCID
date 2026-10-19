@@ -236,13 +236,12 @@ describe('MemberRepository (members module)', () => {
   // ── replaceMemberRoles ──────────────────────────────────────────────────────
 
   describe('replaceMemberRoles', () => {
-    it('executes transaction to replace roles', async () => {
+    it('executes transaction to replace roles and returns the previous ones', async () => {
       const db = buildDb([]);
       const repo = await buildRepo(db);
-      // Should not throw
       await expect(
         repo.replaceMemberRoles('srv-1', 'mem-1', ['role-1', 'role-2']),
-      ).resolves.toBeUndefined();
+      ).resolves.toEqual([]);
       expect(db.transaction).toHaveBeenCalledTimes(1);
     });
   });

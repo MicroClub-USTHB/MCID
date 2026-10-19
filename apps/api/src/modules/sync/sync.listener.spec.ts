@@ -14,6 +14,8 @@ const SYNC_EVENTS = [
   'guildCreate',
   'guildUpdate',
   'guildDelete',
+  'shardReady',
+  'shardResume',
 ] as const;
 
 function buildMockClient() {
@@ -75,7 +77,7 @@ describe('SyncListener', () => {
   });
 
   describe('onModuleInit', () => {
-    it('registers all 10 Discord event listeners', async () => {
+    it('registers all 12 Discord event listeners', async () => {
       const { listener, mockClient } = await buildModule();
       listener.onModuleInit();
 
@@ -90,7 +92,7 @@ describe('SyncListener', () => {
   });
 
   describe('onModuleDestroy', () => {
-    it('calls removeAllListeners for each of the 10 events', async () => {
+    it('calls removeAllListeners for each of the 12 events', async () => {
       const { listener, mockClient } = await buildModule();
       listener.onModuleInit();
       listener.onModuleDestroy();
@@ -101,6 +103,76 @@ describe('SyncListener', () => {
       expect(mockClient.removeAllListeners).toHaveBeenCalledTimes(
         SYNC_EVENTS.length,
       );
+    });
+  });
+
+  describe('gateway reconnects', () => {
+    const handlerFor = (mockClient: any, event: string) =>
+      mockClient.on.mock.calls.find(([e]: [string]) => e === event)[1];
+
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    it('ignores the first shardReady of a shard (the boot sync covers it)', async () => {
+      const { listener, mockClient, mockSyncService } = await buildModule();
+      listener.onModuleInit();
+      handlerFor(mockClient, 'shardReady')(0);
+      jest.advanceTimersByTime(10 * 60_000);
+      expect(mockSyncService.startupSyncAll).not.toHaveBeenCalled();
+    });
+
+    it('queues one reconnect catch-up for a later shardReady', async () => {
+      const { listener, mockClient, mockSyncService } = await buildModule();
+      listener.onModuleInit();
+      const onReady = handlerFor(mockClient, 'shardReady');
+      onReady(0);
+      onReady(0);
+      jest.advanceTimersByTime(10 * 60_000);
+      expect(mockSyncService.startupSyncAll).toHaveBeenCalledTimes(1);
+      expect(mockSyncService.startupSyncAll).toHaveBeenCalledWith('reconnect');
+    });
+
+    it('collapses reconnects inside the debounce window into one catch-up', async () => {
+      const { listener, mockClient, mockSyncService } = await buildModule();
+      listener.onModuleInit();
+      const onReady = handlerFor(mockClient, 'shardReady');
+      onReady(0);
+      onReady(0);
+      jest.advanceTimersByTime(20_000);
+      onReady(0);
+      jest.advanceTimersByTime(10 * 60_000);
+      expect(mockSyncService.startupSyncAll).toHaveBeenCalledTimes(1);
+    });
+
+    it('schedules a new catch-up for a reconnect after the window', async () => {
+      const { listener, mockClient, mockSyncService } = await buildModule();
+      listener.onModuleInit();
+      const onReady = handlerFor(mockClient, 'shardReady');
+      onReady(0);
+      onReady(0);
+      jest.advanceTimersByTime(10 * 60_000);
+      onReady(0);
+      jest.advanceTimersByTime(10 * 60_000);
+      expect(mockSyncService.startupSyncAll).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not sync on shardResume', async () => {
+      const { listener, mockClient, mockSyncService } = await buildModule();
+      listener.onModuleInit();
+      handlerFor(mockClient, 'shardResume')(0, 12);
+      jest.advanceTimersByTime(10 * 60_000);
+      expect(mockSyncService.startupSyncAll).not.toHaveBeenCalled();
+    });
+
+    it('drops a pending catch-up when destroyed', async () => {
+      const { listener, mockClient, mockSyncService } = await buildModule();
+      listener.onModuleInit();
+      const onReady = handlerFor(mockClient, 'shardReady');
+      onReady(0);
+      onReady(0);
+      listener.onModuleDestroy();
+      jest.advanceTimersByTime(10 * 60_000);
+      expect(mockSyncService.startupSyncAll).not.toHaveBeenCalled();
     });
   });
 

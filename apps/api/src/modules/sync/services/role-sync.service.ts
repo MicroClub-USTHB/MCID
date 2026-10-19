@@ -6,6 +6,8 @@ import { SyncLogService } from './sync-log.service';
 import { SyncChangeEntry } from '../sync-types';
 import { withRetry } from '../../../common/utils/retry.util';
 import { PermissionCacheService } from '../../permissions/permission-cache.service';
+import { AdminAccessService } from '../../admin-access/admin-access.service';
+import { AuditService } from '../../audit/audit.service';
 
 @Injectable()
 export class RoleSyncService {
@@ -16,6 +18,8 @@ export class RoleSyncService {
     private readonly memberRepository: MemberRepository,
     private readonly syncLogService: SyncLogService,
     private readonly permissionCache: PermissionCacheService,
+    private readonly adminAccess: AdminAccessService,
+    private readonly auditService: AuditService,
   ) {}
 
   /**
@@ -194,6 +198,20 @@ export class RoleSyncService {
     );
     // Inheritance rules from this role granted permissions on other servers
     await this.permissionCache.clear();
+    if (this.adminAccess.isRootRole(role.id)) {
+      // Everyone holding it just lost root, whoever deleted it in Discord.
+      this.logger.warn(
+        `Root role ${role.id} (${role.name}) was deleted from server ${role.guild.id}`,
+      );
+      this.auditService.logAction({
+        actionType: 'access',
+        action: 'root_role_deleted',
+        entityType: 'role',
+        entityId: role.id,
+        severity: 'error',
+        details: { roleName: role.name, serverId: role.guild.id },
+      });
+    }
     await this.syncLogService.recordEventChange(
       role.guild.id,
       'role',
