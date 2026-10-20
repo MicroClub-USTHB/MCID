@@ -1,3 +1,8 @@
+---
+title: 'Web guide'
+description: 'How the admin panel is built: feature slices, the design system, data fetching, who gets in, and how to add a page step by step.'
+---
+
 This guide covers how the admin panel in `apps/web` is built: where code goes, how it talks to the API, how it looks, how a visitor is let in, and how to add a page. Frontend rules from the project's `apps/web/CLAUDE.md` are folded in here, and each claim points to the file it comes from.
 
 Next.js 16 differs from older versions. Before you use a Next.js API, read the matching guide in `apps/web/node_modules/next/dist/docs/`.
@@ -391,6 +396,6 @@ pnpm run build
 
 ## The docs live here too
 
-These docs are MDX in `src/content/docs`, served by the same app at `/docs`. [Writing these docs](/docs/build/writing-docs) explains how to add a page, and [Contributing](/docs/build/contributing) says when a change needs one.
+These docs are MDX in `src/content/docs`, served by the same app at `/docs` with Fumadocs. Each page has `title` and `description` frontmatter, and each folder a `meta.json` that orders the sidebar. [Writing these docs](/docs/build/writing-docs) explains how to add a page, and [Contributing](/docs/build/contributing) says when a change needs one.
 
 Source: `apps/web/CLAUDE.md`, `apps/web/src/app/dashboard/layout.tsx`, `apps/web/src/app/dashboard/projects/[id]/inbound-webhooks/page.tsx`, `apps/web/src/features/inbound-webhooks/api`, `apps/web/src/features/auth`, `apps/web/src/providers/QueryProvider.tsx`, `apps/web/src/shared/lib/api-client.ts`, `apps/web/src/shared/lib/access.ts`, `apps/web/src/shared/lib/route-access.ts`, `apps/web/src/shared/lib/use-access.ts`, `apps/web/src/shared/lib/utils.ts`, `apps/web/src/shared/lib/cookies.ts`, `apps/web/src/features/access`, `apps/web/src/app/dashboard/access`, `apps/web/src/shared/styles/globals.css`, `apps/web/src/shared/components/layout/nav-items.ts`, `apps/web/src/proxy.ts`, `apps/web/tests/app/dashboard/inbound-webhooks.test.tsx`, `apps/web/tests/setup.ts`.

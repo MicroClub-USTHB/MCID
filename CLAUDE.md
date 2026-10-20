@@ -69,9 +69,9 @@ Put security pins in `overrides` in `pnpm-workspace.yaml`. Prefer scoped overrid
 
 ## Documentation
 
-The developer documentation is MDX in `apps/web/src/content/docs`, served at `/docs` by the web app. `apps/web/src/features/docs/nav.ts` lists every page and is the only place a page is registered. To add one, create the `.mdx` file (no title heading, end with a `Source:` line naming the files it describes), add its entry to `nav.ts`, and run `pnpm --filter @mcid/web exec vitest run tests/features/docs`. See `apps/web/src/content/docs/build/writing-docs.mdx`.
+The developer documentation is MDX in `apps/web/src/content/docs`, served at `/docs` by the web app with Fumadocs (Notebook layout, search at `/api/search`). Each page starts with `title` and `description` frontmatter, and each folder has a `meta.json` whose `pages` list orders the sidebar. To add a page, create the `.mdx` file (frontmatter, no title heading, end with a `Source:` line naming the files it describes), add its name to the folder's `meta.json`, and run `pnpm --filter @mcid/web exec vitest run tests/features/docs tests/app/docs-routes.test.tsx`. `source.config.ts` declares the collection; the `fumadocs-mdx` plugin in `next.config.ts` generates `apps/web/.source/` (git-ignored) on `next dev` and `next build`, and the tests build the page tree from the files themselves. See `apps/web/src/content/docs/build/writing-docs.mdx`.
 
-- The API reference under `api-reference/` is generated. After you change an endpoint, a DTO or a Swagger decorator, run `pnpm docs:api` and commit the result. CI fails when it is out of date.
+- The API reference under `api-reference/` (pages, its `index.mdx` and its `meta.json` files) is generated. After you change an endpoint, a DTO or a Swagger decorator, run `pnpm docs:api` and commit the result. CI fails when it is out of date.
 - Update the hand-written pages in the same pull request when you change behaviour they describe. Tests check that every environment variable is documented and that the code excerpts in the API and web guides still match their files.
 - Prose uses plain hyphens, no em or en dashes, in the present tense, and describes what the code does.
 

@@ -1,12 +1,13 @@
 /**
  * Turns `apps/api/openapi.json` into one MDX page per Swagger group under
- * `src/content/docs/api-reference`. Run with `pnpm docs:api` from the repository root (which
+ * `src/content/docs/api-reference`, plus the reference's index page and the Fumadocs `meta.json`
+ * files that order its sidebar. Run with `pnpm docs:api` from the repository root (which
  * exports the spec first) or `pnpm --filter @mcid/web run docs:api` to use the committed spec.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { generateApiPages } from '../src/features/docs/api-reference/generate';
+import { generateApiReference } from '../src/features/docs/api-reference/generate';
 import type { OpenApiSpec } from '../src/features/docs/api-reference/types';
 
 const spec = JSON.parse(
@@ -14,16 +15,16 @@ const spec = JSON.parse(
 ) as OpenApiSpec;
 const outDir = path.resolve(__dirname, '../src/content/docs/api-reference');
 
-const pages = generateApiPages(spec);
+const files = generateApiReference(spec);
 
-for (const page of pages) {
-  const file = path.join(outDir, `${page.slug}.mdx`);
+for (const page of files) {
+  const file = path.join(outDir, page.path);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, page.content);
 }
 
-// A page that is no longer generated (a group moved or removed) must not stay behind.
-const wanted = new Set(pages.map((page) => path.join(outDir, `${page.slug}.mdx`)));
+// A file that is no longer generated (a group moved or removed) must not stay behind.
+const wanted = new Set(files.map((page) => path.join(outDir, page.path)));
 
 function removeStale(dir: string): void {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -31,7 +32,7 @@ function removeStale(dir: string): void {
     if (entry.isDirectory()) {
       removeStale(full);
       if (fs.readdirSync(full).length === 0) fs.rmdirSync(full);
-    } else if (entry.name.endsWith('.mdx') && !wanted.has(full)) {
+    } else if (/\.(mdx|json)$/.test(entry.name) && !wanted.has(full)) {
       fs.rmSync(full);
       console.log(`removed ${path.relative(outDir, full)}`);
     }
@@ -39,4 +40,4 @@ function removeStale(dir: string): void {
 }
 removeStale(outDir);
 
-console.log(`api-reference: ${pages.length} pages written`);
+console.log(`api-reference: ${files.length} files written`);

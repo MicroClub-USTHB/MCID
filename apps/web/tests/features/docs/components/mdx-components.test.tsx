@@ -1,14 +1,51 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
 import { Callout } from '@/features/docs/components/callout';
-import { CodeBlock } from '@/features/docs/components/code-block';
 import { Diagram } from '@/features/docs/components/diagram';
-import { DocHeading } from '@/features/docs/components/doc-heading';
 import { DocLink } from '@/features/docs/components/doc-link';
 import { DocTable } from '@/features/docs/components/doc-table';
 import { Steps } from '@/features/docs/components/steps';
+import { getMDXComponents } from '@/features/docs/mdx';
+
+import { pages, testSource } from '../helpers/content';
+
+vi.mock('@/features/docs/source', async () => ({
+  source: (await import('../helpers/content')).testSource,
+}));
+
+describe('getMDXComponents', () => {
+  it('provides every component the docs content uses by name', () => {
+    const used = new Set(
+      pages.flatMap((page) => {
+        // JSX in prose only: code blocks and inline code quote component names as text.
+        const prose = page.body.replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, '');
+        return [...prose.matchAll(/<([A-Z][A-Za-z]*)[\s/>]/g)].map((m) => m[1]!);
+      })
+    );
+    const components = getMDXComponents();
+
+    expect(used.size).toBeGreaterThan(5);
+    expect([...used].filter((name) => !(name in components))).toEqual([]);
+  });
+
+  it('uses the Fumadocs code block, headings and the docs link and table', () => {
+    const components = getMDXComponents();
+
+    expect(components.pre).toBeDefined();
+    expect(components.h2).toBeDefined();
+    expect(components.a).toBe(DocLink);
+    expect(components.table).toBe(DocTable);
+  });
+
+  it('renders the docs home sections from the page tree', () => {
+    const { DocsSections } = getMDXComponents() as { DocsSections: () => React.ReactNode };
+    render(<>{DocsSections()}</>);
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Start here' })).toBeInTheDocument();
+    expect(testSource.pageTree.children.length).toBeGreaterThan(1);
+  });
+});
 
 describe('Callout', () => {
   it.each([
@@ -31,7 +68,7 @@ describe('Callout', () => {
 });
 
 describe('Steps', () => {
-  it('keeps the numbered list it wraps', () => {
+  it('keeps the numbered list it wraps, drawn as a procedure', () => {
     render(
       <Steps>
         <ol>
@@ -45,83 +82,7 @@ describe('Steps', () => {
       'First',
       'Second',
     ]);
-  });
-});
-
-describe('CodeBlock', () => {
-  afterEach(() => vi.restoreAllMocks());
-
-  function block() {
-    return (
-      <CodeBlock>
-        <code className="hljs language-bash">pnpm install</code>
-      </CodeBlock>
-    );
-  }
-
-  it('names the language it was written in', () => {
-    render(block());
-
-    expect(screen.getByText('bash')).toBeInTheDocument();
-  });
-
-  it('copies exactly the code and says it did', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-    render(block());
-
-    await userEvent.click(screen.getByRole('button', { name: 'Copy code' }));
-
-    expect(writeText).toHaveBeenCalledWith('pnpm install');
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument());
-  });
-
-  it('stays quiet when the browser refuses the clipboard', async () => {
-    Object.defineProperty(navigator, 'clipboard', {
-      value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
-      configurable: true,
-    });
-    render(block());
-
-    await userEvent.click(screen.getByRole('button', { name: 'Copy code' }));
-
-    expect(screen.getByRole('button', { name: 'Copy code' })).toBeInTheDocument();
-  });
-
-  it('works without a language too', () => {
-    render(
-      <CodeBlock>
-        <code>plain</code>
-      </CodeBlock>
-    );
-
-    expect(screen.getByRole('button', { name: 'Copy code' })).toBeInTheDocument();
-  });
-});
-
-describe('DocHeading', () => {
-  it('gives the heading a link to itself', () => {
-    render(
-      <DocHeading level={2} id="local-setup">
-        Local setup
-      </DocHeading>
-    );
-
-    expect(screen.getByRole('heading', { level: 2, name: /Local setup/ })).toHaveAttribute(
-      'id',
-      'local-setup'
-    );
-    expect(screen.getByRole('link', { name: 'Link to Local setup' })).toHaveAttribute(
-      'href',
-      '#local-setup'
-    );
-  });
-
-  it('is a plain heading when it has no id', () => {
-    render(<DocHeading level={3}>Loose</DocHeading>);
-
-    expect(screen.getByRole('heading', { level: 3, name: 'Loose' })).toBeInTheDocument();
-    expect(screen.queryByRole('link')).toBeNull();
+    expect(screen.getByRole('list').parentElement).toHaveClass('docs-steps');
   });
 });
 
@@ -166,7 +127,10 @@ describe('DocTable', () => {
       </DocTable>
     );
 
-    expect(screen.getByRole('table').parentElement).toHaveClass('overflow-x-auto');
+    const box = screen.getByRole('table').parentElement;
+    expect(box).toHaveClass('overflow-auto');
+    // Focusable, so the keyboard can scroll it too.
+    expect(box).toHaveAttribute('tabindex', '0');
   });
 });
 
