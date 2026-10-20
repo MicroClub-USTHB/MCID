@@ -22,7 +22,8 @@ export function proxy(request: NextRequest) {
     publicRoutes.some((route) => pathname === route || pathname.startsWith('/api/')) ||
     pathname === '/docs' ||
     pathname.startsWith('/docs/') ||
-    pathname === '/sitemap.xml';
+    pathname === '/sitemap.xml' ||
+    pathname === '/manifest.webmanifest';
 
   if (isPublicRoute) {
     return NextResponse.next();
