@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { X } from 'lucide-react';
 
+import { McidLogoIcon } from '@/shared/components/brand';
 import { LogoutButton } from '@/features/auth/components/LogoutButton';
 import { useAuthStore } from '@/features/auth/stores/auth';
 import { SidebarNav } from '@/shared/components/layout/sidebar-nav';
@@ -36,16 +37,15 @@ function BrandMark() {
   return (
     <Link
       href="/dashboard"
+      aria-label="MCID dashboard"
       className="flex min-w-0 items-center gap-2 rounded-md px-1 py-1 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
     >
-      <span
-        aria-hidden="true"
-        className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary font-heading text-sm font-bold text-sidebar-primary-foreground"
-      >
-        MC
-      </span>
+      <McidLogoIcon size={32} />
       <McSidebarFade className="flex flex-col leading-tight">
-        <span className="font-heading text-sm font-bold text-sidebar-foreground">MCID</span>
+        <span className="font-heading text-sm font-extrabold tracking-[-0.02em]">
+          <span className="text-sidebar-foreground">MC</span>
+          <span className="text-primary">ID</span>
+        </span>
         <span className="text-xs text-muted-foreground">Micro Club Identity</span>
       </McSidebarFade>
     </Link>
