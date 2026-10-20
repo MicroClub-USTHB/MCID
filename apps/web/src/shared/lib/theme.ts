@@ -1,34 +1,52 @@
 'use client';
 
-import { useCallback, useEffect, useSyncExternalStore } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
+import { flushSync } from 'react-dom';
 
-export type ThemeChoice = 'system' | 'light' | 'dark';
+export type ThemeMode = 'light' | 'dark';
 
-/** localStorage key holding the member's choice; absent means "follow the system". */
+/** localStorage key holding the member's choice. */
 export const THEME_STORAGE_KEY = 'mcid-theme';
 
-const DARK_QUERY = '(prefers-color-scheme: dark)';
+/** Micro Club's brand theme is Primary in dark mode, so a first visit is dark. */
+export const DEFAULT_THEME: ThemeMode = 'dark';
+
 const CHANGE_EVENT = 'mcid-theme-change';
 
 /**
- * Runs in <head> before the page paints (see `app/layout.tsx`), so the right
- * palette shows on the first frame instead of flashing light then dark.
- * Kept free of imports: it is serialised into an inline script.
+ * Runs in <head> before the page paints (see `app/layout.tsx`), so the right palette shows on
+ * the first frame. Kept free of imports: it is serialised into an inline script.
  */
-export const THEME_INIT_SCRIPT = `(function(){try{var c=localStorage.getItem('${THEME_STORAGE_KEY}');var d=c==='dark'||(c!=='light'&&window.matchMedia('${DARK_QUERY}').matches);document.documentElement.classList.toggle('dark',d);}catch(e){}})();`;
+export const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem('${THEME_STORAGE_KEY}');var d=t?t==='dark':${DEFAULT_THEME === 'dark'};var r=document.documentElement;r.classList.toggle('dark',d);r.style.colorScheme=d?'dark':'light';}catch(e){}})();`;
 
-function readChoice(): ThemeChoice {
+function readTheme(): ThemeMode {
   try {
     const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-    return stored === 'light' || stored === 'dark' ? stored : 'system';
+    return stored === 'light' || stored === 'dark' ? stored : DEFAULT_THEME;
   } catch {
-    return 'system';
+    return DEFAULT_THEME;
   }
 }
 
-function applyChoice(choice: ThemeChoice) {
-  const dark = choice === 'dark' || (choice === 'system' && window.matchMedia(DARK_QUERY).matches);
-  document.documentElement.classList.toggle('dark', dark);
+function applyTheme(mode: ThemeMode) {
+  const root = document.documentElement;
+  root.classList.toggle('dark', mode === 'dark');
+  root.style.colorScheme = mode;
+}
+
+/**
+ * Runs a DOM change inside a View Transition so a light/dark swap crossfades, as on the
+ * mcoli-ui site. Falls back to an instant change when unsupported or with reduced motion.
+ */
+export function withViewTransition(update: () => void) {
+  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  if (!document.startViewTransition || reduceMotion) {
+    update();
+    return;
+  }
+  const transition = document.startViewTransition(() => flushSync(update));
+  transition.ready.catch(() => {});
+  transition.finished.catch(() => {});
 }
 
 function subscribe(onChange: () => void) {
@@ -40,34 +58,22 @@ function subscribe(onChange: () => void) {
   };
 }
 
-/**
- * The member's theme choice and a setter. `system` follows the operating
- * system and keeps following it when it changes; `light` and `dark` are stored
- * in localStorage. The `dark` class on <html> switches every mcoli-ui token.
- */
-export function useThemeChoice(): [ThemeChoice, (choice: ThemeChoice) => void] {
-  // The stored choice is only known in the browser; the server renders "system".
-  const choice = useSyncExternalStore(subscribe, readChoice, () => 'system' as const);
+/** The current light/dark mode and a setter that stores it and repaints with a crossfade. */
+export function useThemeMode(): [ThemeMode, (mode: ThemeMode) => void] {
+  // The stored choice is only known in the browser; the server renders the default.
+  const mode = useSyncExternalStore(subscribe, readTheme, () => DEFAULT_THEME);
 
-  useEffect(() => {
-    applyChoice(choice);
-    if (choice !== 'system') return;
-    const media = window.matchMedia(DARK_QUERY);
-    const follow = () => applyChoice('system');
-    media.addEventListener('change', follow);
-    return () => media.removeEventListener('change', follow);
-  }, [choice]);
-
-  const setChoice = useCallback((next: ThemeChoice) => {
-    try {
-      if (next === 'system') window.localStorage.removeItem(THEME_STORAGE_KEY);
-      else window.localStorage.setItem(THEME_STORAGE_KEY, next);
-    } catch {
-      // Storage can be unavailable (private mode); the choice still applies to this page.
-    }
-    applyChoice(next);
-    window.dispatchEvent(new Event(CHANGE_EVENT));
+  const setMode = useCallback((next: ThemeMode) => {
+    withViewTransition(() => {
+      try {
+        window.localStorage.setItem(THEME_STORAGE_KEY, next);
+      } catch {
+        // Storage can be unavailable (private mode); the choice still applies to this page.
+      }
+      applyTheme(next);
+      window.dispatchEvent(new Event(CHANGE_EVENT));
+    });
   }, []);
 
-  return [choice, setChoice];
+  return [mode, setMode];
 }

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Fingerprint } from 'lucide-react';
 
 import { LANDING } from '@/features/landing/content';
-import { ThemeToggle } from '@/shared/components/common/ThemeToggle';
+import { ModeToggle } from '@/shared/components/common/ModeToggle';
 import { buttonVariants } from '@/shared/components/ui/mc-button-variants';
 
 export function LandingNav() {
@@ -25,7 +25,7 @@ export function LandingNav() {
           {LANDING.name}
         </Link>
         <div className="flex items-center gap-1">
-          <ThemeToggle />
+          <ModeToggle />
           <Link
             href={LANDING.signIn.href}
             className={buttonVariants({ variant: 'secondary', size: 'sm' })}
