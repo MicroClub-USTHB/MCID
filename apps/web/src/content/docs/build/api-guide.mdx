@@ -1,3 +1,8 @@
+---
+title: 'API guide'
+description: 'How the API is built and how to add an endpoint, step by step, with a real feature as the worked example.'
+---
+
 This guide shows how the API is built and how to add to it. It starts with the anatomy of a module, covers the pieces every module shares, and ends with a step-by-step walk through a real endpoint. Read [Architecture](/docs/build/architecture) first if you have not.
 
 ## Anatomy of a module
@@ -63,7 +68,7 @@ Two decorators declare what a project needs on a server, and `ApiKeyGuard` enfor
 
 ### Tell Swagger who calls it
 
-Every route also declares its audience to Swagger, with `@ApiSecurity('api-key')` for project routes or `@ApiBearerAuth('session-token')` for session routes. That is not decoration. The generated [API reference](/docs/api-reference/project/overview) uses it to put each endpoint in the Project API or the Admin API, and `@ApiTags('Name')` decides the group page. A new tag needs a page in `apps/web/src/features/docs/nav.ts`, and the docs test fails until it has one.
+Every route also declares its audience to Swagger, with `@ApiSecurity('api-key')` for project routes or `@ApiBearerAuth('session-token')` for session routes. That is not decoration. The generated [API reference](/docs/api-reference/project/overview) uses it to put each endpoint in the Project API or the Admin API, and `@ApiTags('Name')` decides the group page. A new tag gets its own page and sidebar entry the next time `pnpm docs:api` runs, and the docs test fails until the result is committed.
 
 ## Caching and invalidation
 

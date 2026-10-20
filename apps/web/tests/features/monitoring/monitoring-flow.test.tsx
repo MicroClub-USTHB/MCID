@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import { useState, type ReactNode } from 'react';
@@ -8,6 +8,7 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../../setup';
 import { AuditLogFilters, ExportAuditButton } from '@/features/monitoring/components';
 import type { AuditLogFilters as AuditLogFilterState } from '@/features/monitoring/types';
+import { pickDate } from '../../helpers/date-picker';
 
 const BASE_URL = 'http://localhost:3000/api';
 
@@ -56,8 +57,8 @@ describe('monitoring flow', () => {
 
     render(<MonitoringFlowHarness />, { wrapper });
 
-    fireEvent.change(screen.getByLabelText('Date from'), { target: { value: '2026-04-01' } });
-    fireEvent.change(screen.getByLabelText('Date to'), { target: { value: '2026-04-30' } });
+    await pickDate(user, 'Date from', '2026-04-01');
+    await pickDate(user, 'Date to', '2026-04-30');
     await user.click(screen.getByRole('combobox', { name: 'Severity' }));
     await user.click(await screen.findByRole('option', { name: 'Error' }));
     await user.click(screen.getByRole('radio', { name: 'Auth' }));

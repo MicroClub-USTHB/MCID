@@ -34,6 +34,7 @@ import {
   McSelectValue,
 } from '@/shared/components/ui/mc-select';
 import { StatCard, StatCardError, StatCardSkeleton } from '@/shared/components/ui/stat-card';
+import { PageHeader } from '@/shared/components/layout/page-header';
 
 const DATE_RANGE_OPTIONS: Array<{ value: StatsDateRange; label: string }> = [
   { value: '7d', label: '7 days' },
@@ -246,12 +247,11 @@ function MemberStatisticsPage() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <header className="min-w-0">
-        <h1 className="header-xs font-bold text-foreground">Member Statistics</h1>
-        <p className="mt-1 max-w-xl paragraph-sm text-muted-foreground">
-          Membership, growth, roles, and activity across managed servers.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="Overview"
+        title="Member Statistics"
+        description="Membership, growth, roles, and activity across managed servers."
+      />
 
       {/* One filter bar: compact controls on one surface, export pushed right. */}
       <div

@@ -1,0 +1,6 @@
+{
+  "title": "Start here",
+  "description": "What MCID is and the few concepts everything else builds on.",
+  "defaultOpen": true,
+  "pages": ["what-is-mcid", "quickstart"]
+}

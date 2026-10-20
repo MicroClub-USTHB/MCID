@@ -1,14 +1,16 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Loader2, ShieldAlert } from 'lucide-react';
+import { Loader2, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { buttonVariants } from '@/shared/components/ui/mc-button';
+import { McAlert } from '@/shared/components/ui/mc-alert';
+import { buttonVariants } from '@/shared/components/ui/mc-button-variants';
 import { cn } from '@/shared/lib/utils';
 import { useAuthStore } from '@/features/auth/stores/auth';
 import { consumePostLoginRedirect, fetchCurrentAdmin } from '@/features/auth/api/service';
 import { mapAdminProfileToUser } from '@/features/auth/api/mappers';
+import { AuthMark, AuthShell } from '@/features/auth/components/AuthShell';
 
 type CallbackStatus = 'processing' | 'error' | 'access-denied';
 
@@ -90,60 +92,69 @@ export function AuthCallbackHandler() {
 
   if (status === 'access-denied') {
     return (
-      <div
-        role="alert"
-        className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-8 text-center"
-      >
-        <div className="rounded-full bg-error/12 p-4">
-          <ShieldAlert className="h-8 w-8 text-error" aria-hidden="true" />
-        </div>
-        <h1 ref={headingRef} tabIndex={-1} className="header-xs font-bold text-foreground">
+      <AuthShell role="alert" className="items-center text-center">
+        <span className="flex size-14 items-center justify-center rounded-2xl border border-error/30 bg-error/12">
+          <ShieldAlert className="size-7 text-error" aria-hidden="true" />
+        </span>
+        <h1
+          ref={headingRef}
+          tabIndex={-1}
+          className="mt-5 header-xs font-bold text-foreground outline-none"
+        >
           Access Denied
         </h1>
-        <p className="max-w-sm paragraph-sm text-muted-foreground">
+        <p className="mt-2 paragraph-sm text-pretty text-muted-foreground">
           Your Discord account doesn&apos;t have the role required to access the MCID admin panel.
           Contact a club admin if you believe this is a mistake.
         </p>
         <Link
           href="/login"
-          className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }), 'mt-2')}
+          className={cn(buttonVariants({ variant: 'secondary', size: 'md' }), 'mt-6 w-full')}
         >
           Back to login
         </Link>
-      </div>
+      </AuthShell>
     );
   }
 
   if (status === 'error') {
     return (
-      <div
-        role="alert"
-        className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-8 text-center"
-      >
-        <div className="rounded-full bg-error/12 p-4">
-          <AlertTriangle className="h-8 w-8 text-error" aria-hidden="true" />
-        </div>
-        <h1 ref={headingRef} tabIndex={-1} className="header-xs font-bold text-foreground">
+      <AuthShell role="alert" className="items-center text-center">
+        <AuthMark />
+        <h1
+          ref={headingRef}
+          tabIndex={-1}
+          className="mt-5 header-xs font-bold text-foreground outline-none"
+        >
           Sign-in failed
         </h1>
-        <p className="max-w-sm paragraph-sm text-error">{errorMessage}</p>
+        <McAlert
+          variant="destructive"
+          title="Discord sign-in did not complete"
+          description={errorMessage}
+          className="mt-5 w-full text-left"
+        />
         <Link
           href="/login"
-          className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }), 'mt-2')}
+          className={cn(buttonVariants({ variant: 'primary', size: 'md' }), 'mt-6 w-full')}
         >
           Retry
         </Link>
-      </div>
+      </AuthShell>
     );
   }
 
   return (
-    <div
-      role="status"
-      className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background"
-    >
-      <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
-      <p className="paragraph-sm text-muted-foreground">Connecting to Discord…</p>
-    </div>
+    <AuthShell role="status" className="items-center text-center">
+      <span className="relative flex size-14 items-center justify-center">
+        <AuthMark />
+        <Loader2
+          className="absolute -right-1.5 -bottom-1.5 size-5 animate-spin rounded-full bg-card text-primary"
+          aria-hidden="true"
+        />
+      </span>
+      <p className="mt-5 font-heading text-base font-semibold text-foreground">Signing you in</p>
+      <p className="mt-1 paragraph-sm text-muted-foreground">Connecting to Discord…</p>
+    </AuthShell>
   );
 }

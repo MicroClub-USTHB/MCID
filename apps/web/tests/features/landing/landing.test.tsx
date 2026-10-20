@@ -1,5 +1,6 @@
-import { render, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
 
 import Home, { metadata } from '@/app/page';
 import { DOCS_HREF, LANDING } from '@/features/landing/content';
@@ -29,9 +30,9 @@ describe('Landing page', () => {
 
   it('offers the docs first and the admin sign-in second, in the hero', () => {
     render(<Home />);
-    const main = within(screen.getByRole('main'));
+    const hero = within(screen.getByRole('region', { name: LANDING.headline }));
 
-    const links = main.getAllByRole('link');
+    const links = hero.getAllByRole('link');
     expect(links.map((link) => link.textContent)).toEqual([
       LANDING.docs.label,
       LANDING.signIn.label,
@@ -40,13 +41,102 @@ describe('Landing page', () => {
     expect(links[1]).toHaveAttribute('href', '/login');
   });
 
-  it('puts the admin sign-in in the navigation too, with the same label', () => {
+  it('puts the admin sign-in in the site header too, with the same label', () => {
     render(<Home />);
 
-    const nav = within(screen.getByRole('navigation', { name: 'Primary' }));
+    const header = within(screen.getByRole('banner'));
 
-    expect(nav.getByRole('link', { name: LANDING.signIn.label })).toHaveAttribute('href', '/login');
-    expect(nav.getByRole('link', { name: LANDING.name })).toHaveAttribute('href', '/');
+    expect(header.getByRole('link', { name: LANDING.signIn.label })).toHaveAttribute(
+      'href',
+      '/login'
+    );
+    expect(header.getByRole('link', { name: 'MCID home' })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('contentinfo')).toBeInTheDocument();
+  });
+
+  it('highlights the key phrase of the headline', () => {
+    render(<Home />);
+
+    const accent = within(screen.getByRole('heading', { level: 1 })).getByText(
+      LANDING.headlineAccent
+    );
+    expect(accent).toHaveClass('text-gradient-primary');
+    expect(LANDING.headline).toBe(`${LANDING.headlineLead}${LANDING.headlineAccent}`);
+  });
+
+  it('copies the mcid-cli login command', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+    render(<Home />);
+
+    expect(screen.getByText(LANDING.command.flag)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Copy command' }));
+
+    expect(writeText).toHaveBeenCalledWith('npx mcid-cli login --profile prod');
+    expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument();
+  });
+
+  it('resets the copy button after a moment', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+    render(<Home />);
+
+    await user.click(screen.getByRole('button', { name: 'Copy request' }));
+    expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(screen.getByRole('button', { name: 'Copy request' })).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it('copies the token exchange request from the developers section', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+    render(<Home />);
+
+    await user.click(screen.getByRole('button', { name: 'Copy request' }));
+
+    const copied = writeText.mock.calls[0]?.[0] ?? '';
+    expect(copied).toContain('POST "$MCID_URL/auth/token"');
+    expect(copied).toContain('X-API-Key: $MCID_API_KEY');
+  });
+
+  it('stays quiet when the clipboard is unavailable', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(new Error('denied'));
+    render(<Home />);
+
+    await user.click(screen.getByRole('button', { name: 'Copy command' }));
+
+    expect(screen.getByRole('button', { name: 'Copy command' })).toBeInTheDocument();
+  });
+
+  it('presents how it works, the features, the developer guide and a final call to action', () => {
+    render(<Home />);
+
+    const titles = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+    expect(titles).toEqual([
+      LANDING.howItWorks.title,
+      LANDING.features.title,
+      LANDING.developers.title,
+      LANDING.finalCta.title,
+    ]);
+    expect(
+      within(screen.getByRole('region', { name: LANDING.howItWorks.title })).getAllByRole(
+        'listitem'
+      )
+    ).toHaveLength(3);
+    expect(
+      within(screen.getByRole('region', { name: LANDING.features.title })).getAllByRole('heading', {
+        level: 3,
+      })
+    ).toHaveLength(LANDING.features.items.length);
+    expect(screen.getByRole('link', { name: LANDING.developers.link.label })).toHaveAttribute(
+      'href',
+      '/docs/integrate/sso'
+    );
   });
 
   it('shows the admin panel with a description for screen readers', () => {
@@ -77,6 +167,7 @@ describe('Landing page', () => {
 
   it('sets a title and a description of a sensible length', () => {
     expect(metadata.title).toEqual({ absolute: LANDING.metadata.title });
+    expect(metadata.alternates?.canonical).toBe('/');
     expect(metadata.description?.length).toBeGreaterThan(50);
     expect(metadata.description?.length).toBeLessThanOrEqual(160);
   });

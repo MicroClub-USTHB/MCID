@@ -27,7 +27,7 @@ export function SyncStatusCard({ serverName, status, action }: SyncStatusCardPro
   const absolute = formatAbsoluteTime(status.lastSyncAt);
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
+    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           <span

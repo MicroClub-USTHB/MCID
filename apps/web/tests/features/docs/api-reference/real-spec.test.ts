@@ -2,9 +2,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { generateApiPages, groupSlug } from '@/features/docs/api-reference/generate';
+import {
+  generateApiPages,
+  generateApiReference,
+  groupSlug,
+} from '@/features/docs/api-reference/generate';
 import type { OpenApiSpec } from '@/features/docs/api-reference/types';
-import { allDocPages } from '@/features/docs/nav';
+
+import { pages as contentPages } from '../helpers/content';
 
 const SPEC_PATH = path.resolve(__dirname, '../../../../../api/openapi.json');
 const OUT_DIR = path.resolve(__dirname, '../../../../src/content/docs/api-reference');
@@ -12,6 +17,7 @@ const STALE = 'run `pnpm docs:api` and commit the result';
 
 const spec = JSON.parse(fs.readFileSync(SPEC_PATH, 'utf8')) as OpenApiSpec;
 const pages = generateApiPages(spec);
+const files = generateApiReference(spec);
 
 function filesBelow(dir: string, prefix = ''): string[] {
   return fs
@@ -19,7 +25,7 @@ function filesBelow(dir: string, prefix = ''): string[] {
     .flatMap((entry) =>
       entry.isDirectory()
         ? filesBelow(path.join(dir, entry.name), `${prefix}${entry.name}/`)
-        : entry.name.endsWith('.mdx')
+        : /\.(mdx|json)$/.test(entry.name)
           ? [`${prefix}${entry.name}`]
           : []
     );
@@ -30,30 +36,27 @@ const operationIds = Object.values(spec.paths).flatMap((item) =>
 );
 
 describe('the API reference, against the committed openapi.json', () => {
-  it('has a nav entry for every generated page, group pages titled after their group', () => {
-    const navEntries = allDocPages().filter((page) => page.slug.startsWith('api-reference/'));
-
-    const titled = (title: string, group: string) => (group === 'Overview' ? '*' : title);
-
-    expect(navEntries.map((page) => page.slug).sort()).toEqual(
-      pages.map((page) => `api-reference/${page.slug}`).sort()
-    );
+  it('titles group pages after their group and every page from its frontmatter', () => {
     for (const generated of pages) {
-      const entry = navEntries.find((page) => page.slug === `api-reference/${generated.slug}`)!;
-      expect(titled(entry.title, generated.group)).toBe(titled(generated.group, generated.group));
+      const onDisk = contentPages.find(
+        (page) => page.file === `api-reference/${generated.slug}.mdx`
+      )!;
+      expect(onDisk.data.title).toBe(generated.title);
+      expect(onDisk.data.description).toBe(generated.description);
+      if (generated.group !== 'Overview') expect(generated.title).toBe(generated.group);
     }
   });
 
   it(`has exactly the generated pages on disk, none missing or left over: ${STALE}`, () => {
     const onDisk = filesBelow(OUT_DIR).sort();
 
-    expect(onDisk).toEqual(pages.map((page) => `${page.slug}.mdx`).sort());
+    expect(onDisk).toEqual(files.map((file) => file.path).sort());
   });
 
-  it(`has pages that match what the spec generates today: ${STALE}`, () => {
-    for (const page of pages) {
-      const onDisk = fs.readFileSync(path.join(OUT_DIR, `${page.slug}.mdx`), 'utf8');
-      expect(onDisk, `${page.slug}.mdx is out of date`).toBe(page.content);
+  it(`has files that match what the spec generates today: ${STALE}`, () => {
+    for (const file of files) {
+      const onDisk = fs.readFileSync(path.join(OUT_DIR, file.path), 'utf8');
+      expect(onDisk, `${file.path} is out of date`).toBe(file.content);
     }
   });
 

@@ -34,7 +34,7 @@ export function MessageHistory({
   onRetry,
 }: MessageHistoryProps) {
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
+    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <h3 className="paragraph-xs font-semibold tracking-wide text-muted-foreground uppercase">
           Message history

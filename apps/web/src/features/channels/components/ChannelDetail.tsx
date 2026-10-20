@@ -10,7 +10,7 @@ interface ChannelDetailProps {
 /** Name / topic / type / NSFW / permission overwrites for the selected channel. */
 export function ChannelDetail({ channel }: ChannelDetailProps) {
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4">
+    <div className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4 shadow-sm">
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="header-xs font-bold text-foreground">#{channel.name}</h2>
         <McBadge variant="outline">{channel.typeLabel}</McBadge>

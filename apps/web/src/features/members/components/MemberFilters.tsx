@@ -3,17 +3,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, Search, Sparkles, X } from 'lucide-react';
 import { useQueries } from '@tanstack/react-query';
+import { Combobox as ComboboxPrimitive } from '@base-ui/react';
 
 import { McBadge } from '@/shared/components/ui/mc-badge';
 import { McButton, buttonVariants } from '@/shared/components/ui/mc-button';
 import {
-  McDropdownMenu,
-  McDropdownMenuCheckboxItem,
-  McDropdownMenuContent,
-  McDropdownMenuGroup,
-  McDropdownMenuLabel,
-  McDropdownMenuTrigger,
-} from '@/shared/components/ui/mc-dropdown-menu';
+  McCombobox,
+  McComboboxContent,
+  McComboboxItem,
+  McComboboxList,
+  McComboboxSearch,
+} from '@/shared/components/ui/mc-combobox';
 import { McInput } from '@/shared/components/ui/mc-input';
 import { cn } from '@/shared/lib/utils';
 import { useServersQuery } from '@/features/servers/api/queries';
@@ -175,42 +175,51 @@ function MultiSelectPicker({
     );
   }, [groups, label, options, selectedIds, selectionType]);
 
+  const labelById = useMemo(
+    () => new Map(selectedOptions.map((option) => [option.id, option.label])),
+    [selectedOptions]
+  );
+  const listId = `${label.toLowerCase()}-filter-options`;
+  const triggerLabel = selectedIds.length > 0 ? `${label} (${selectedIds.length} selected)` : label;
+
   return (
     <div className="space-y-1">
-      <McDropdownMenu
+      <McCombobox<string, true>
+        multiple
+        value={selectedIds}
+        onValueChange={(next) => {
+          const changed = [
+            ...next.filter((id) => !selectedIds.includes(id)),
+            ...selectedIds.filter((id) => !next.includes(id)),
+          ];
+          changed.forEach(onToggle);
+        }}
+        inputValue={search}
+        onInputValueChange={setSearch}
+        filter={null}
         onOpenChange={(open) => {
           if (!open) setSearch('');
         }}
+        itemToStringLabel={(id) => labelById.get(id) ?? id}
+        disabled={disabled}
       >
-        <McDropdownMenuTrigger
-          disabled={disabled}
+        <ComboboxPrimitive.Trigger
+          aria-label={triggerLabel}
           className={cn(
             buttonVariants({ variant: 'secondary', size: 'sm' }),
             'w-full justify-between gap-3 font-normal'
           )}
         >
-          <span>
-            {selectedIds.length > 0 ? `${label} (${selectedIds.length} selected)` : label}
-          </span>
+          <span>{triggerLabel}</span>
           <ChevronDown className="size-4" aria-hidden="true" />
-        </McDropdownMenuTrigger>
-        <McDropdownMenuContent sideOffset={8} className="w-[min(22rem,calc(100vw-2rem))] p-2">
-          <div className="border-b border-border pb-2">
-            <McInput
-              id={`${label.toLowerCase()}-filter-search`}
-              type="search"
-              aria-label={`Filter ${label.toLowerCase()}`}
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key !== 'Escape') event.stopPropagation();
-              }}
-              placeholder={searchPlaceholder}
-              addonStart={<Search aria-hidden="true" />}
-            />
-          </div>
-
-          <div className="max-h-72 overflow-y-auto pt-2">
+        </ComboboxPrimitive.Trigger>
+        <McComboboxContent className="w-[min(22rem,calc(100vw-2rem))] min-w-(--anchor-width)">
+          <McComboboxSearch
+            aria-label={`Filter ${label.toLowerCase()}`}
+            aria-controls={listId}
+            placeholder={searchPlaceholder}
+          />
+          <McComboboxList id={listId} className="max-h-72 overflow-y-auto">
             {loading ? (
               <p className="px-2 py-4 paragraph-sm text-muted-foreground">
                 Loading {label.toLowerCase()}...
@@ -219,29 +228,27 @@ function MultiSelectPicker({
               <p className="px-2 py-4 paragraph-sm text-muted-foreground">{emptyMessage}</p>
             ) : (
               filteredGroups.map((group) => (
-                <McDropdownMenuGroup key={group.id} className="gap-1">
+                <ComboboxPrimitive.Group key={group.id} className="flex flex-col gap-0.5 py-1">
                   {groups ? (
-                    <McDropdownMenuLabel className="paragraph-xs font-semibold text-muted-foreground">
+                    <ComboboxPrimitive.GroupLabel className="px-2 py-1 paragraph-xs font-semibold text-muted-foreground">
                       {group.label}
-                    </McDropdownMenuLabel>
+                    </ComboboxPrimitive.GroupLabel>
                   ) : null}
                   {group.options.map((option) => (
-                    <McDropdownMenuCheckboxItem
+                    <McComboboxItem
                       key={option.id}
-                      checked={selectedIds.includes(option.id)}
-                      onCheckedChange={() => onToggle(option.id)}
-                      closeOnClick={false}
-                      className="text-foreground"
+                      value={option.id}
+                      className="cursor-pointer text-foreground"
                     >
                       {option.label}
-                    </McDropdownMenuCheckboxItem>
+                    </McComboboxItem>
                   ))}
-                </McDropdownMenuGroup>
+                </ComboboxPrimitive.Group>
               ))
             )}
-          </div>
-        </McDropdownMenuContent>
-      </McDropdownMenu>
+          </McComboboxList>
+        </McComboboxContent>
+      </McCombobox>
 
       <SelectedFilterChips type={selectionType} options={selectedOptions} onRemove={onToggle} />
     </div>

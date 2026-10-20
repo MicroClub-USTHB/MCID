@@ -1,119 +1,165 @@
 /*
- * Article text and code colours, from the design tokens only. Inside the components layer, with
- * :where() on the tags, so any Tailwind utility on a component (Steps, tables, callouts) still wins.
+ * The docs site on Fumadocs, skinned like the mcoli-ui docs. Imported by globals.css right after
+ * the Fumadocs styles. Colours come from the design tokens only (via --color-fd-*), so every rule
+ * follows the .dark class.
  */
-@layer components {
-  .docs-prose {
-    color: var(--foreground);
-    font-size: 0.9375rem;
-    line-height: 1.75;
-  }
 
-  .docs-prose :where(p) {
-    margin-block: 1rem;
-  }
+/* Fumadocs colours are the app's tokens, as in the mcoli-ui globals.css. */
+@theme inline {
+  --color-fd-background: var(--background);
+  --color-fd-foreground: var(--foreground);
+  --color-fd-muted: var(--muted);
+  --color-fd-muted-foreground: var(--muted-foreground);
+  --color-fd-popover: var(--popover);
+  --color-fd-popover-foreground: var(--popover-foreground);
+  --color-fd-card: var(--card);
+  --color-fd-card-foreground: var(--card-foreground);
+  --color-fd-border: var(--border);
+  --color-fd-primary: var(--primary);
+  --color-fd-primary-foreground: var(--primary-foreground);
+  --color-fd-secondary: var(--muted);
+  --color-fd-secondary-foreground: var(--secondary-foreground);
+  --color-fd-accent: var(--accent);
+  --color-fd-accent-foreground: var(--accent-foreground);
+  --color-fd-ring: var(--ring);
+}
 
-  .docs-prose :where(strong) {
-    color: var(--foreground);
-    font-weight: 700;
-  }
+/* Brand-tinted glow + fading grid behind the top of every docs page (Notebook containerProps). */
+@utility docs-backdrop {
+  position: relative;
+  isolation: isolate;
 
-  .docs-prose :where(ul),
-  .docs-prose :where(ol) {
-    margin-block: 1rem;
-    padding-left: 1.5rem;
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 30rem;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      radial-gradient(
+        ellipse 55% 70% at 50% 0%,
+        color-mix(in oklab, var(--primary) 16%, transparent),
+        transparent 70%
+      ),
+      linear-gradient(to right, var(--border) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+    background-size:
+      100% 100%,
+      56px 56px,
+      56px 56px;
+    mask-image: radial-gradient(ellipse 70% 100% at 50% 0%, #000 20%, transparent 75%);
+    opacity: 0.3;
   }
+}
 
-  .docs-prose :where(ul) {
-    list-style: disc;
+/* Borders are softer in the dark theme, so the grid can come forward a bit. */
+.dark .docs-backdrop::before {
+  opacity: 0.55;
+}
+
+/* Breadcrumb styled like the landing section labels: small, semibold, primary. */
+@utility docs-eyebrow {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--primary);
+
+  & a,
+  & span {
+    color: inherit;
   }
+}
 
-  .docs-prose :where(ol) {
-    list-style: decimal;
+/* Headings use the brand display face, like header-* on the landing page. */
+.prose :where(h1, h2, h3, h4):not(:where([class~='not-prose'], [class~='not-prose'] *)) {
+  font-family: var(--font-heading);
+  letter-spacing: -0.02em;
+}
+
+.prose :where(h2):not(:where([class~='not-prose'], [class~='not-prose'] *)) {
+  font-weight: 700;
+}
+
+/* Inline code: a token-tinted chip instead of plain muted. */
+.prose :where(:not(pre) > code):not(:where([class~='not-prose'], [class~='not-prose'] *)) {
+  border: 1px solid var(--border);
+  background-color: color-mix(in oklab, var(--primary) 7%, var(--card));
+  color: var(--foreground);
+  border-radius: var(--radius-md);
+  padding: 0.125rem 0.375rem;
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+
+/* Sidebar: a primary tint and accent colour on the active link. */
+#nd-sidebar a[data-active='true'] {
+  font-weight: 500;
+  background-color: color-mix(in oklab, var(--primary) 12%, transparent);
+  color: var(--sidebar-primary);
+}
+
+/* Fumadocs steps use the brand primary. */
+.fd-step::before {
+  background-color: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+  font-family: var(--font-heading);
+  font-weight: 700;
+}
+
+/*
+ * <Steps> wraps a numbered list: a rail on the left and a numbered primary marker per item,
+ * the same look as the Fumadocs steps.
+ */
+.docs-steps {
+  margin-block: 1.5rem;
+}
+
+.docs-steps > ol {
+  counter-reset: step;
+  list-style: none;
+  margin: 0 0 0 0.5rem;
+  padding: 0 0 0 1.5rem;
+  border-inline-start: 1px solid var(--border);
+}
+
+@media (min-width: 40rem) {
+  .docs-steps > ol {
+    margin-inline-start: 1rem;
+    padding-inline-start: 1.75rem;
   }
+}
 
-  .docs-prose :where(li) {
-    margin-block: 0.375rem;
-  }
+.docs-steps > ol > li {
+  position: relative;
+  counter-increment: step;
+  padding-inline-start: 0;
+  margin-block: 0 1.5rem;
+}
 
-  .docs-prose :where(li)::marker {
-    color: var(--muted-foreground);
-  }
+.docs-steps > ol > li::marker {
+  content: none;
+}
 
-  .docs-prose :where(blockquote) {
-    margin-block: 1.5rem;
-    border-left: 3px solid var(--border);
-    padding-left: 1rem;
-    color: var(--muted-foreground);
-  }
+.docs-steps > ol > li::before {
+  content: counter(step);
+  position: absolute;
+  inset-inline-start: calc(-1.5rem - 1rem - 0.5px);
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  font-family: var(--font-heading);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
 
-  .docs-prose :where(hr) {
-    margin-block: 2.5rem;
-    border: 0;
-    border-top: 1px solid var(--border);
-  }
-
-  /*
-   * The highlighter (highlight.js classes). The code background is --background. Each state colour
-   * is mixed 60/40 with --foreground, which darkens it in light mode and lightens it in dark mode,
-   * so every colour here clears 4.5:1 on that background in both themes.
-   */
-  .docs-prose .hljs-comment,
-  .docs-prose .hljs-quote {
-    color: var(--muted-foreground);
-    font-style: italic;
-  }
-
-  .docs-prose .hljs-keyword,
-  .docs-prose .hljs-selector-tag,
-  .docs-prose .hljs-doctag,
-  .docs-prose .hljs-meta .hljs-keyword {
-    color: var(--primary);
-  }
-
-  .docs-prose .hljs-string,
-  .docs-prose .hljs-regexp,
-  .docs-prose .hljs-addition,
-  .docs-prose .hljs-meta .hljs-string {
-    color: color-mix(in srgb, var(--success) 60%, var(--foreground));
-  }
-
-  .docs-prose .hljs-number,
-  .docs-prose .hljs-literal,
-  .docs-prose .hljs-symbol,
-  .docs-prose .hljs-bullet {
-    color: color-mix(in srgb, var(--warning) 60%, var(--foreground));
-  }
-
-  .docs-prose .hljs-title,
-  .docs-prose .hljs-title.function_,
-  .docs-prose .hljs-section,
-  .docs-prose .hljs-built_in,
-  .docs-prose .hljs-type,
-  .docs-prose .hljs-class .hljs-title {
-    color: var(--foreground);
-    font-weight: 600;
-  }
-
-  .docs-prose .hljs-attr,
-  .docs-prose .hljs-attribute,
-  .docs-prose .hljs-property,
-  .docs-prose .hljs-variable,
-  .docs-prose .hljs-template-variable,
-  .docs-prose .hljs-params {
-    color: color-mix(in srgb, var(--info) 60%, var(--foreground));
-  }
-
-  .docs-prose .hljs-deletion {
-    color: color-mix(in srgb, var(--error) 60%, var(--foreground));
-    text-decoration: line-through;
-  }
-
-  .docs-prose .hljs-emphasis {
-    font-style: italic;
-  }
-
-  .docs-prose .hljs-strong {
-    font-weight: 700;
+@media (min-width: 40rem) {
+  .docs-steps > ol > li::before {
+    inset-inline-start: calc(-1.75rem - 1rem - 0.5px);
   }
 }

@@ -33,7 +33,7 @@ export function SyncChangeDetail({
 }: SyncChangeDetailProps) {
   return (
     <div className="flex flex-col gap-3">
-      <div className="rounded-lg border border-border bg-card p-4">
+      <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
         <h3 className="paragraph-xs font-semibold tracking-wide text-muted-foreground uppercase">
           Change details
         </h3>

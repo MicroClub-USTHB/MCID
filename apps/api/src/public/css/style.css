@@ -1,45 +1,45 @@
 /*
  * Legacy login page (views/login.ejs), styled with the mcoli-ui "primary"
- * theme: the Micro Club design system the admin panel uses. Light by default,
- * dark when the system asks for it.
+ * theme: the Micro Club design system the admin panel uses. Dark by default,
+ * light when the system asks for it.
  */
 :root {
-    color-scheme: light dark;
-    --background: #ffffff;
-    --foreground: #000350;
-    --card: #ffffff;
-    --border: #e6e9ff;
-    --muted-foreground: #54588b;
-    --primary: #0006b1;
-    --primary-foreground: #ffffff;
-    --secondary: #e6e9ff;
-    --secondary-foreground: #000585;
+    color-scheme: dark light;
+    --background: #0a0a0a;
+    --foreground: #fafafa;
+    --card: #171717;
+    --border: #262626;
+    --muted-foreground: #a1a1a1;
+    --primary: #d9ddff;
+    --primary-foreground: #000350;
+    --secondary: #262626;
+    --secondary-foreground: #fafafa;
+    --ring: #d9ddff;
+    --shadow: 0 4px 12px -4px hsl(0 0% 0% / 0.4);
     --success: #22c55e;
     --error: #e7000b;
-    --ring: #d9ddff;
-    --shadow: 0 4px 12px -4px hsl(0 0% 0% / 0.08);
 }
 
-@media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: light) {
     :root {
-        --background: #0a0a0a;
-        --foreground: #fafafa;
-        --card: #171717;
-        --border: #262626;
-        --muted-foreground: #a1a1a1;
-        --primary: #d9ddff;
-        --primary-foreground: #000350;
-        --secondary: #262626;
-        --secondary-foreground: #fafafa;
+        --background: #ffffff;
+        --foreground: #000350;
+        --card: #ffffff;
+        --border: #e6e9ff;
+        --muted-foreground: #54588b;
+        --primary: #0006b1;
+        --primary-foreground: #ffffff;
+        --secondary: #e6e9ff;
+        --secondary-foreground: #000585;
         --ring: #d9ddff;
-        --shadow: 0 4px 12px -4px hsl(0 0% 0% / 0.4);
+        --shadow: 0 4px 12px -4px hsl(0 0% 0% / 0.08);
     }
 }
 
 body {
     margin: 0;
     padding: 0;
-    font-family: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-family: 'DM Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
     background-color: var(--background);
     color: var(--foreground);
     display: flex;
@@ -69,23 +69,24 @@ body {
 }
 
 .logo-mark {
+    display: block;
     width: 3rem;
     height: 3rem;
-    border-radius: 0.75rem;
-    background-color: var(--primary);
-    color: var(--primary-foreground);
-    display: flex;
-    justify-content: center;
-    align-items: center;
     margin: 0 auto 1rem;
-    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
-    font-size: 1rem;
-    font-weight: 700;
+}
+
+/* The MCID fingerprint: outer ridge and core in the foreground colour, middle ridge in primary. */
+.mark-fg {
+    stroke: var(--foreground);
+}
+
+.mark-primary {
+    stroke: var(--primary);
 }
 
 h1,
 h2 {
-    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    font-family: 'Plus Jakarta Sans', 'DM Sans', ui-sans-serif, system-ui, sans-serif;
     font-weight: 700;
     color: var(--foreground);
 }

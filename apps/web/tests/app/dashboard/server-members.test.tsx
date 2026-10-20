@@ -44,7 +44,7 @@ describe("A server's member roster", () => {
 
     await waitFor(() => expect(listUrl?.searchParams.getAll('serverId')).toEqual(['server-main']));
     expect(screen.getByRole('heading', { name: 'Members' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Servers' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Roles' })).toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Servers' })).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Roles' })).toBeInTheDocument();
   });
 });

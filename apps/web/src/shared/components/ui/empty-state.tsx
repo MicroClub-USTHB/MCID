@@ -39,18 +39,22 @@ function EmptyState({
     <div
       data-slot="empty-state"
       className={cn(
-        'flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-card px-6 py-16 text-center',
+        'relative isolate flex flex-col items-center justify-center gap-4 overflow-hidden rounded-xl border border-dashed border-border bg-card px-6 py-16 text-center',
         className
       )}
       {...props}
     >
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 -z-10 bg-dots opacity-60 mask-radial"
+      />
       {iconNode && (
-        <div className="flex size-12 items-center justify-center rounded-full bg-secondary text-secondary-foreground">
+        <div className="flex size-12 items-center justify-center rounded-xl border border-border bg-secondary text-secondary-foreground shadow-sm">
           {iconNode}
         </div>
       )}
-      <div className="flex flex-col gap-1">
-        <p className="paragraph-md font-semibold text-foreground">{title}</p>
+      <div className="flex flex-col items-center gap-1.5">
+        <p className="font-heading paragraph-lg font-bold text-foreground">{title}</p>
         {description && (
           <p className="max-w-md paragraph-sm text-muted-foreground">{description}</p>
         )}
