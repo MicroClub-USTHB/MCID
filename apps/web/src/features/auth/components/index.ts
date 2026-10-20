@@ -3,3 +3,4 @@ export { ProtectedRoute } from './ProtectedRoute';
 export { SessionProvider } from './SessionProvider';
 export { AuthCallbackHandler } from './AuthCallbackHandler';
 export { LogoutButton } from './LogoutButton';
+export { AuthMark, AuthShell } from './AuthShell';
