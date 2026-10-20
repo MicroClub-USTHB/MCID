@@ -70,4 +70,19 @@ describe('callback listener', () => {
     expect((await fetch(new URL('/other', url))).status).toBe(404);
     expect((await fetch(url, { method: 'POST' })).status).toBe(404);
   });
+
+  it('serves a dark-first page with the MCID fingerprint mark and no remote assets', async () => {
+    const listener = await startCallbackListener(() => {});
+    cleanups.push(listener.close);
+    const res = await fetch(new URL('?code=c&state=s', listener.redirectUri));
+    const html = await res.text();
+    expect(res.headers.get('content-type')).toContain('text/html');
+    expect(html).toContain('<svg class="mark" viewBox="0 0 120 120"');
+    expect(html).toContain('M 38 82 V 60 A 22 22 0 0 1 82 60 V 82');
+    expect(html).not.toContain('>MC<');
+    expect(html).toMatch(/:root \{\n\s+color-scheme: dark light;\n\s+--background: #0a0a0a;/);
+    expect(html).toContain('--primary: #d9ddff;');
+    expect(html).toContain('@media (prefers-color-scheme: light)');
+    expect(html).not.toMatch(/https?:\/\//);
+  });
 });

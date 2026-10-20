@@ -5,50 +5,51 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MCID Admin</title>
+  <link rel="icon" href="/assets/mcid-mark.svg" type="image/svg+xml">
   <style>
-    /* mcoli-ui "primary" theme (Micro Club design system), light and dark. */
+    /* mcoli-ui "primary" theme (Micro Club design system), dark by default, light when the system asks for it. */
     :root {
-      color-scheme: light dark;
-      --bg: #ffffff;
-      --surface: #f9faff;
-      --border: #e6e9ff;
-      --border-strong: #0006b1;
-      --text: #000350;
-      --muted: #54588b;
-      --subtle: #d9ddff;
-      --inverse-bg: #0006b1;
-      --inverse-text: #ffffff;
-      --success-bg: #e6f9ee;
+      color-scheme: dark light;
+      --bg: #0a0a0a;
+      --surface: #171717;
+      --border: #262626;
+      --border-strong: #d9ddff;
+      --text: #fafafa;
+      --muted: #a1a1a1;
+      --subtle: #343434;
+      --inverse-bg: #d9ddff;
+      --inverse-text: #000350;
+      --success-bg: #0f2a19;
       --success-border: #22c55e;
-      --success-text: #14532d;
-      --danger-bg: #ffedee;
-      --danger-border: #f96f70;
-      --danger-text: #e7000b;
-      --info-bg: #f9faff;
-      --info-border: #e6e9ff;
-      --info-text: #000350;
+      --success-text: #e6f9ee;
+      --danger-bg: #2a0b0d;
+      --danger-border: #e7000b;
+      --danger-text: #ffedee;
+      --info-bg: #171717;
+      --info-border: #262626;
+      --info-text: #fafafa;
     }
 
-    @media (prefers-color-scheme: dark) {
+    @media (prefers-color-scheme: light) {
       :root {
-        --bg: #0a0a0a;
-        --surface: #171717;
-        --border: #262626;
-        --border-strong: #d9ddff;
-        --text: #fafafa;
-        --muted: #a1a1a1;
-        --subtle: #343434;
-        --inverse-bg: #d9ddff;
-        --inverse-text: #000350;
-        --success-bg: #0f2a19;
+        --bg: #ffffff;
+        --surface: #f9faff;
+        --border: #e6e9ff;
+        --border-strong: #0006b1;
+        --text: #000350;
+        --muted: #54588b;
+        --subtle: #d9ddff;
+        --inverse-bg: #0006b1;
+        --inverse-text: #ffffff;
+        --success-bg: #e6f9ee;
         --success-border: #22c55e;
-        --success-text: #e6f9ee;
-        --danger-bg: #2a0b0d;
-        --danger-border: #e7000b;
-        --danger-text: #ffedee;
-        --info-bg: #171717;
-        --info-border: #262626;
-        --info-text: #fafafa;
+        --success-text: #14532d;
+        --danger-bg: #ffedee;
+        --danger-border: #f96f70;
+        --danger-text: #e7000b;
+        --info-bg: #f9faff;
+        --info-border: #e6e9ff;
+        --info-text: #000350;
       }
     }
 
@@ -61,7 +62,7 @@
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+      font-family: "DM Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
       font-size: 14px;
       line-height: 1.5;
       min-height: 100vh;
@@ -92,18 +93,14 @@
       justify-content: center;
     }
 
-    .logo-slot img {
+    .logo-mark {
       width: 100%;
       height: 100%;
-      object-fit: contain;
     }
 
-    /* The MC logo is drawn in black; show it white on the dark background. */
-    @media (prefers-color-scheme: dark) {
-      .logo-slot img {
-        filter: invert(1);
-      }
-    }
+    /* The MCID fingerprint: outer ridge and core in the text colour, middle ridge in primary. */
+    .mark-fg { stroke: var(--text); }
+    .mark-primary { stroke: var(--inverse-bg); }
 
     .header-text h1 {
       font-size: 1rem;
@@ -375,7 +372,11 @@
     <!-- Header -->
     <header class="header">
       <div class="logo-slot">
-        <img src="/assets/MCLogo.svg" alt="MC logo" onerror="this.style.display='none'">
+        <svg class="logo-mark" viewBox="0 0 120 120" fill="none" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <path class="mark-fg" d="M 38 100 A 22 22 0 0 1 16 78 V 60 A 44 44 0 0 1 104 60 V 78 A 22 22 0 0 1 82 100"/>
+          <path class="mark-primary" d="M 38 82 V 60 A 22 22 0 0 1 82 60 V 82"/>
+          <path class="mark-fg" d="M 60 56 V 100"/>
+        </svg>
       </div>
       <div class="header-text">
         <h1>MCID Admin</h1>

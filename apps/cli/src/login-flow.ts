@@ -101,10 +101,18 @@ export function extractState(discordUrl: string): string {
   return state;
 }
 
+/** The MCID fingerprint mark (same paths as apps/web/src/shared/components/brand/mcid-mark.ts). */
+const MARK =
+  '<svg class="mark" viewBox="0 0 120 120" fill="none" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<path class="fg" d="M 38 100 A 22 22 0 0 1 16 78 V 60 A 44 44 0 0 1 104 60 V 78 A 22 22 0 0 1 82 100"/>' +
+  '<path class="pr" d="M 38 82 V 60 A 22 22 0 0 1 82 60 V 82"/>' +
+  '<path class="fg" d="M 60 56 V 100"/>' +
+  '</svg>';
+
 /**
  * The page the browser shows after the Discord login. It uses the colours and
  * type of the mcoli-ui "primary" theme (the Micro Club design system the admin
- * panel uses), light or dark to match the system setting. Fonts are not
+ * panel uses), dark by default and light when the system asks for it. Fonts are not
  * fetched: the page names DM Sans and Plus Jakarta Sans and falls back to the
  * system font, so nothing leaves this machine.
  */
@@ -119,30 +127,27 @@ const page = (title: string, body: string, variant: 'success' | 'error' = 'succe
 <title>mcid-cli</title>
 <style>
   :root {
-    color-scheme: light dark;
-    --background: #ffffff;
-    --foreground: #000350;
-    --card: #ffffff;
-    --border: #e6e9ff;
-    --muted-foreground: #54588b;
-    --primary: #0006b1;
-    --primary-foreground: #ffffff;
-    --secondary: #e6e9ff;
+    color-scheme: dark light;
+    --background: #0a0a0a;
+    --foreground: #fafafa;
+    --card: #171717;
+    --border: #262626;
+    --muted-foreground: #a1a1a1;
+    --primary: #d9ddff;
     --success: #22c55e;
-    --error: #e7000b;
-    --shadow: 0 4px 12px -4px hsl(0 0% 0% / 0.08);
+    --error: #ff6467;
+    --shadow: 0 4px 12px -4px hsl(0 0% 0% / 0.4);
   }
-  @media (prefers-color-scheme: dark) {
+  @media (prefers-color-scheme: light) {
     :root {
-      --background: #0a0a0a;
-      --foreground: #fafafa;
-      --card: #171717;
-      --border: #262626;
-      --muted-foreground: #a1a1a1;
-      --primary: #d9ddff;
-      --primary-foreground: #000350;
-      --secondary: #262626;
-      --shadow: 0 4px 12px -4px hsl(0 0% 0% / 0.4);
+      --background: #ffffff;
+      --foreground: #000350;
+      --card: #ffffff;
+      --border: #e6e9ff;
+      --muted-foreground: #54588b;
+      --primary: #0006b1;
+      --error: #e7000b;
+      --shadow: 0 4px 12px -4px hsl(0 0% 0% / 0.08);
     }
   }
   body {
@@ -155,7 +160,7 @@ const page = (title: string, body: string, variant: 'success' | 'error' = 'succe
     box-sizing: border-box;
     background: var(--background);
     color: var(--foreground);
-    font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: "DM Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
   .card {
     width: 100%;
@@ -177,19 +182,9 @@ const page = (title: string, body: string, variant: 'success' | 'error' = 'succe
     font-weight: 600;
     color: var(--muted-foreground);
   }
-  .mark {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.75rem;
-    height: 1.75rem;
-    border-radius: 0.5rem;
-    background: var(--primary);
-    color: var(--primary-foreground);
-    font-family: "Plus Jakarta Sans", system-ui, sans-serif;
-    font-size: 0.75rem;
-    font-weight: 700;
-  }
+  .mark { display: block; width: 1.75rem; height: 1.75rem; }
+  .mark .fg { stroke: var(--foreground); }
+  .mark .pr { stroke: var(--primary); }
   .icon {
     width: 3rem;
     height: 3rem;
@@ -205,7 +200,7 @@ const page = (title: string, body: string, variant: 'success' | 'error' = 'succe
   .icon.error { --accent: var(--error); }
   h1 {
     margin: 0 0 0.5rem;
-    font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+    font-family: "Plus Jakarta Sans", "DM Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     font-size: 1.5rem;
     line-height: 2rem;
     font-weight: 700;
@@ -213,7 +208,7 @@ const page = (title: string, body: string, variant: 'success' | 'error' = 'succe
   p { margin: 0; color: var(--muted-foreground); font-size: 0.875rem; line-height: 1.25rem; }
 </style>
 <main class="card">
-  <div class="brand"><span class="mark" aria-hidden="true">MC</span>mcid-cli</div>
+  <div class="brand">${MARK}mcid-cli</div>
   <div class="icon ${variant}"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">${icon}</svg></div>
   <h1>${title}</h1>
   <p>${body}</p>
