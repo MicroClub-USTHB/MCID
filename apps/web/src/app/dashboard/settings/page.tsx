@@ -22,6 +22,7 @@ import { ConfirmDialog } from '@/shared/components/ui/confirm-dialog';
 import { SkeletonCard } from '@/shared/components/common';
 import { useCan } from '@/shared/lib/use-access';
 import { showToast } from '@/shared/stores';
+import { PageHeader } from '@/shared/components/layout/page-header';
 
 function SettingsPage() {
   const [resetOpen, setResetOpen] = useState(false);
@@ -58,40 +59,39 @@ function SettingsPage() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="paragraph-xs font-semibold tracking-wide text-primary uppercase">
-            Operations
-          </p>
-          <h1 className="mt-1 header-xs font-bold text-foreground">Settings</h1>
-          <p className="mt-1 max-w-2xl paragraph-sm text-muted-foreground">
-            {canRead
-              ? 'Configure MCID behavior and manage your admin profile.'
-              : 'Manage your admin profile.'}
-          </p>
-          {canRead && settings?.meta.updatedAt ? (
-            <p
-              className="mt-1 paragraph-xs text-muted-foreground"
-              title={formatAbsoluteTime(settings.meta.updatedAt) ?? undefined}
+      <PageHeader
+        eyebrow="System"
+        title="Settings"
+        description={
+          canRead
+            ? 'Configure MCID behavior and manage your admin profile.'
+            : 'Manage your admin profile.'
+        }
+        actions={
+          canReset ? (
+            <McButton
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setResetOpen(true)}
+              disabled={settingsQuery.isPending}
+              icon="leading"
+              iconDefinition={<RotateCcw aria-hidden="true" />}
             >
-              Last changed {formatRelativeTime(settings.meta.updatedAt)}
-            </p>
-          ) : null}
-        </div>
-        {canReset ? (
-          <McButton
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => setResetOpen(true)}
-            disabled={settingsQuery.isPending}
-            icon="leading"
-            iconDefinition={<RotateCcw aria-hidden="true" />}
+              Reset to defaults
+            </McButton>
+          ) : null
+        }
+      >
+        {canRead && settings?.meta.updatedAt ? (
+          <p
+            className="paragraph-xs text-muted-foreground"
+            title={formatAbsoluteTime(settings.meta.updatedAt) ?? undefined}
           >
-            Reset to defaults
-          </McButton>
+            Last changed {formatRelativeTime(settings.meta.updatedAt)}
+          </p>
         ) : null}
-      </header>
+      </PageHeader>
 
       <div className="columns-1 gap-4 lg:columns-2 [&>*]:mb-4 [&>*]:break-inside-avoid">
         {profileQuery.isError ? (

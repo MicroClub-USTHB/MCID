@@ -1,5 +1,9 @@
 @import 'tailwindcss';
+@import 'fumadocs-ui/css/shadcn.css';
+@import 'fumadocs-ui/css/preset.css';
 @import 'tw-animate-css';
+@import './brand.css';
+@import '../../features/docs/docs.css';
 
 @custom-variant dark (&:is(.dark *));
 

@@ -1,3 +1,8 @@
+---
+title: 'Decisions'
+description: 'A short log of why MCID is the way it is: context, decision, consequences and the pull request behind each choice.'
+---
+
 This is a short log of why MCID is the way it is. Each entry gives the context, the decision, what follows from it, and where the discussion or the change lives. Read an entry before you reverse it: most of them were made to avoid a problem that is not obvious from the code.
 
 ## PostgreSQL is the source of truth, Redis only caches
@@ -104,9 +109,9 @@ This is a short log of why MCID is the way it is. Each entry gives the context, 
 
 **Context.** The specifications in `docs/` were long, partly out of date, and not where developers looked.
 
-**Decision.** The developer docs are plain MDX files in `apps/web`, served at `/docs` with plain `@next/mdx` and no extra service. The new pages are the source of truth, and the old files in `docs/` are kept as historical design records.
+**Decision.** The developer docs are plain MDX files in `apps/web`, served at `/docs` by the same app and no extra service. They are built with Fumadocs, in the Notebook layout of the mcoli-ui docs. The new pages are the source of truth, and the old files in `docs/` are kept as historical design records.
 
-**Consequences.** Docs are reviewed and versioned like code, and tests check links, anchors and the nav. There is no search yet.
+**Consequences.** Docs are reviewed and versioned like code, and tests check links, anchors and the `meta.json` navigation. Search runs in the app, at `/api/search`.
 
 **Links.** [Issue #174](https://github.com/MicroClub-USTHB/MCID/issues/174), [PR #179](https://github.com/MicroClub-USTHB/MCID/pull/179).
 

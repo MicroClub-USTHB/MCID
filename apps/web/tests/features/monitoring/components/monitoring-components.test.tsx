@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -8,6 +8,7 @@ import { HealthIndicator } from '@/features/monitoring/components/HealthIndicato
 import type { CrossServerListItemDto } from '@/features/members/types';
 import type { AuditActionType } from '@/features/monitoring/types';
 import type { AuditLogFilters as AuditLogFilterState } from '@/features/monitoring/types';
+import { getDateTrigger, pickDate } from '../../../helpers/date-picker';
 
 const ACTIONS: Array<{ label: string; value: AuditActionType }> = [
   { label: 'Auth', value: 'auth' },
@@ -61,15 +62,15 @@ describe('monitoring components', () => {
     const onChange = vi.fn();
     render(<FiltersHarness onChange={onChange} />);
 
-    fireEvent.change(screen.getByLabelText('Date from'), { target: { value: '2026-04-01' } });
-    fireEvent.change(screen.getByLabelText('Date to'), { target: { value: '2026-04-30' } });
+    await pickDate(user, 'Date from', '2026-04-01');
+    await pickDate(user, 'Date to', '2026-04-30');
     await user.click(screen.getByRole('combobox', { name: 'Actor' }));
     await user.click(await screen.findByRole('option', { name: 'Admin One' }));
     await user.click(screen.getByRole('combobox', { name: 'Severity' }));
     await user.click(await screen.findByRole('option', { name: 'Warning' }));
 
-    expect(screen.getByLabelText('Date from')).toHaveValue('2026-04-01');
-    expect(screen.getByLabelText('Date to')).toHaveValue('2026-04-30');
+    expect(getDateTrigger('Date from')).toHaveTextContent('Apr 1, 2026');
+    expect(getDateTrigger('Date to')).toHaveTextContent('Apr 30, 2026');
     expect(screen.getByRole('combobox', { name: 'Actor' })).toHaveTextContent('Admin One');
     expect(screen.getByRole('combobox', { name: 'Severity' })).toHaveTextContent('Warning');
     expect(onChange).toHaveBeenLastCalledWith({

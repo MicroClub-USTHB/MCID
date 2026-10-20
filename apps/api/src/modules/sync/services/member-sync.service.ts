@@ -7,6 +7,8 @@ import { members } from '../../../database/entities/member.entity';
 import { withRetry } from '../../../common/utils/retry.util';
 import { PermissionCacheService } from '../../permissions/permission-cache.service';
 import { ServersRepository } from '../../servers/servers.repository';
+import { AdminAccessService } from '../../admin-access/admin-access.service';
+import { AuditService } from '../../audit/audit.service';
 
 @Injectable()
 export class MemberSyncService {
@@ -17,7 +19,56 @@ export class MemberSyncService {
     private readonly syncLogService: SyncLogService,
     private readonly permissionCache: PermissionCacheService,
     private readonly serversRepository: ServersRepository,
+    private readonly adminAccess: AdminAccessService,
+    private readonly auditService: AuditService,
   ) {}
+
+  /**
+   * Root access is a Discord role, so anyone who can assign roles can grant or
+   * remove it. Sync cannot prevent that, but it records it: one warning row per
+   * root role gained or lost. Role ids are unique across Discord, so a root role
+   * can only belong to the main server. No previous roles means the member was
+   * never synced (every synced member holds at least @everyone), so the state
+   * is seeded silently instead of logging a grant for each existing root member.
+   * Never throws: auditing must not break the sync.
+   */
+  private auditRootRoleChanges(
+    guild: Guild,
+    memberId: string,
+    previousRoleIds: string[],
+    newRoleIds: string[],
+  ): void {
+    if (previousRoleIds.length === 0) return;
+    try {
+      const record = (roleId: string, action: string) => {
+        const roleName = guild.roles.cache.get(roleId)?.name ?? null;
+        this.logger.warn(
+          `${action} for member ${memberId}: role ${roleId} (${roleName ?? 'unknown'}) in server ${guild.id}`,
+        );
+        this.auditService.logAction({
+          actionType: 'access',
+          action,
+          entityType: 'member',
+          entityId: memberId,
+          severity: 'warning',
+          details: { roleId, roleName, serverId: guild.id },
+        });
+      };
+      for (const id of newRoleIds) {
+        if (this.adminAccess.isRootRole(id) && !previousRoleIds.includes(id))
+          record(id, 'root_granted');
+      }
+      for (const id of previousRoleIds) {
+        if (this.adminAccess.isRootRole(id) && !newRoleIds.includes(id))
+          record(id, 'root_revoked');
+      }
+    } catch (err: unknown) {
+      this.logger.error(
+        `Failed to audit root role changes for ${memberId}`,
+        err instanceof Error ? err.stack : String(err),
+      );
+    }
+  }
 
   /**
    * Real-time gateway events fire for every guild the bot is in, including
@@ -70,7 +121,7 @@ export class MemberSyncService {
     );
 
     const roleIds = [...guildMember.roles.cache.keys()];
-    await withRetry(
+    const previousRoleIds = await withRetry(
       () =>
         this.memberRepository.replaceMemberRoles(
           guild.id,
@@ -80,6 +131,7 @@ export class MemberSyncService {
       `replaceMemberRoles(${guildMember.id})`,
       this.logger,
     );
+    this.auditRootRoleChanges(guild, guildMember.id, previousRoleIds, roleIds);
   }
 
   /**
@@ -274,15 +326,22 @@ export class MemberSyncService {
       !oldRoles.every((role) => newRoles.has(role.id));
 
     if (rolesChanged) {
-      await withRetry(
+      const newRoleIds = [...newRoles.keys()];
+      const previousRoleIds = await withRetry(
         () =>
           this.memberRepository.replaceMemberRoles(
             newMember.guild.id,
             newMember.id,
-            [...newRoles.keys()],
+            newRoleIds,
           ),
         `handleMemberUpdate replaceMemberRoles(${newMember.id})`,
         this.logger,
+      );
+      this.auditRootRoleChanges(
+        newMember.guild,
+        newMember.id,
+        previousRoleIds,
+        newRoleIds,
       );
     }
 

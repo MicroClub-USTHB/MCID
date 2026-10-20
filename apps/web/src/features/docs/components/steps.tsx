@@ -1,20 +1,9 @@
 import type { ReactNode } from 'react';
 
-/** Turns the numbered list inside into a procedure with numbered markers. */
+/**
+ * Turns the numbered list inside into a procedure, drawn like the Fumadocs steps: a rail on the
+ * left and a numbered marker in the brand primary on each item (see `.docs-steps` in docs.css).
+ */
 export function Steps({ children }: { children: ReactNode }) {
-  return (
-    <div
-      className={[
-        'my-6 [counter-reset:step]',
-        '[&>ol]:m-0 [&>ol]:list-none [&>ol]:space-y-6 [&>ol]:p-0',
-        '[&>ol>li]:relative [&>ol>li]:pl-11 [&>ol>li]:[counter-increment:step]',
-        '[&>ol>li]:before:absolute [&>ol>li]:before:top-0 [&>ol>li]:before:left-0',
-        '[&>ol>li]:before:flex [&>ol>li]:before:size-8 [&>ol>li]:before:items-center [&>ol>li]:before:justify-center',
-        '[&>ol>li]:before:rounded-full [&>ol>li]:before:bg-secondary [&>ol>li]:before:paragraph-sm li]:before:font-semibold',
-        '[&>ol>li]:before:text-foreground [&>ol>li]:before:content-[counter(step)]',
-      ].join(' ')}
-    >
-      {children}
-    </div>
-  );
+  return <div className="docs-steps">{children}</div>;
 }

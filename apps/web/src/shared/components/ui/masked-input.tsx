@@ -4,6 +4,47 @@ import * as React from 'react';
 import { Check, Copy, Eye, EyeOff } from 'lucide-react';
 
 import { cn } from '@/shared/lib/utils';
+import { McButton } from '@/shared/components/ui/mc-button';
+import { McTooltip, McTooltipContent, McTooltipTrigger } from '@/shared/components/ui/mc-tooltip';
+
+/** An icon button inside the field, named by `label` and with that label as its tooltip. */
+function IconAction({
+  label,
+  icon,
+  onClick,
+  className,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <McTooltip>
+      <McTooltipTrigger
+        render={
+          <McButton
+            type="button"
+            variant="tertiary"
+            size="sm"
+            icon="only"
+            iconDefinition={icon}
+            onClick={onClick}
+            className={cn(
+              'size-8 bg-transparent p-0 text-muted-foreground hover:bg-secondary hover:text-secondary-foreground',
+              className
+            )}
+          >
+            {label}
+          </McButton>
+        }
+      />
+      <McTooltipContent side="top" sideOffset={8} arrow={false} className="p-2">
+        {label}
+      </McTooltipContent>
+    </McTooltip>
+  );
+}
 
 interface MaskedInputProps extends Omit<React.ComponentProps<'input'>, 'value' | 'onCopy'> {
   value: string;
@@ -70,34 +111,18 @@ function MaskedInput({
       />
       <div className="absolute inset-y-0 right-0 flex items-center gap-0.5 pr-1.5">
         {showRevealToggle && secret && (
-          <button
-            type="button"
-            aria-label={revealLabel ?? (visible ? 'Hide value' : 'Reveal value')}
-            className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors outline-none hover:bg-secondary hover:text-secondary-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          <IconAction
+            label={revealLabel ?? (visible ? 'Hide value' : 'Reveal value')}
             onClick={() => setVisible((v) => !v)}
-          >
-            {visible ? (
-              <EyeOff className="size-4" aria-hidden="true" />
-            ) : (
-              <Eye className="size-4" aria-hidden="true" />
-            )}
-          </button>
+            icon={visible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+          />
         )}
-        <button
-          type="button"
-          aria-label={copyLabel ?? 'Copy to clipboard'}
-          className={cn(
-            'flex size-8 items-center justify-center rounded-md transition-colors outline-none hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring',
-            copied ? 'text-success' : 'text-muted-foreground hover:text-secondary-foreground'
-          )}
+        <IconAction
+          label={copyLabel ?? 'Copy to clipboard'}
           onClick={() => void handleCopy()}
-        >
-          {copied ? (
-            <Check className="size-4" aria-hidden="true" />
-          ) : (
-            <Copy className="size-4" aria-hidden="true" />
-          )}
-        </button>
+          className={copied ? 'text-success hover:text-success' : undefined}
+          icon={copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+        />
       </div>
     </div>
   );

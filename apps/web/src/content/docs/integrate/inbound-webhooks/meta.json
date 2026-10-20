@@ -1,0 +1,11 @@
+{
+  "title": "Inbound webhooks",
+  "description": "Receive form submissions from outside tools, validated against a schema.",
+  "pages": [
+    "overview",
+    "schemas",
+    "signing-and-sending",
+    "reading-submissions",
+    "errors-and-limits"
+  ]
+}

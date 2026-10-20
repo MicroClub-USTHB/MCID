@@ -12,6 +12,7 @@ import { ChannelDetail, ChannelTree, MessageHistory } from '@/features/channels/
 import { EmptyState } from '@/shared/components/ui/empty-state';
 import { LoadingSkeleton } from '@/shared/components/common';
 import { useCan } from '@/shared/lib/use-access';
+import { PageHeader } from '@/shared/components/layout/page-header';
 
 /** Channels of the server in the URL; the sidebar's server switcher picks the server. */
 export function ChannelsView({ serverId }: { serverId: string }) {
@@ -40,13 +41,11 @@ export function ChannelsView({ serverId }: { serverId: string }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <header>
-        <h1 className="header-xs font-bold">Channels</h1>
-        <p className="mt-1 max-w-2xl paragraph-sm text-muted-foreground">
-          Browse this server’s channels by category and read recent message history — without
-          leaving MCID.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="Discord"
+        title="Channels"
+        description="Browse this server’s channels by category and read recent message history without leaving MCID."
+      />
 
       <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
         <div>

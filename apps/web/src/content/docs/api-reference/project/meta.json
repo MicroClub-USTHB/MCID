@@ -1,0 +1,14 @@
+{
+  "title": "Project API",
+  "description": "For developers of Micro Club projects: log members in, check permissions, use channels and webhooks, and send data to inbound webhooks.",
+  "pages": [
+    "overview",
+    "authentication",
+    "authentication-sso",
+    "channels",
+    "inbound-webhooks-ingest",
+    "members",
+    "permissions",
+    "webhooks"
+  ]
+}

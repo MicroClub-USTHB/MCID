@@ -1,0 +1,5 @@
+{
+  "title": "Integrate with MCID",
+  "description": "For developers of Micro Club projects: sign members in, use your API key, check permissions and receive data through inbound webhooks.",
+  "pages": ["sso", "api-keys", "roles-and-permissions", "inbound-webhooks", "conventions"]
+}

@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
-import { McCard } from '@/shared/components/ui/mc-card';
+import { Eye } from 'lucide-react';
+
+import { AuthMark, AuthShell } from '@/features/auth/components/AuthShell';
 import { DiscordLoginButton } from '@/features/auth/components/DiscordLoginButton';
 import { getSafeRedirectPath } from '@/features/auth/lib/safe-redirect';
 
@@ -10,7 +12,7 @@ export const metadata: Metadata = {
 /**
  * The post-login destination is read from `searchParams` on the server rather
  * than with `useSearchParams` on the client. That keeps this a Server
- * Component — so it can still export `metadata` — and avoids the Suspense
+ * Component, so it can still export `metadata`, and avoids the Suspense
  * boundary a statically-rendered page would otherwise be required to wrap the
  * hook in. Bouncing an already-authenticated admin away from this page is
  * handled in `proxy.ts`, where it happens before any HTML is sent
@@ -25,24 +27,26 @@ export default async function LoginPage({
   const redirectPath = getSafeRedirectPath(typeof redirect === 'string' ? redirect : undefined);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <McCard className="w-full max-w-sm gap-0 p-8 shadow-lg">
-        <div className="mb-8 flex flex-col items-center gap-4 text-center">
-          <span
-            aria-hidden="true"
-            className="flex h-12 w-12 items-center justify-center rounded-xl bg-linear-to-br from-primary to-purple-secondary-600 font-heading text-lg font-bold text-primary-foreground"
-          >
-            MC
-          </span>
-          <div>
-            <h1 className="header-xs font-bold text-foreground">Welcome to MCID</h1>
-            <p className="mt-1 paragraph-sm text-muted-foreground">
-              Sign in with your Discord account to continue
-            </p>
-          </div>
+    <AuthShell>
+      <div className="mb-8 flex flex-col items-center gap-5 text-center">
+        <AuthMark />
+        <div className="space-y-2">
+          <h1 id="login-title" className="header-xs font-bold text-foreground">
+            Sign in to MCID
+          </h1>
+          <p className="paragraph-sm text-pretty text-muted-foreground">
+            Micro Club admins sign in with their Discord account.
+          </p>
         </div>
-        <DiscordLoginButton size="lg" redirectPath={redirectPath} className="w-full" />
-      </McCard>
-    </div>
+      </div>
+      <DiscordLoginButton size="lg" redirectPath={redirectPath} className="w-full" />
+      <p className="mt-6 flex items-start gap-2 border-t border-border pt-5 text-left text-xs leading-5 text-muted-foreground">
+        <Eye className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+        <span>
+          MCID reads your Discord profile, email, servers and roles to decide what you can open. It
+          never posts on your behalf.
+        </span>
+      </p>
+    </AuthShell>
   );
 }

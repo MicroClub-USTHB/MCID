@@ -14,6 +14,7 @@ import { MemberSyncService } from './services/member-sync.service';
 import { RoleSyncService } from './services/role-sync.service';
 import { ServerSyncService } from './services/server-sync.service';
 import { SyncLogService } from './services/sync-log.service';
+import type { SyncType } from '@mcid/contracts';
 import { SyncChangeEntry } from './sync-types';
 import { SyncTarget } from './dto/trigger-sync.dto';
 import { SyncStatusDto } from './dto/sync-status.dto';
@@ -201,12 +202,21 @@ export class SyncService implements OnApplicationBootstrap, OnModuleDestroy {
     }
   }
 
-  // ── Startup sync ─────────────────────────────────────────────────────
+  // ── Startup and reconnect sync ───────────────────────────────────────
 
-  async startupSyncAll(): Promise<void> {
-    const activeServers = await this.serversRepository.findAllActive();
+  /**
+   * Queues a full sync for every active server the bot is in, main server
+   * first because it decides admin access. Servers with a sync already queued
+   * or running are skipped. `syncType` tells the sync log why it ran: 'full'
+   * for the boot sync, 'reconnect' for the catch-up after a lost session.
+   */
+  async startupSyncAll(syncType: SyncType = 'full'): Promise<void> {
+    const reason = syncType === 'reconnect' ? 'reconnect' : 'boot';
+    const activeServers = (await this.serversRepository.findAllActive()).sort(
+      (a, b) => Number(b.isMain) - Number(a.isMain),
+    );
     this.logger.log(
-      `Bot ready — starting boot sync for ${activeServers.length} active server(s)`,
+      `Starting ${reason} sync for ${activeServers.length} active server(s)`,
     );
     let queuedCount = 0;
     for (const server of activeServers) {
@@ -214,29 +224,31 @@ export class SyncService implements OnApplicationBootstrap, OnModuleDestroy {
         const guild = await this.discordService.getGuildById(server.id);
         if (!guild) {
           this.logger.warn(
-            `Bot not in server ${server.id} (${server.name}) — skipping boot sync`,
+            `Bot not in server ${server.id} (${server.name}) — skipping ${reason} sync`,
           );
           continue;
         }
         const activeLog = await this.syncRepository.getActiveLog(server.id);
         if (activeLog) {
           this.logger.log(
-            `Skipping boot sync for ${server.id} — sync already queued or in progress`,
+            `Skipping ${reason} sync for ${server.id} — sync already queued or in progress`,
           );
           continue;
         }
         const log = await this.syncRepository.createLog(
           server.id,
-          'full',
+          syncType,
           'queued',
           new Date(),
           SyncTarget.ALL,
         );
         queuedCount += 1;
-        this.logger.log(`Queued boot sync ${log.id} for server ${server.id}`);
+        this.logger.log(
+          `Queued ${reason} sync ${log.id} for server ${server.id}`,
+        );
       } catch (err: unknown) {
         this.logger.error(
-          `Error scheduling boot sync for server ${server.id}`,
+          `Error scheduling ${reason} sync for server ${server.id}`,
           err instanceof Error ? err.stack : String(err),
         );
       }

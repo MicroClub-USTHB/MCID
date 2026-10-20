@@ -1,3 +1,8 @@
+---
+title: 'Architecture'
+description: 'How MCID fits together: the repository, a request through the API, how callers authenticate, where data lives and how Discord stays in sync.'
+---
+
 This page explains how MCID is put together: what is in the repository, how a request travels through the API, who is allowed to call what, where data lives and how it stays in step with Discord. Read it before you change anything in `apps/api`.
 
 ## The repository
@@ -104,8 +109,8 @@ If the bot token is missing or wrong, the API still starts and serves everything
 
 <Diagram src="/docs/sync-lifecycle.svg" alt="Two flows keep PostgreSQL in step with Discord. On the left, when the bot is ready or an admin asks, a sync is queued for each active server, a worker drains the queue every five seconds, and syncs server, roles and members before writing the log. On the right, a gateway event is handled by the sync listener as one incremental update, then the affected caches are cleared." width={960} height={520} />
 
-- **Full syncs** are queued as rows in the sync log with the status `queued`. A worker polls for them every 5 seconds and runs them one at a time once the bot is ready. A sync reads the server's details, then its roles, then its members, writes a log with every change, and ends as `success` or `failed`. When the bot becomes ready, one sync is queued for each active server. Admins queue more from the admin panel.
-- **Live updates** come from the gateway. `SyncListener` handles member joins, leaves and updates, user updates, and role and guild changes as they happen. It updates only what changed and clears the related permission caches.
+- **Full syncs** are queued as rows in the sync log with the status `queued`. A worker polls for them every 5 seconds and runs them one at a time once the bot is ready. A sync reads the server's details, then its roles, then its members, writes a log with every change, and ends as `success` or `failed`. When the bot becomes ready, one sync is queued for each active server, main server first. When the gateway starts a new session after a disconnect (discord.js `shardReady` after the first one), the events sent during the gap are lost, so `SyncListener` queues the same syncs again with the type `reconnect`, once per minute at most. A resumed session (`shardResume`) replays its events and needs none. Admins queue more from the admin panel.
+- **Live updates** come from the gateway. `SyncListener` handles member joins, leaves and updates, user updates, and role and guild changes as they happen. It updates only what changed and clears the related permission caches. Root access is a Discord role, so when a member gains or loses a root role, or a root role is deleted, the sync services write a warning to the log and an `access` audit row (`root_granted`, `root_revoked`, `root_role_deleted`). A member never synced before is recorded silently.
 
 ## Where inbound webhooks fit
 

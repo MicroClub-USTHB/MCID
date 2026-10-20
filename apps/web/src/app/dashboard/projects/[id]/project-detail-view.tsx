@@ -36,6 +36,7 @@ import {
 import { McSkeleton } from '@/shared/components/ui/mc-skeleton';
 import { McSwitch } from '@/shared/components/ui/mc-switch';
 import { useCan } from '@/shared/lib/use-access';
+import { PageHeader } from '@/shared/components/layout/page-header';
 
 interface ProjectDetailViewProps {
   id: string;
@@ -138,17 +139,11 @@ function ProjectDetailView({ id }: ProjectDetailViewProps) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center gap-2">
-              <h1 className="header-xs font-bold text-foreground">{project.name}</h1>
-              {project.isInternal && <McBadge variant="secondary">Internal</McBadge>}
-            </div>
-            {project.description && (
-              <p className="paragraph-sm text-muted-foreground">{project.description}</p>
-            )}
-          </div>
+      <PageHeader
+        eyebrow="Projects"
+        title={project.name}
+        description={project.description || undefined}
+        actions={
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
               {(project.isActive ? canRevokeKey : canRotateKey) ? (
@@ -180,13 +175,19 @@ function ProjectDetailView({ id }: ProjectDetailViewProps) {
               </McButton>
             </Can>
           </div>
-        </div>
-      </div>
+        }
+      >
+        {project.isInternal ? (
+          <div>
+            <McBadge variant="secondary">Internal</McBadge>
+          </div>
+        ) : null}
+      </PageHeader>
 
       {canViewKey ? (
         <section
           aria-labelledby="api-key-heading"
-          className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5"
+          className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5 shadow-sm"
         >
           <div className="flex items-center gap-2">
             <KeyRound className="size-4 text-muted-foreground" aria-hidden="true" />
@@ -210,7 +211,7 @@ function ProjectDetailView({ id }: ProjectDetailViewProps) {
 
       <section
         aria-labelledby="redirect-heading"
-        className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5"
+        className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5 shadow-sm"
       >
         <div className="flex flex-col gap-1">
           <h2 id="redirect-heading" className="paragraph-md font-semibold text-foreground">

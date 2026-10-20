@@ -4,12 +4,13 @@ import { useCallback, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Menu, Search } from 'lucide-react';
 
-import { ThemeToggle } from '@/shared/components/common/ThemeToggle';
+import { ModeToggle } from '@/shared/components/common/ModeToggle';
 import { Breadcrumb } from '@/shared/components/layout/breadcrumb';
 import { AppSidebar, MobileSidebar } from '@/shared/components/layout/sidebar';
 import { useBreadcrumbItems } from '@/shared/components/layout/use-breadcrumb-items';
 import { McButton } from '@/shared/components/ui/mc-button';
 import { McInput } from '@/shared/components/ui/mc-input';
+import McSeparator from '@/shared/components/ui/mc-separator';
 import {
   McSidebarInset,
   McSidebarProvider,
@@ -43,7 +44,7 @@ function DashboardShell({ children }: { children: ReactNode }) {
       <AppSidebar />
       <MobileSidebar open={mobileOpen} onClose={closeMobile} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex h-topbar shrink-0 items-center gap-3 border-b border-border bg-background px-4 md:px-6">
+        <header className="relative z-10 flex h-topbar shrink-0 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-md md:px-6">
           <McButton
             ref={menuButtonRef}
             variant="tertiary"
@@ -58,6 +59,12 @@ function DashboardShell({ children }: { children: ReactNode }) {
             Open sidebar
           </McButton>
           <McSidebarTrigger className="hidden md:inline-flex" />
+          <McSeparator
+            orientation="vertical"
+            size={20}
+            aria-hidden="true"
+            className="hidden border-0 bg-border md:block"
+          />
           <Breadcrumb items={breadcrumbItems} className="hidden min-w-0 flex-1 sm:block" />
           <div className="ml-auto flex items-center gap-2">
             <McInput
@@ -67,7 +74,7 @@ function DashboardShell({ children }: { children: ReactNode }) {
               addonStart={<Search aria-hidden="true" />}
               className="hidden w-64 lg:flex"
             />
-            <ThemeToggle />
+            <ModeToggle />
           </div>
         </header>
         <McSidebarInset id="main-content" className="p-4 md:p-6">

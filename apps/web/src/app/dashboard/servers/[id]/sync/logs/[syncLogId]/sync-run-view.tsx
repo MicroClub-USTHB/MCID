@@ -2,12 +2,14 @@
 
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AlertTriangle, ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 
 import { SYNC_CHANGES_PAGE_SIZE, useSyncChangesQuery } from '@/features/sync/api/queries';
 import { SyncChangeDetail } from '@/features/sync/components';
 import { McButton } from '@/shared/components/ui/mc-button';
 import { EmptyState } from '@/shared/components/ui/empty-state';
+import { McAlert } from '@/shared/components/ui/mc-alert';
+import { PageHeader } from '@/shared/components/layout/page-header';
 
 /** Entity-level changes of one sync run. `backHref` is where "Back to sync" leads. */
 export function SyncRunView({ syncLogId: raw, backHref }: { syncLogId: string; backHref: string }) {
@@ -39,18 +41,19 @@ export function SyncRunView({ syncLogId: raw, backHref }: { syncLogId: string; b
         <EmptyState title="Sync run not found" description="That sync run reference isn’t valid." />
       ) : (
         <>
-          <header>
-            <h1 className="header-xs font-bold">Sync run #{syncLogId}</h1>
-            <p className="mt-1 paragraph-sm text-muted-foreground">
-              Every entity-level change recorded during this sync operation.
-            </p>
-          </header>
+          <PageHeader
+            eyebrow="Discord"
+            title={`Sync run #${syncLogId}`}
+            description="Every entity-level change recorded during this sync operation."
+          />
 
           {error && (
-            <p className="flex items-start gap-2 rounded-md bg-error/10 p-3 paragraph-sm text-error">
-              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              <span>{error}</span>
-            </p>
+            <McAlert
+              variant="destructive"
+              title="This sync failed"
+              description={error}
+              className="w-full max-w-none"
+            />
           )}
 
           <SyncChangeDetail

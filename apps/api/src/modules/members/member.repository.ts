@@ -256,12 +256,13 @@ export class MemberRepository {
     return row;
   }
 
+  /** Returns the role ids the member held in this server before the swap. */
   async replaceMemberRoles(
     serverId: string,
     memberId: string,
     roleIds: string[],
-  ): Promise<void> {
-    await this.db.transaction(async (tx) => {
+  ): Promise<string[]> {
+    return this.db.transaction(async (tx) => {
       const existingRoles = await tx
         .select({ roleId: serverMemberRoles.roleId })
         .from(serverMemberRoles)
@@ -293,6 +294,8 @@ export class MemberRepository {
           })),
         );
       }
+
+      return existingRoles.map((r) => r.roleId);
     });
   }
 

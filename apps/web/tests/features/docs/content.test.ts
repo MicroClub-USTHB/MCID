@@ -1,26 +1,31 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { compile } from '@mdx-js/mdx';
-import rehypeHighlight from 'rehype-highlight';
-import rehypeSlug from 'rehype-slug';
-import remarkGfm from 'remark-gfm';
+import { remarkGfm, remarkHeading } from 'fumadocs-core/mdx-plugins';
 import { describe, expect, it } from 'vitest';
 
-import { extractHeadings } from '@/features/docs/headings';
-import { allDocPages, findDoc } from '@/features/docs/nav';
+import { findPage, pages } from './helpers/content';
 
-const CONTENT_DIR = path.resolve(__dirname, '../../../src/content/docs');
+const WEB = path.resolve(__dirname, '../../..');
 
-/** The same plugins next.config.ts gives the real build. */
-const PIPELINE = {
-  remarkPlugins: [remarkGfm],
-  rehypePlugins: [rehypeSlug, [rehypeHighlight, { detect: false, ignoreMissing: true }]],
-} as const;
+/** The remark plugins Fumadocs runs on every page: GFM tables and the heading ids of the TOC. */
+const PIPELINE = { remarkPlugins: [remarkGfm, remarkHeading] };
 
-const pages = allDocPages().map((page) => ({
-  slug: page.slug,
-  source: fs.readFileSync(path.join(CONTENT_DIR, `${page.slug}.mdx`), 'utf8'),
-}));
+async function compiled(body: string) {
+  const file = await compile(body, PIPELINE);
+  const toc = (file.data.toc ?? []) as { url: string }[];
+  return { output: String(file), ids: new Set(toc.map((item) => item.url.slice(1))) };
+}
+
+const idsByUrl = new Map<string, Promise<Set<string>>>();
+const idsOf = (url: string) => {
+  if (!idsByUrl.has(url))
+    idsByUrl.set(
+      url,
+      compiled(findPage(url)!.body).then((c) => c.ids)
+    );
+  return idsByUrl.get(url)!;
+};
 
 /** The lines that are prose, with the lines inside code fences set aside. */
 function split(source: string) {
@@ -39,25 +44,28 @@ function split(source: string) {
   return { prose, fences };
 }
 
-function headingIds(source: string): Set<string> {
-  return new Set(extractHeadings(source).map((heading) => heading.id));
-}
-
-describe.each(pages)('docs page $slug', ({ source }) => {
-  const { prose, fences } = split(source);
+describe.each(pages)('docs page $file', (page) => {
+  const { prose, fences } = split(page.body);
 
   it('is valid MDX', async () => {
-    await expect(compile(source, PIPELINE)).resolves.toBeDefined();
+    await expect(compiled(page.body)).resolves.toBeDefined();
+  });
+
+  it('has a title and a description that fits a search snippet, in its frontmatter', () => {
+    expect(page.source.startsWith('---\n')).toBe(true);
+    expect(page.data.title?.trim().length ?? 0).toBeGreaterThan(0);
+    expect(page.data.description?.length ?? 0).toBeGreaterThanOrEqual(30);
+    expect(page.data.description?.length ?? 0).toBeLessThanOrEqual(160);
   });
 
   it('turns every markdown table into a real table', async () => {
     const hasTableSyntax = prose.some((line) => /^\s*\|?\s*-{3,}\s*\|/.test(line));
-    const output = String(await compile(source, PIPELINE));
+    const { output } = await compiled(page.body);
 
     expect(output.includes('_components.table')).toBe(hasTableSyntax);
   });
 
-  it('has no h1, because the page title comes from the nav', () => {
+  it('has no h1, because the page title comes from the frontmatter', () => {
     expect(prose.filter((line) => /^#\s/.test(line))).toEqual([]);
   });
 
@@ -68,8 +76,9 @@ describe.each(pages)('docs page $slug', ({ source }) => {
   });
 
   // Prose only: program output inside a code block is quoted exactly, dashes and all.
-  it('uses no em or en dashes in its prose', () => {
-    expect(prose.join('\n').match(/[–—]/g) ?? []).toEqual([]);
+  it('uses no em or en dashes in its prose, title or description', () => {
+    const text = [page.data.title, page.data.description, ...prose].join('\n');
+    expect(text.match(/[–—]/g) ?? []).toEqual([]);
   });
 
   it('ends by naming the files it describes', () => {
@@ -78,27 +87,23 @@ describe.each(pages)('docs page $slug', ({ source }) => {
     expect(last.startsWith('Source:')).toBe(true);
   });
 
-  it('only links to pages and headings that exist', () => {
+  it('only links to pages and headings that exist', async () => {
     const problems: string[] = [];
     for (const [, target] of prose.join('\n').matchAll(/\]\((\/docs[^)\s]*)\)/g)) {
       const [route, anchor] = target!.split('#');
-      const slugPath = route!.replace(/^\/docs\/?/, '');
-      if (slugPath === '') continue;
-      const page = findDoc(slugPath);
-      if (!page) {
+      const url = route!.replace(/\/$/, '');
+      if (!findPage(url)) {
         problems.push(`${target}: no such page`);
         continue;
       }
-      if (anchor && !headingIds(pages.find((p) => p.slug === page.slug)!.source).has(anchor)) {
-        problems.push(`${target}: no such heading`);
-      }
+      if (anchor && !(await idsOf(url)).has(anchor)) problems.push(`${target}: no such heading`);
     }
 
     expect(problems).toEqual([]);
   });
 
-  it('keeps in-page anchors pointing at real headings', () => {
-    const ids = headingIds(source);
+  it('keeps in-page anchors pointing at real headings', async () => {
+    const { ids } = await compiled(page.body);
     const missing = [...prose.join('\n').matchAll(/\]\(#([^)\s]+)\)/g)]
       .map((match) => match[1]!)
       .filter((id) => !ids.has(id));
@@ -108,11 +113,11 @@ describe.each(pages)('docs page $slug', ({ source }) => {
 });
 
 describe('MDX pipeline', () => {
-  it('uses in the real build the plugins these tests compile with', () => {
-    const config = fs.readFileSync(path.resolve(__dirname, '../../../next.config.ts'), 'utf8');
+  it('builds the docs with Fumadocs from src/content/docs', () => {
+    const config = fs.readFileSync(path.join(WEB, 'next.config.ts'), 'utf8');
+    const sourceConfig = fs.readFileSync(path.join(WEB, 'source.config.ts'), 'utf8');
 
-    for (const plugin of ['remark-gfm', 'rehype-slug', 'rehype-highlight']) {
-      expect(config, plugin).toContain(`'${plugin}'`);
-    }
+    expect(config).toContain("from 'fumadocs-mdx/next'");
+    expect(sourceConfig).toContain("dir: 'src/content/docs'");
   });
 });

@@ -21,7 +21,7 @@ import type { SubmissionDto } from '@/features/inbound-webhooks/types';
 import { DataTable, type DataTableColumn } from '@/shared/components/ui/data-table';
 import { EmptyState } from '@/shared/components/ui/empty-state';
 import { McButton } from '@/shared/components/ui/mc-button';
-import { McInput } from '@/shared/components/ui/mc-input';
+import { DateField } from '@/shared/components/ui/date-field';
 import { Pagination } from '@/shared/components/ui/pagination';
 import { downloadTextFile } from '@/shared/lib/download';
 import { showToast } from '@/shared/stores';
@@ -165,19 +165,17 @@ export function SubmissionsSection({ webhookId, slug, schema }: SubmissionsSecti
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-wrap items-end gap-3">
-          <McInput
+          <DateField
             id="submissions-from"
             label="From (UTC)"
-            type="date"
             value={dateFrom}
-            onChange={(event) => changeDate(setDateFrom, event.target.value)}
+            onChange={(value) => changeDate(setDateFrom, value ?? '')}
           />
-          <McInput
+          <DateField
             id="submissions-to"
             label="To (UTC)"
-            type="date"
             value={dateTo}
-            onChange={(event) => changeDate(setDateTo, event.target.value)}
+            onChange={(value) => changeDate(setDateTo, value ?? '')}
           />
           {filtered ? (
             <McButton

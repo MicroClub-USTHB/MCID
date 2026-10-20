@@ -21,6 +21,7 @@ import {
 import { EmptyState } from '@/shared/components/ui/empty-state';
 import { LoadingSkeleton } from '@/shared/components/common';
 import { useCan } from '@/shared/lib/use-access';
+import { PageHeader } from '@/shared/components/layout/page-header';
 
 /** Sync status and history of the server in the URL. Syncing every server lives on the Servers page. */
 export function SyncView({ serverId }: { serverId: string }) {
@@ -44,12 +45,11 @@ export function SyncView({ serverId }: { serverId: string }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <header>
-        <h1 className="header-xs font-bold">Sync</h1>
-        <p className="mt-1 max-w-2xl paragraph-sm text-muted-foreground">
-          Monitor Discord ⇆ MCID synchronization for this server and sync it on demand.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="Discord"
+        title="Sync"
+        description="Monitor Discord ⇆ MCID synchronization for this server and sync it on demand."
+      />
 
       <SyncProgressIndicator inProgress={active} />
 

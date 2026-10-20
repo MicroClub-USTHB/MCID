@@ -1,17 +1,17 @@
 import type { NextConfig } from 'next';
-import createMDX from '@next/mdx';
+import { createMDX } from 'fumadocs-mdx/next';
 
-const withMDX = createMDX({
-  options: {
-    // Turbopack takes plugins by name only, with options that can be serialised.
-    remarkPlugins: ['remark-gfm'],
-    rehypePlugins: ['rehype-slug', ['rehype-highlight', { detect: false, ignoreMissing: true }]],
-  },
-});
+// Compiles the docs collection of source.config.ts and writes its index to `.source/`
+// (ignored by git) whenever `next dev` or `next build` loads this file.
+const withMDX = createMDX();
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  turbopack: {
+    // The generated collection; its types live in src/features/docs/collections.d.ts.
+    resolveAlias: { 'fumadocs-mdx:collections/server': './.source/server.ts' },
+  },
 };
 
 export default withMDX(nextConfig);

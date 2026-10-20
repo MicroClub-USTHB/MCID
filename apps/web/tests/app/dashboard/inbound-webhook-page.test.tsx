@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '../../setup';
 import { WebhookView } from '@/app/dashboard/projects/[id]/inbound-webhooks/[webhookId]/webhook-view';
 import { toastMessages } from '../../helpers/toasts';
+import { pickDate } from '../../helpers/date-picker';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), back: vi.fn() }),
@@ -172,8 +173,9 @@ describe('Inbound webhook page: submissions', () => {
     render(<WebhookView webhookId={WEBHOOK_ID} />, { wrapper });
     await screen.findByText('Ada');
 
-    await userEvent.type(screen.getByLabelText('From (UTC)'), '2026-10-01');
-    await userEvent.type(screen.getByLabelText('To (UTC)'), '2026-10-04');
+    const user = userEvent.setup();
+    await pickDate(user, 'From (UTC)', '2026-10-01');
+    await pickDate(user, 'To (UTC)', '2026-10-04');
 
     await waitFor(() => {
       const last = submissionRequests.at(-1);
