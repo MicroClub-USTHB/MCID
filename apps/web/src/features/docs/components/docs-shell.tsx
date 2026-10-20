@@ -7,7 +7,7 @@ import { Fingerprint, Menu, X } from 'lucide-react';
 
 import { DocsSidebar } from '@/features/docs/components/docs-sidebar';
 import { API_REFERENCE_HREF } from '@/features/docs/links';
-import { ThemeToggle } from '@/shared/components/common/ThemeToggle';
+import { ModeToggle } from '@/shared/components/common/ModeToggle';
 import { McButton, buttonVariants } from '@/shared/components/ui/mc-button';
 import {
   McDialog,
@@ -105,7 +105,7 @@ export function DocsShell({ children }: { children: ReactNode }) {
             >
               API reference
             </a>
-            <ThemeToggle />
+            <ModeToggle />
             <Link href="/login" className={buttonVariants({ variant: 'secondary', size: 'sm' })}>
               Admin sign in
             </Link>

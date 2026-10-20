@@ -4,7 +4,7 @@ import { useCallback, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Menu, Search } from 'lucide-react';
 
-import { ThemeToggle } from '@/shared/components/common/ThemeToggle';
+import { ModeToggle } from '@/shared/components/common/ModeToggle';
 import { Breadcrumb } from '@/shared/components/layout/breadcrumb';
 import { AppSidebar, MobileSidebar } from '@/shared/components/layout/sidebar';
 import { useBreadcrumbItems } from '@/shared/components/layout/use-breadcrumb-items';
@@ -67,7 +67,7 @@ function DashboardShell({ children }: { children: ReactNode }) {
               addonStart={<Search aria-hidden="true" />}
               className="hidden w-64 lg:flex"
             />
-            <ThemeToggle />
+            <ModeToggle />
           </div>
         </header>
         <McSidebarInset id="main-content" className="p-4 md:p-6">

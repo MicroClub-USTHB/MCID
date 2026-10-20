@@ -1,64 +1,45 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
-import { ThemeToggle } from '@/shared/components/common/ThemeToggle';
-import { THEME_INIT_SCRIPT, THEME_STORAGE_KEY } from '@/shared/lib/theme';
-
-function prefersDark(dark: boolean) {
-  vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
-    matches: dark && query === '(prefers-color-scheme: dark)',
-    media: query,
-    onchange: null,
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  }));
-}
+import { ModeToggle } from '@/shared/components/common/ModeToggle';
+import { DEFAULT_THEME, THEME_INIT_SCRIPT, THEME_STORAGE_KEY } from '@/shared/lib/theme';
 
 afterEach(() => {
   document.documentElement.classList.remove('dark');
-  prefersDark(false);
+  document.documentElement.style.colorScheme = '';
 });
 
 describe('theme', () => {
-  it('follows the system when nothing is stored', () => {
-    prefersDark(true);
-    render(<ThemeToggle />);
+  it('defaults to dark, the Micro Club brand theme', () => {
+    expect(DEFAULT_THEME).toBe('dark');
+    render(<ModeToggle />);
 
-    expect(screen.getByRole('button', { name: /theme: system/i })).toBeInTheDocument();
-    expect(document.documentElement).toHaveClass('dark');
+    expect(screen.getByRole('switch', { name: 'Dark mode' })).toBeChecked();
   });
 
-  it('cycles system, light, dark and stores the choice', async () => {
-    prefersDark(true);
-    render(<ThemeToggle />);
-    const toggle = () => screen.getByRole('button', { name: /^theme:/i });
+  it('switches between dark and light and stores the choice', async () => {
+    render(<ModeToggle />);
+    const toggle = screen.getByRole('switch', { name: 'Dark mode' });
 
-    await userEvent.click(toggle());
+    await userEvent.click(toggle);
     expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('light');
     expect(document.documentElement).not.toHaveClass('dark');
-    expect(toggle()).toHaveAccessibleName(/theme: light/i);
+    expect(toggle).not.toBeChecked();
 
-    await userEvent.click(toggle());
+    await userEvent.click(toggle);
     expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('dark');
     expect(document.documentElement).toHaveClass('dark');
-
-    await userEvent.click(toggle());
-    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBeNull();
-    expect(toggle()).toHaveAccessibleName(/theme: system/i);
+    expect(toggle).toBeChecked();
   });
 
-  it('applies a stored choice before React renders, from the inline script', () => {
-    localStorage.setItem(THEME_STORAGE_KEY, 'dark');
+  it('applies the stored or default mode before React renders, from the inline script', () => {
     new Function(THEME_INIT_SCRIPT)();
     expect(document.documentElement).toHaveClass('dark');
 
     localStorage.setItem(THEME_STORAGE_KEY, 'light');
-    prefersDark(true);
     new Function(THEME_INIT_SCRIPT)();
     expect(document.documentElement).not.toHaveClass('dark');
+    expect(document.documentElement.style.colorScheme).toBe('light');
   });
 });

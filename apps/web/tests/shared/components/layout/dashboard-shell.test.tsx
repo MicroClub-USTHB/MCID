@@ -20,7 +20,7 @@ vi.mock('@/features/auth/components/LogoutButton', () => ({
 import { DashboardShell } from '@/shared/components/layout/dashboard-shell';
 
 describe('DashboardShell', () => {
-  it('offers a theme switch in the top bar', () => {
+  it('offers the light and dark switch in the top bar', () => {
     render(
       <DashboardShell>
         <div>page content</div>
@@ -28,7 +28,7 @@ describe('DashboardShell', () => {
       { wrapper }
     );
 
-    expect(screen.getByRole('button', { name: /theme: system/i })).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Dark mode' })).toBeInTheDocument();
   });
 
   it('renders children within the main landmark', () => {
