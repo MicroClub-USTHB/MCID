@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 
 import { useProjectsQuery } from '@/features/projects';
 import { useMembersQuery } from '@/features/members/api/queries';
@@ -27,6 +27,7 @@ import type {
   MonitoringPeriod,
 } from '@/features/monitoring/types';
 import { McBadge } from '@/shared/components/ui/mc-badge';
+import { McAlert } from '@/shared/components/ui/mc-alert';
 import { McButton } from '@/shared/components/ui/mc-button';
 import { McCard } from '@/shared/components/ui/mc-card';
 import {
@@ -37,6 +38,7 @@ import {
   McSelectValue,
 } from '@/shared/components/ui/mc-select';
 import { LoadingSkeleton } from '@/shared/components/common';
+import { PageHeader } from '@/shared/components/layout/page-header';
 
 const PERIODS: Array<{ value: MonitoringPeriod; label: string }> = [
   { value: '7d', label: '7 days' },
@@ -97,51 +99,46 @@ function MonitoringPage() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="paragraph-xs font-semibold tracking-wide text-primary uppercase">
-            Operations
-          </p>
-          <h1 className="mt-1 header-xs font-bold text-foreground">System Monitoring</h1>
-          <p className="mt-1 max-w-2xl paragraph-sm text-muted-foreground">
-            Track API usage, service health, authentication failures, and audit activity.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div
-            className="inline-flex gap-1 rounded-lg border border-border bg-background p-0.5"
-            role="group"
-            aria-label="Usage period"
-          >
-            {PERIODS.map((option) => (
-              <McButton
-                key={option.value}
-                type="button"
-                size="sm"
-                variant={period === option.value ? 'secondary' : 'tertiary'}
-                aria-pressed={period === option.value}
-                onClick={() => setPeriod(option.value)}
-              >
-                {option.label}
-              </McButton>
-            ))}
-          </div>
-          {usageQuery.data ? (
-            <McBadge variant="secondary" size="md">
-              {usageQuery.data.totalRequests.toLocaleString()} requests
-            </McBadge>
-          ) : null}
-        </div>
-      </header>
+      <PageHeader
+        eyebrow="System"
+        title="System Monitoring"
+        description="Track API usage, service health, authentication failures, and audit activity."
+        actions={
+          <>
+            <div
+              className="inline-flex gap-1 rounded-lg border border-border bg-background p-0.5"
+              role="group"
+              aria-label="Usage period"
+            >
+              {PERIODS.map((option) => (
+                <McButton
+                  key={option.value}
+                  type="button"
+                  size="sm"
+                  variant={period === option.value ? 'secondary' : 'tertiary'}
+                  aria-pressed={period === option.value}
+                  onClick={() => setPeriod(option.value)}
+                >
+                  {option.label}
+                </McButton>
+              ))}
+            </div>
+            {usageQuery.data ? (
+              <McBadge variant="secondary" size="md">
+                {usageQuery.data.totalRequests.toLocaleString()} requests
+              </McBadge>
+            ) : null}
+          </>
+        }
+      />
 
       {serviceDown ? (
-        <div
-          className="flex items-center gap-3 rounded-lg border border-error bg-error/10 px-4 py-3 paragraph-sm text-error"
-          role="alert"
-        >
-          <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
-          One or more services are unavailable. Review the health indicators below.
-        </div>
+        <McAlert
+          variant="destructive"
+          title="One or more services are unavailable"
+          description="Review the health indicators below."
+          className="w-full max-w-none bg-destructive/5"
+        />
       ) : null}
 
       {canMonitoring ? (

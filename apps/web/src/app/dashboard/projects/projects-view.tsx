@@ -28,6 +28,7 @@ import {
 } from '@/shared/components/ui/mc-select';
 import { useCan } from '@/shared/lib/use-access';
 import { FolderKanban, Search } from 'lucide-react';
+import { PageHeader } from '@/shared/components/layout/page-header';
 
 type StatusFilter = 'all' | 'active' | 'inactive';
 
@@ -105,15 +106,12 @@ function ProjectsView() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="header-xs font-bold text-foreground">Projects</h1>
-          <p className="mt-1 paragraph-sm text-muted-foreground">
-            Applications that integrate with MCID and what they can access.
-          </p>
-        </div>
-        {canWrite ? <CreateProjectButton /> : null}
-      </div>
+      <PageHeader
+        eyebrow="Projects"
+        title="Projects"
+        description="Applications that integrate with MCID and what they can access."
+        actions={canWrite ? <CreateProjectButton /> : null}
+      />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <McInput

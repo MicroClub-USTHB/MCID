@@ -82,7 +82,7 @@ function DataTable<TData extends RowData>({
     <div
       data-slot="data-table"
       className={cn(
-        'overflow-hidden rounded-lg border border-border bg-card text-card-foreground',
+        'overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-sm',
         className
       )}
     >

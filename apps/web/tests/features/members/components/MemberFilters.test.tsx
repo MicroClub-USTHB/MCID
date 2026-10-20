@@ -136,7 +136,7 @@ describe('MemberFilters', () => {
 
     render(<FiltersHarness />, { wrapper });
 
-    await screen.findByRole('button', { name: 'Servers' });
+    await screen.findByRole('combobox', { name: 'Servers' });
 
     const searchInput = screen.getByRole('searchbox', { name: 'Search' });
     await user.type(searchInput, 'clubber');
@@ -147,29 +147,25 @@ describe('MemberFilters', () => {
       expect(screen.getByTestId('filters-state')).toHaveTextContent('"search":"clubber"')
     );
 
-    await user.click(screen.getByRole('button', { name: 'Servers' }));
-    await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Main Server' }));
+    await user.click(screen.getByRole('combobox', { name: 'Servers' }));
+    await user.click(await screen.findByRole('option', { name: 'Main Server' }));
 
-    await user.click(screen.getByRole('menuitemcheckbox', { name: 'Event Server' }));
+    await user.click(screen.getByRole('option', { name: 'Event Server' }));
     await user.keyboard('{Escape}');
 
-    await user.click(screen.getByRole('button', { name: 'Roles' }));
-    await waitFor(() =>
-      expect(screen.getByRole('menuitemcheckbox', { name: 'Admin' })).toBeInTheDocument()
-    );
-    expect(
-      screen.getByRole('menuitemcheckbox', { name: 'Unnamed role (role-managed)' })
-    ).toBeInTheDocument();
-    expect(screen.getByRole('menuitemcheckbox', { name: 'Event Lead' })).toBeInTheDocument();
+    await user.click(screen.getByRole('combobox', { name: 'Roles' }));
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Admin' })).toBeInTheDocument());
+    expect(screen.getByRole('option', { name: 'Unnamed role (role-managed)' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Event Lead' })).toBeInTheDocument();
 
-    const roleSearch = screen.getByRole('searchbox', { name: 'Filter roles' });
+    const roleSearch = screen.getByRole('combobox', { name: 'Filter roles' });
     await user.type(roleSearch, 'event');
-    expect(screen.queryByRole('menuitemcheckbox', { name: 'Admin' })).not.toBeInTheDocument();
-    expect(screen.getByRole('menuitemcheckbox', { name: 'Event Lead' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Admin' })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Event Lead' })).toBeInTheDocument();
     await user.clear(roleSearch);
 
-    await user.click(screen.getByRole('menuitemcheckbox', { name: 'Admin' }));
-    await user.click(screen.getByRole('menuitemcheckbox', { name: 'Event Lead' }));
+    await user.click(screen.getByRole('option', { name: 'Admin' }));
+    await user.click(screen.getByRole('option', { name: 'Event Lead' }));
 
     await waitFor(() =>
       expect(screen.getByTestId('filters-state')).toHaveTextContent(

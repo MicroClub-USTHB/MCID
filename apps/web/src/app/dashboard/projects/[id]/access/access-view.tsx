@@ -14,6 +14,7 @@ import {
 } from '@/features/projects/components';
 import type { AccessMatrixEntry } from '@/features/projects/types';
 import { useServersQuery } from '@/features/servers';
+import { PageHeader } from '@/shared/components/layout/page-header';
 
 /** Which servers a project may use, with which operations and scopes, and the history of those grants. */
 export function ProjectAccessView({ projectId }: { projectId: string }) {
@@ -44,16 +45,11 @@ export function ProjectAccessView({ projectId }: { projectId: string }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <header>
-        <h1 className="header-xs font-bold text-foreground">Server access</h1>
-        {projectQuery.data && (
-          <p className="mt-1 paragraph-sm text-muted-foreground">{projectQuery.data.name}</p>
-        )}
-      </header>
+      <PageHeader eyebrow="Projects" title="Server access" description={projectQuery.data?.name} />
 
       <section
         aria-label="Server access by server"
-        className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5"
+        className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5 shadow-sm"
       >
         <p className="paragraph-xs text-muted-foreground">
           Grant or revoke access per server and tune which operations and scopes are allowed.
@@ -69,7 +65,7 @@ export function ProjectAccessView({ projectId }: { projectId: string }) {
 
       <section
         aria-labelledby="audit-heading"
-        className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5"
+        className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5 shadow-sm"
       >
         <div className="flex flex-col gap-1">
           <h2 id="audit-heading" className="paragraph-md font-semibold text-foreground">

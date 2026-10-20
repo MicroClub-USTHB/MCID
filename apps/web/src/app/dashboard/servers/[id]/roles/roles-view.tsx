@@ -17,6 +17,7 @@ import { McButton } from '@/shared/components/ui/mc-button';
 import { useCan } from '@/shared/lib/use-access';
 import { Shield, Plus } from 'lucide-react';
 import type { CreateInheritanceRulePayload } from '@/features/roles/types';
+import { PageHeader } from '@/shared/components/layout/page-header';
 
 /** Roles of the server in the URL; the sidebar's server switcher picks the server. */
 export function RolesView({ serverId }: { serverId: string }) {
@@ -57,26 +58,25 @@ export function RolesView({ serverId }: { serverId: string }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="header-xs font-bold">Roles &amp; Permissions</h1>
-          <p className="mt-1 paragraph-sm text-muted-foreground">
-            Manage this server&apos;s role-permission mappings and inheritance rules.
-          </p>
-        </div>
-        {canWrite && stats && stats.roles.length > 0 && (
-          <McButton
-            type="button"
-            variant="secondary"
-            size="sm"
-            icon="leading"
-            iconDefinition={<Plus aria-hidden="true" />}
-            onClick={() => setRuleDialogOpen(true)}
-          >
-            Add Inheritance Rule
-          </McButton>
-        )}
-      </div>
+      <PageHeader
+        eyebrow="Discord"
+        title="Roles & Permissions"
+        description="Manage this server's role-permission mappings and inheritance rules."
+        actions={
+          canWrite && stats && stats.roles.length > 0 ? (
+            <McButton
+              type="button"
+              variant="secondary"
+              size="sm"
+              icon="leading"
+              iconDefinition={<Plus aria-hidden="true" />}
+              onClick={() => setRuleDialogOpen(true)}
+            >
+              Add Inheritance Rule
+            </McButton>
+          ) : null
+        }
+      />
 
       {statsQuery.isError && (
         <div className="flex flex-col gap-3 rounded-lg border border-border p-6">
@@ -128,7 +128,7 @@ export function RolesView({ serverId }: { serverId: string }) {
           {inheritanceRules.length > 0 && (
             <section className="flex flex-col gap-3">
               <h2 className="paragraph-sm font-semibold text-foreground">Inheritance Rules</h2>
-              <div className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4">
+              <div className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4 shadow-sm">
                 {inheritanceRules.map((rule) => (
                   <div
                     key={rule.id}

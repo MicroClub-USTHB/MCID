@@ -12,6 +12,7 @@ import { EmptyState } from '@/shared/components/ui/empty-state';
 import { McBadge } from '@/shared/components/ui/mc-badge';
 import { LoadingSkeleton } from '@/shared/components/common';
 import { MemberAvatar } from '@/features/members/components/MemberAvatar';
+import { PageHeader } from '@/shared/components/layout/page-header';
 
 const DEFAULT_PAGE_SIZE = 50;
 const PAGE_SIZE_OPTIONS = [50, 100, 200] as const;
@@ -182,22 +183,21 @@ export function MembersView({ serverId }: { serverId?: string } = {}) {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-3">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="header-xs font-bold">Members</h1>
-            <p className="mt-1 max-w-2xl paragraph-sm text-muted-foreground">
-              {serverId
-                ? 'Search this server’s members, narrow by role, and export the filtered dataset.'
-                : 'Search club members, narrow by server or role, and export the filtered dataset.'}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
+      <PageHeader
+        eyebrow={serverId ? 'Discord' : 'Overview'}
+        title="Members"
+        description={
+          serverId
+            ? 'Search this server’s members, narrow by role, and export the filtered dataset.'
+            : 'Search club members, narrow by server or role, and export the filtered dataset.'
+        }
+        actions={
+          <>
             <ExportButton format="csv" filters={filters} />
             <ExportButton format="json" filters={filters} />
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       <MemberFilters
         filters={filters}
@@ -207,7 +207,7 @@ export function MembersView({ serverId }: { serverId?: string } = {}) {
       />
 
       {query.isPending ? (
-        <div className="space-y-4 rounded-lg border border-border bg-card p-4">
+        <div className="space-y-4 rounded-lg border border-border bg-card p-4 shadow-sm">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {Array.from({ length: 4 }).map((_, index) => (
               <LoadingSkeleton key={index} className="h-12 rounded-lg" />
