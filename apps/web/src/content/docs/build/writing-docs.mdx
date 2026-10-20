@@ -1,8 +1,25 @@
-These docs are plain MDX files in the repository, so they are reviewed and versioned like code. This page explains how to add or change one.
+---
+title: 'Writing these docs'
+description: 'How to add or change a documentation page: where files live, frontmatter and meta.json, the components and the style rules.'
+---
+
+These docs are plain MDX files in the repository, so they are reviewed and versioned like code. The web app serves them at `/docs` with [Fumadocs](https://fumadocs.dev), in the same Notebook layout as the mcoli-ui docs, with search. This page explains how to add or change one.
 
 ## Where pages live
 
-Pages are MDX files in `apps/web/src/content/docs`, grouped in folders by section. The file path decides the address: `src/content/docs/build/contributing.mdx` is served at `/docs/build/contributing`.
+Pages are MDX files in `apps/web/src/content/docs`, grouped in folders by section. The file path decides the address: `src/content/docs/build/contributing.mdx` is served at `/docs/build/contributing`, and an `index.mdx` is served at its folder's address (`src/content/docs/index.mdx` is `/docs`).
+
+Each folder has a `meta.json` that names the section and orders the sidebar. Its `pages` list holds the file names without `.mdx` and the names of subfolders:
+
+```json
+{
+  "title": "Build MCID",
+  "description": "For people who work on MCID itself: how to contribute and how these docs are written.",
+  "pages": ["architecture", "local-setup", "api-guide"]
+}
+```
+
+The folder titles and descriptions also make the cards of the docs home. The `api-reference` folder is generated, its `meta.json` files included: change the generator in `apps/web/src/features/docs/api-reference`, never the files.
 
 ## Add a page
 
@@ -10,13 +27,26 @@ Pages are MDX files in `apps/web/src/content/docs`, grouped in folders by sectio
 
 1. Create the file in the right folder, for example `src/content/docs/build/my-page.mdx`.
 
-2. Register it in `DOCS_NAV` in `apps/web/src/features/docs/nav.ts` with a `slug` (the path without `.mdx`), a `title`, and a `description` of 30 to 160 characters. The title becomes the page heading and the description becomes its search snippet.
+2. Start it with frontmatter that gives a `title` and a `description` of 30 to 160 characters. The title becomes the page heading and the browser title, and the description is shown under it and is its search snippet. Write each value as a quoted string, as Prettier formats it.
 
-3. Write the content. Do not add a title heading, because the page already shows the title from the nav. Start with a short introduction and then use `##` sections.
+3. Add the file name, without `.mdx`, to the `pages` list of the folder's `meta.json`, where it belongs in the sidebar.
 
-4. Run the docs tests, which check that the nav and the files match, that every link and anchor resolves, and that the page is valid MDX.
+4. Write the content. Do not add a title heading, because the page already shows the title from the frontmatter. Start with a short introduction and then use `##` sections.
+
+5. Run the docs tests, which check that every page is in a `meta.json`, that every link and anchor resolves, and that the page is valid MDX.
 
 </Steps>
+
+```mdx
+---
+title: 'My page'
+description: 'What this page explains, in one sentence that reads well as a search result.'
+---
+
+A short introduction.
+
+## A section
+```
 
 ```bash
 pnpm --filter @mcid/web exec vitest run tests/features/docs
@@ -24,7 +54,7 @@ pnpm --filter @mcid/web exec vitest run tests/features/docs
 
 ## Components
 
-Fenced code blocks get syntax highlighting and a copy button automatically. Always name the language after the opening fence.
+Fenced code blocks get syntax highlighting (Shiki) and a copy button automatically. Always name the language after the opening fence. Headings get an anchor link and appear in the table of contents on the right.
 
 A `Callout` draws attention to something. It has a `type` of `note`, `tip` or `warning`:
 
@@ -40,7 +70,7 @@ A `Callout` draws attention to something. It has a `type` of `note`, `tip` or `w
 
 `Steps` turns a numbered list into a procedure, as in "Add a page" above. Leave a blank line after the opening tag and before the closing tag.
 
-`Tabs` offers alternatives, for example one example in several languages. They are the same tabs used in the admin panel:
+`Tabs` offers alternatives, for example one example in several languages. They are the Fumadocs tabs:
 
 ```mdx
 <Tabs defaultValue="node">
@@ -61,6 +91,12 @@ A `Callout` draws attention to something. It has a `type` of `note`, `tip` or `w
 
 Tables scroll sideways inside their own box on narrow screens, so wide tables are fine.
 
+The reference pages also use `Endpoint` (a method and a path), `SwaggerLink` (an operation in Swagger) and `InboundContract` (a table read from `@mcid/contracts`). Every component a page can use is listed in `apps/web/src/features/docs/mdx.tsx`.
+
+## How it is built
+
+`apps/web/source.config.ts` declares the collection and its frontmatter schema. The `fumadocs-mdx` plugin in `next.config.ts` compiles it and writes its index to `apps/web/.source/` (ignored by git) whenever `next dev` or `next build` starts, so there is no extra command. `src/features/docs/source.ts` turns it into the page tree, and `src/app/docs` holds the layout, the page route and its metadata. Search is served by `src/app/api/search/route.ts`. The brand styling is in `src/features/docs/docs.css`.
+
 ## Style rules
 
 - Use plain hyphens. Do not use em dashes or en dashes in prose. A code block that quotes real program output keeps the output exactly as it was.
@@ -72,6 +108,6 @@ Tables scroll sideways inside their own box on narrow screens, so wide tables ar
 
 ## What the tests check
 
-The tests in `apps/web/tests/features/docs` fail when a page in the nav has no file, when a file is missing from the nav, when a page is not valid MDX, when it contains a top-level heading, when a code block does not name its language, when its prose uses an em or en dash (a code block may quote program output exactly), when it does not end with a `Source:` line, or when an internal link or anchor does not resolve.
+The tests in `apps/web/tests/features/docs` build the page tree from the files with the Fumadocs loader. They fail when a `meta.json` lists a page that has no file, when a page is missing from its folder's `meta.json`, when a page has no title or description, when a page is not valid MDX, when it contains a top-level heading, when a code block does not name its language, when its prose uses an em or en dash (a code block may quote program output exactly), when it does not end with a `Source:` line, or when an internal link or anchor does not resolve.
 
-Source: `apps/web/src/features/docs/nav.ts`, `apps/web/src/mdx-components.tsx`, `apps/web/tests/features/docs`.
+Source: `apps/web/source.config.ts`, `apps/web/src/features/docs/source.ts`, `apps/web/src/features/docs/mdx.tsx`, `apps/web/src/app/docs`, `apps/web/tests/features/docs`.

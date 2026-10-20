@@ -22,7 +22,7 @@ export function darkVariant(src: string): string {
 export function Diagram({ src, alt, width, height }: DiagramProps) {
   const className = 'h-auto w-full rounded-lg border border-border bg-card';
   return (
-    <figure className="my-6">
+    <figure className="not-prose my-6">
       <Image
         src={src}
         alt={alt}

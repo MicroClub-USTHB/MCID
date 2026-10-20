@@ -51,5 +51,17 @@ export interface ApiPage {
   group: string;
   /** The path below `src/content/docs/api-reference`, without `.mdx`: `project/members`. */
   slug: string;
+  /** The page title in the sidebar and the browser tab: the group, or `Project API overview`. */
+  title: string;
+  /** The meta description, also shown under the title. */
+  description: string;
+  /** The whole file: frontmatter, then the MDX body. */
+  content: string;
+}
+
+/** A file the generator writes below `src/content/docs/api-reference`. */
+export interface ApiFile {
+  /** The path below `api-reference`: `project/members.mdx`, `meta.json`. */
+  path: string;
   content: string;
 }

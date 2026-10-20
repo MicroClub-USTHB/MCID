@@ -1,0 +1,17 @@
+{
+  "title": "Build MCID",
+  "description": "For people who work on MCID itself: how to contribute and how these docs are written.",
+  "pages": [
+    "architecture",
+    "local-setup",
+    "api-guide",
+    "web-guide",
+    "contracts",
+    "testing",
+    "contributing",
+    "operations",
+    "decisions",
+    "glossary",
+    "writing-docs"
+  ]
+}

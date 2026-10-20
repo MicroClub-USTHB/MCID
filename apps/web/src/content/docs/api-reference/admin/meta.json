@@ -1,0 +1,22 @@
+{
+  "title": "Admin API",
+  "description": "What the admin dashboard uses. These endpoints need an admin session and are not meant for projects.",
+  "pages": [
+    "overview",
+    "admin-access",
+    "admin-settings",
+    "audit",
+    "authentication",
+    "channels",
+    "inbound-webhooks-admin",
+    "inbound-webhooks-read",
+    "members",
+    "monitoring",
+    "permissions",
+    "projects",
+    "servers",
+    "statistics",
+    "sync",
+    "webhooks"
+  ]
+}

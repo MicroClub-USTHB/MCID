@@ -1,0 +1,8 @@
+{
+  "title": "API reference",
+  "description": "Every endpoint of the MCID HTTP API, generated from apps/api/openapi.json.",
+  "pages": [
+    "project",
+    "admin"
+  ]
+}

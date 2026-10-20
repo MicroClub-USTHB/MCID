@@ -1,3 +1,8 @@
+---
+title: 'Inbound webhooks: signing and sending'
+description: 'Sign and send a submission with Node, Python or curl: the signature, replay protection, the origin allowlist and the rate limit.'
+---
+
 Each request to an inbound webhook carries your API key and, unless an admin switched it off, a signature. The signature proves the body is exactly what your backend produced and was not replayed. This page shows how to compute it, with runnable examples, and what MCID answers when something is wrong.
 
 ## What you send

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { allDocPages } from '@/features/docs/nav';
+import { pages as contentPages } from './helpers/content';
 
 /**
  * Tests that keep the docs tied to the code they describe, so a page cannot quietly go stale:
@@ -11,12 +11,12 @@ import { allDocPages } from '@/features/docs/nav';
  */
 
 const REPO = path.resolve(__dirname, '../../../../..');
-const CONTENT_DIR = path.resolve(__dirname, '../../../src/content/docs');
-
 const read = (file: string) => fs.readFileSync(path.join(REPO, file), 'utf8');
-const doc = (slug: string) => fs.readFileSync(path.join(CONTENT_DIR, `${slug}.mdx`), 'utf8');
-
-const pages = allDocPages().map((page) => ({ slug: page.slug, source: doc(page.slug) }));
+const pages = contentPages.map((page) => ({
+  slug: page.file.replace(/\.mdx$/, ''),
+  source: page.source,
+}));
+const doc = (slug: string) => pages.find((page) => page.slug === slug)!.source;
 
 function listTs(dir: string): string[] {
   return fs
