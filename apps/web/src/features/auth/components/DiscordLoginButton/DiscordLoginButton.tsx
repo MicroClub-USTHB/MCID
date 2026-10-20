@@ -2,7 +2,7 @@
 
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
-import { buttonVariants } from '@/shared/components/ui/mc-button';
+import { buttonVariants } from '@/shared/components/ui/mc-button-variants';
 import { getDiscordOAuthUrl, rememberPostLoginRedirect } from '@/features/auth/api/service';
 
 type DiscordLoginButtonSize = 'sm' | 'md' | 'lg';
