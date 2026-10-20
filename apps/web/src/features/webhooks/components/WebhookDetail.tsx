@@ -42,7 +42,7 @@ export function WebhookDetail({ webhook, onDeleted }: WebhookDetailProps) {
   return (
     <section
       aria-labelledby="webhook-detail-heading"
-      className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4"
+      className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4 shadow-sm"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">

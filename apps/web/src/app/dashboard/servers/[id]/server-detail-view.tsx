@@ -7,6 +7,7 @@ import { Server as ServerIcon } from 'lucide-react';
 
 import { Can } from '@/shared/components/common';
 import { EmptyState } from '@/shared/components/ui/empty-state';
+import { McAlert } from '@/shared/components/ui/mc-alert';
 import { McButton, buttonVariants } from '@/shared/components/ui/mc-button';
 import { McSkeleton } from '@/shared/components/ui/mc-skeleton';
 import { showToast } from '@/shared/stores';
@@ -26,6 +27,7 @@ import {
   useUpdateServerMutation,
 } from '@/features/servers';
 import { useServerStatsQuery } from '@/features/stats';
+import { PageHeader } from '@/shared/components/layout/page-header';
 
 interface ServerDetailViewProps {
   id: string;
@@ -86,8 +88,13 @@ function ServerDetailView({ id }: ServerDetailViewProps) {
     }
 
     return (
-      <div className="flex flex-col items-start gap-3 rounded-lg bg-error/10 p-4 text-error">
-        <p className="paragraph-sm">{apiError.message || 'Failed to load server.'}</p>
+      <div className="flex flex-col items-start gap-3">
+        <McAlert
+          variant="destructive"
+          title="Couldn’t load this server"
+          description={apiError.message || 'Failed to load server.'}
+          className="w-full max-w-none"
+        />
         <McButton type="button" variant="secondary" size="sm" onClick={() => void refetch()}>
           Retry
         </McButton>
@@ -97,55 +104,58 @@ function ServerDetailView({ id }: ServerDetailViewProps) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <ServerAvatar name={server.name} icon={server.icon} size="lg" />
-          <div className="flex flex-col gap-1">
-            <h1 className="header-xs font-bold text-foreground">{server.name}</h1>
-            <div className="flex items-center gap-2">
-              <ServerStatusBadge isActive={server.isActive} isMain={server.isMain} />
-              <ServerTypeBadge type={server.type} />
-            </div>
-          </div>
-        </div>
+      <PageHeader
+        eyebrow="Discord"
+        title={server.name}
+        leading={<ServerAvatar name={server.name} icon={server.icon} size="lg" />}
+        actions={
+          <>
+            <Can resource="servers" level="write">
+              <McButton
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={server.isMain}
+                onClick={() => {
+                  if (server.isActive) {
+                    setDisableOpen(true);
+                  } else {
+                    enableMutation.mutate(server.id, {
+                      onSuccess: () => showToast(`${server.name} enabled`, 'success'),
+                      onError: (mutationError) =>
+                        showToast(mutationError.message || 'Failed to enable server', 'error'),
+                    });
+                  }
+                }}
+              >
+                {server.isActive ? 'Disable' : 'Enable'}
+              </McButton>
+            </Can>
+            <Can resource="servers" level="manage">
+              <McButton
+                type="button"
+                variant="primary"
+                destructive
+                size="sm"
+                disabled={server.isMain}
+                onClick={() => setDeleteOpen(true)}
+              >
+                Delete
+              </McButton>
+            </Can>
+          </>
+        }
+      >
         <div className="flex items-center gap-2">
-          <Can resource="servers" level="write">
-            <McButton
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={server.isMain}
-              title={server.isMain ? 'The main server cannot be disabled' : undefined}
-              onClick={() => {
-                if (server.isActive) {
-                  setDisableOpen(true);
-                } else {
-                  enableMutation.mutate(server.id, {
-                    onSuccess: () => showToast(`${server.name} enabled`, 'success'),
-                    onError: (mutationError) =>
-                      showToast(mutationError.message || 'Failed to enable server', 'error'),
-                  });
-                }
-              }}
-            >
-              {server.isActive ? 'Disable' : 'Enable'}
-            </McButton>
-          </Can>
-          <Can resource="servers" level="manage">
-            <McButton
-              type="button"
-              variant="primary"
-              destructive
-              size="sm"
-              disabled={server.isMain}
-              title={server.isMain ? 'The main server cannot be deleted' : undefined}
-              onClick={() => setDeleteOpen(true)}
-            >
-              Delete
-            </McButton>
-          </Can>
+          <ServerStatusBadge isActive={server.isActive} isMain={server.isMain} />
+          <ServerTypeBadge type={server.type} />
         </div>
-      </div>
+        {server.isMain ? (
+          <p className="paragraph-xs text-muted-foreground">
+            The main server cannot be disabled or deleted.
+          </p>
+        ) : null}
+      </PageHeader>
 
       <Can resource="stats" level="read">
         <ServerStatsCard stats={stats} isLoading={isStatsPending} />

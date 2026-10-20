@@ -1,7 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-
+import { McAvatar, McAvatarFallback, McAvatarImage } from '@/shared/components/ui/mc-avatar';
 import { cn } from '@/shared/lib/utils';
 
 interface MemberAvatarProps {
@@ -13,6 +12,7 @@ interface MemberAvatarProps {
   className?: string;
 }
 
+/** A member's Discord avatar on the mcoli-ui avatar, with their initials while it loads or fails. */
 export function MemberAvatar({
   displayName,
   avatarUrl,
@@ -21,30 +21,22 @@ export function MemberAvatar({
   textSizeClassName = 'text-sm',
   className,
 }: MemberAvatarProps) {
-  const [imageErrorUrl, setImageErrorUrl] = useState<string | null>(null);
-
-  const shouldShowImage = Boolean(avatarUrl) && imageErrorUrl !== avatarUrl;
-
   return (
-    <div
-      className={cn(
-        'flex items-center justify-center overflow-hidden rounded-full bg-primary text-center text-primary-foreground',
-        sizeClassName,
-        className
-      )}
-    >
-      {shouldShowImage && avatarUrl ? (
-        <img
+    <McAvatar className={cn(sizeClassName, className)}>
+      {avatarUrl ? (
+        <McAvatarImage
+          key={avatarUrl}
           src={avatarUrl}
           alt={`${displayName} avatar`}
-          className="size-full rounded-full object-cover"
           loading="lazy"
           decoding="async"
-          onError={() => setImageErrorUrl(avatarUrl)}
         />
-      ) : (
-        <span className={cn('font-semibold', textSizeClassName)}>{avatarInitials}</span>
-      )}
-    </div>
+      ) : null}
+      <McAvatarFallback
+        className={cn('bg-primary font-semibold text-primary-foreground', textSizeClassName)}
+      >
+        {avatarInitials}
+      </McAvatarFallback>
+    </McAvatar>
   );
 }

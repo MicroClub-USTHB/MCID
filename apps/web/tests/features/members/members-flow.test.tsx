@@ -174,20 +174,18 @@ describe('members flow', () => {
     render(<MembersFlowHarness />, { wrapper });
 
     await screen.findByText('Clubber Lang');
-    await screen.findByRole('button', { name: 'Servers' });
+    await screen.findByRole('combobox', { name: 'Servers' });
 
     await user.type(screen.getByRole('searchbox', { name: 'Search' }), 'club');
     await waitFor(() => expect(listRequestUrl?.searchParams.get('search')).toBe('club'));
 
-    await user.click(screen.getByRole('button', { name: 'Servers' }));
-    await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Main Server' }));
+    await user.click(screen.getByRole('combobox', { name: 'Servers' }));
+    await user.click(await screen.findByRole('option', { name: 'Main Server' }));
     await user.keyboard('{Escape}');
 
-    await user.click(screen.getByRole('button', { name: 'Roles' }));
-    await waitFor(() =>
-      expect(screen.getByRole('menuitemcheckbox', { name: 'Admin' })).toBeInTheDocument()
-    );
-    await user.click(screen.getByRole('menuitemcheckbox', { name: 'Admin' }));
+    await user.click(screen.getByRole('combobox', { name: 'Roles' }));
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Admin' })).toBeInTheDocument());
+    await user.click(screen.getByRole('option', { name: 'Admin' }));
     await user.keyboard('{Escape}');
 
     await waitFor(() =>

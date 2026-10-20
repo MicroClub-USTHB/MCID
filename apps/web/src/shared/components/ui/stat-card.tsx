@@ -2,6 +2,7 @@ import * as React from 'react';
 import { RotateCw, TrendingDown, TrendingUp } from 'lucide-react';
 
 import { cn } from '@/shared/lib/utils';
+import { McButton } from '@/shared/components/ui/mc-button';
 import { McSkeleton } from '@/shared/components/ui/mc-skeleton';
 
 /**
@@ -103,7 +104,7 @@ function StatCard({
     <div
       data-slot="stat-card"
       className={cn(
-        'overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-xs',
+        'overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-sm',
         className
       )}
       {...props}
@@ -181,7 +182,7 @@ function StatCardSkeleton({
       role="status"
       aria-busy="true"
       className={cn(
-        'overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-xs',
+        'overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-sm',
         className
       )}
       {...props}
@@ -207,7 +208,7 @@ function StatCardError({ label, onRetry, className, ...props }: StatCardErrorPro
   return (
     <div
       className={cn(
-        'overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-xs',
+        'overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-sm',
         className
       )}
       {...props}
@@ -218,14 +219,18 @@ function StatCardError({ label, onRetry, className, ...props }: StatCardErrorPro
           {label}
         </span>
         <span className="paragraph-sm text-error">Failed to load</span>
-        <button
+        <McButton
           type="button"
+          variant="link"
+          size="sm"
+          destructive
+          icon="leading"
+          iconDefinition={<RotateCw aria-hidden="true" />}
           onClick={onRetry}
-          className="inline-flex w-fit items-center gap-1 paragraph-sm text-error hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card focus-visible:outline-none"
+          className="w-fit no-underline hover:underline"
         >
-          <RotateCw className="size-4" aria-hidden="true" />
           Retry
-        </button>
+        </McButton>
       </div>
     </div>
   );

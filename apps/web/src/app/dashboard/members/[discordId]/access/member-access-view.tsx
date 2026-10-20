@@ -6,6 +6,7 @@ import { ArrowLeft } from 'lucide-react';
 import { MemberAccessEditor } from '@/features/access/components/MemberAccessEditor';
 import { buttonVariants } from '@/shared/components/ui/mc-button';
 import { cn } from '@/shared/lib/utils';
+import { PageHeader } from '@/shared/components/layout/page-header';
 
 /** One member's access levels and overrides. Root only, and independent of the member detail page. */
 export function MemberAccessView({ memberId }: { memberId: string }) {
@@ -19,11 +20,12 @@ export function MemberAccessView({ memberId }: { memberId: string }) {
           <ArrowLeft className="size-4" aria-hidden="true" />
           Access
         </Link>
-        <h1 className="mt-2 header-xs font-bold text-foreground">Member access</h1>
-        <p className="mt-1 max-w-2xl paragraph-sm text-muted-foreground">
-          What this person can do, and where it comes from. An override replaces what their roles
-          grant for that area, for this person only.
-        </p>
+        <PageHeader
+          className="mt-2"
+          eyebrow="System"
+          title="Member access"
+          description="What this person can do, and where it comes from. An override replaces what their roles grant for that area, for this person only."
+        />
       </div>
       <MemberAccessEditor memberId={memberId} />
     </div>

@@ -51,7 +51,7 @@ export function RoleEditor({ role, catalog }: { role: AccessRoleDto; catalog: Ac
 
   if (role.root) {
     return (
-      <section className="flex flex-col gap-3 rounded-lg border border-border bg-card p-5">
+      <section className="flex flex-col gap-3 rounded-lg border border-border bg-card p-5 shadow-sm">
         <div className="flex items-center gap-2">
           <Lock className="size-4 text-muted-foreground" aria-hidden="true" />
           <h2 className="paragraph-md font-semibold text-foreground">{role.name}</h2>
@@ -83,7 +83,7 @@ export function RoleEditor({ role, catalog }: { role: AccessRoleDto; catalog: Ac
   }
 
   return (
-    <section className="flex min-w-0 flex-col gap-4 rounded-lg border border-border bg-card p-5">
+    <section className="flex min-w-0 flex-col gap-4 rounded-lg border border-border bg-card p-5 shadow-sm">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="paragraph-md font-semibold text-foreground">{role.name}</h2>
         <div className="flex gap-2">

@@ -1,4 +1,4 @@
-import { McInput } from '@/shared/components/ui/mc-input';
+import { DateField } from '@/shared/components/ui/date-field';
 import { McRadioGroup, McRadioGroupItem } from '@/shared/components/ui/mc-radio-group';
 import {
   McSelect,
@@ -63,19 +63,20 @@ function AuditLogFilters({
   ];
 
   return (
-    <section className="rounded-lg border border-border bg-card p-4" aria-label="Audit log filters">
+    <section
+      className="rounded-lg border border-border bg-card p-4 shadow-sm"
+      aria-label="Audit log filters"
+    >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <McInput
-          type="date"
+        <DateField
           label="Date from"
-          value={filters.dateFrom ?? ''}
-          onChange={(event) => update({ dateFrom: event.target.value || undefined })}
+          value={filters.dateFrom}
+          onChange={(dateFrom) => update({ dateFrom })}
         />
-        <McInput
-          type="date"
+        <DateField
           label="Date to"
-          value={filters.dateTo ?? ''}
-          onChange={(event) => update({ dateTo: event.target.value || undefined })}
+          value={filters.dateTo}
+          onChange={(dateTo) => update({ dateTo })}
         />
         {showActorFilter ? (
           <div className="flex flex-col gap-1.5">

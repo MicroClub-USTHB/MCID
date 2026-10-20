@@ -41,7 +41,7 @@ export function WebhookDocs({ webhookId }: { webhookId: string }) {
       ) : docs.data === undefined ? (
         <McSkeleton rectangle className="h-64 w-full" />
       ) : (
-        <div className="rounded-lg border border-border bg-card p-4">
+        <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
           <DocsMarkdown markdown={docs.data} />
         </div>
       )}

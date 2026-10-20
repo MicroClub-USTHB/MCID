@@ -19,6 +19,7 @@ import { McTabs, McTabsList, McTabsPanel, McTabsTrigger } from '@/shared/compone
 import { useCan } from '@/shared/lib/use-access';
 import { showToast } from '@/shared/stores';
 import type { ApiError } from '@/shared/types';
+import { PageHeader } from '@/shared/components/layout/page-header';
 
 function ActiveSwitch({ webhookId, isActive }: { webhookId: string; isActive: boolean }) {
   const update = useUpdateInboundWebhookMutation(webhookId);
@@ -75,13 +76,13 @@ export function WebhookView({ webhookId }: { webhookId: string }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="header-xs font-bold break-words text-foreground">{webhook.name}</h1>
-          <p className="mt-1 font-mono text-xs text-muted-foreground">{webhook.slug}</p>
-        </div>
-        <ActiveSwitch webhookId={webhook.id} isActive={webhook.isActive} />
-      </header>
+      <PageHeader
+        eyebrow="Inbound webhook"
+        title={webhook.name}
+        actions={<ActiveSwitch webhookId={webhook.id} isActive={webhook.isActive} />}
+      >
+        <p className="font-mono text-xs text-muted-foreground">{webhook.slug}</p>
+      </PageHeader>
 
       {webhook.isActive ? null : (
         <p role="status" className="paragraph-sm text-muted-foreground">
