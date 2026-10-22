@@ -25,10 +25,8 @@ export function defaultWhoamiDeps(): WhoamiDeps {
 }
 
 /**
- * Read-only: resolves the profile's stored session and asks MCID who it
- * belongs to. Never writes the config file and never prints the token,
- * in either human or `--json` mode. There is no refresh endpoint for the
- * admin session (see the Admin API reference), so a 401 here is final — no retry.
+ * Read-only: resolves the session and asks MCID who it belongs to.
+ * Respects MCID_TOKEN env var and reports auth source.
  */
 export async function whoami(options: WhoamiOptions, deps: WhoamiDeps): Promise<void> {
   const config = await loadConfig(deps.configPath);
@@ -37,10 +35,10 @@ export async function whoami(options: WhoamiOptions, deps: WhoamiDeps): Promise<
 
   const { status, body } = await getAdminMeRaw(session.baseUrl, session.token);
   if (status === 401) {
-    throw new CliError(
-      `session expired, run \`mcid-cli login --profile ${profileName}\``,
-      ExitCode.Auth,
-    );
+    const hint = session.isEnvToken
+      ? 'check the MCID_TOKEN environment variable'
+      : `run \`mcid-cli login --profile ${profileName}\``;
+    throw new CliError(`session expired or invalid; ${hint}`, ExitCode.Auth);
   }
   if (status === 403) {
     throw new CliError(
@@ -55,7 +53,11 @@ export async function whoami(options: WhoamiOptions, deps: WhoamiDeps): Promise<
   }
 
   const me = parseAdminMe(body);
-  deps.out(`Logged in as ${adminDisplayName(me)} (${me.username}) on ${profileName}`);
+  const authSource = session.isEnvToken
+    ? '(via MCID_TOKEN env var)'
+    : `on ${profileName}`;
+
+  deps.out(`Logged in as ${adminDisplayName(me)} (${me.username}) ${authSource}`);
   deps.out(`MCID: ${session.baseUrl}`);
   deps.out(`Session expires: ${me.sessionExpiresAt}`);
 }
