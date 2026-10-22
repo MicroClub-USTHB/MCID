@@ -13,6 +13,7 @@ import { registerConfigCommand } from './commands/config.js';
 import { registerDoctorCommand } from './commands/doctor.js';
 import { registerCompletionCommand } from './commands/completion.js';
 import { registerOpenCommand } from './commands/open.js';
+import { registerProjectCommand } from './commands/project.js';
 
 // When stdout is closed early (e.g. `mcid-cli webhook list | head`), stop quietly
 // instead of crashing with an unhandled EPIPE stack trace.
@@ -54,6 +55,7 @@ registerProfileCommand(program);
 registerConfigCommand(program);
 registerSchemaCommand(program);
 registerWebhookCommand(program);
+registerProjectCommand(program);
 
 async function main() {
   if (process.argv.length <= 2) {
