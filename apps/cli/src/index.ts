@@ -19,6 +19,7 @@ import { registerSyncCommand } from './commands/sync.js';
 import { registerMemberCommand } from './commands/member.js';
 import { registerRoleCommand } from './commands/role.js';
 import { registerAccessCommand } from './commands/access.js';
+import { registerOpsCommand } from './commands/ops.js';
 
 // When stdout is closed early (e.g. `mcid-cli webhook list | head`), stop quietly
 // instead of crashing with an unhandled EPIPE stack trace.
@@ -66,6 +67,7 @@ registerSyncCommand(program);
 registerMemberCommand(program);
 registerRoleCommand(program);
 registerAccessCommand(program);
+registerOpsCommand(program);
 
 async function main() {
   if (process.argv.length <= 2) {
