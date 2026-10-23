@@ -264,13 +264,14 @@ export function registerMemberCommand(program: Command): void {
                 'http://localhost:3000',
             );
           const snowflake = /^\d{17,20}$/;
+          const explicitServer = options.server;
           let resolvedServer: { id: string; name: string };
           let resolvedMember: { discordId: string; username: string };
 
-          if (snowflake.test(options.server ?? '') && snowflake.test(memberArg)) {
+          if (explicitServer && snowflake.test(explicitServer) && snowflake.test(memberArg)) {
             // Project API keys cannot enumerate admin resources. Accept explicit
             // snowflakes so project-only callers do not need an admin session.
-            resolvedServer = { id: options.server, name: options.server };
+            resolvedServer = { id: explicitServer, name: explicitServer };
             resolvedMember = { discordId: memberArg, username: memberArg };
           } else {
             const client = await getClient(options.profile);
