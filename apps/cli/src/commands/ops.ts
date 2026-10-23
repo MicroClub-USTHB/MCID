@@ -3,6 +3,14 @@ import { Command } from 'commander';
 import { configPath, loadConfig, resolveProfileName } from '../config.js';
 import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
+import {
+  normalizeAuditLogs,
+  normalizeAuthFailures,
+  normalizeGrowthSeries,
+  normalizeRoleStats,
+  normalizeServerStats,
+  normalizeUsage,
+} from '../lib/api-normalize.js';
 import { ApiClient } from '../lib/client.js';
 import { confirmDestructive } from '../lib/confirm.js';
 import {
@@ -14,7 +22,7 @@ import {
   toCsv,
 } from '../lib/output.js';
 import { promptConfirm } from '../lib/prompts.js';
-import { resolveProject, resolveServer } from '../lib/resolver.js';
+import { resolveMember, resolveProject, resolveServer } from '../lib/resolver.js';
 import { colors, formatSparkline } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
 
@@ -107,8 +115,11 @@ export function registerOpsCommand(program: Command): void {
         }
         process.stdout.write('\n');
 
-        const allHealthy = isApiOk && isDbOk && isRedisOk && isDiscordOk;
-        if (!allHealthy) {
+        // Exit 5 means the CLI could not complete the check, not that a
+        // downstream integration is degraded. A disconnected Discord gateway
+        // is expected during local development without a bot token.
+        const coreHealthy = isApiOk && isDbOk && isRedisOk;
+        if (!coreHealthy) {
           process.exitCode = ExitCode.Unexpected;
         }
       } catch (err) {
@@ -122,18 +133,30 @@ export function registerOpsCommand(program: Command): void {
   monitorCmd
     .command('usage')
     .description('View API requests per project and error rates')
-    .option('--period <period>', 'Time window (24h, 7d, 30d)', '24h')
+    .option('--period <period>', 'Time window (7d, 30d, 90d)', '7d')
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as JSON')
     .action(async (options: { period: string; profile?: string; json?: boolean }) => {
       try {
         const client = await getClient(options.profile);
-        const data = await client.get<Record<string, unknown>[]>(
+        const raw = await client.get(
           `/admin/monitoring/usage?period=${encodeURIComponent(options.period)}`,
         );
+        const rows = normalizeUsage(raw);
 
         if (options.json) {
-          printJson(data);
+          printJson(raw);
+          return;
+        }
+
+        const totalRequests = (raw as { totalRequests?: number }).totalRequests;
+
+        if (rows.length === 0) {
+          process.stdout.write(
+            colors.dim(
+              `No project-attributed API usage recorded in the last ${options.period}${totalRequests !== undefined ? ` (total requests: ${totalRequests})` : ''}.\n`,
+            ),
+          );
           return;
         }
 
@@ -141,11 +164,18 @@ export function registerOpsCommand(program: Command): void {
           columns: [
             {
               header: 'PROJECT',
-              format: (_, r) => colors.bold(String(r['projectName'] || r['projectId'] || '-')),
+              key: 'projectName',
+              format: (v) => colors.bold(String(v || '-')),
             },
             {
               header: 'REQUESTS',
-              key: 'requestCount',
+              key: 'requests',
+              align: 'right',
+              format: (v) => String(v ?? 0),
+            },
+            {
+              header: 'ERRORS',
+              key: 'errors',
               align: 'right',
               format: (v) => String(v ?? 0),
             },
@@ -156,7 +186,7 @@ export function registerOpsCommand(program: Command): void {
               format: (v) => `${Number(v ?? 0).toFixed(1)}%`,
             },
           ],
-          data,
+          data: rows,
         });
       } catch (err) {
         exitWithError('monitor usage', err);
@@ -173,11 +203,17 @@ export function registerOpsCommand(program: Command): void {
       try {
         const client = await getClient(options.profile);
         let path = '/admin/monitoring/auth-failures';
-        if (options.since) path += `?since=${encodeURIComponent(options.since)}`;
-        const list = await client.get<Record<string, unknown>[]>(path);
+        if (options.since) path += `?dateFrom=${encodeURIComponent(options.since)}`;
+        const raw = await client.get(path);
+        const list = normalizeAuthFailures(raw);
 
         if (options.json) {
-          printJson(list);
+          printJson(raw);
+          return;
+        }
+
+        if (list.length === 0) {
+          process.stdout.write(colors.dim('No authentication failures recorded.\n'));
           return;
         }
 
@@ -189,7 +225,7 @@ export function registerOpsCommand(program: Command): void {
               format: (v) => formatAge(typeof v === 'string' ? v : undefined),
             },
             { header: 'REASON', key: 'reason', format: (v) => colors.red(String(v)) },
-            { header: 'IP ADDRESS', key: 'ip', format: (v) => String(v ?? '-') },
+            { header: 'IP ADDRESS', key: 'ipAddress', format: (v) => String(v ?? '-') },
             { header: 'TARGET', key: 'target', format: (v) => String(v ?? '-') },
           ],
           data: list,
@@ -208,7 +244,6 @@ export function registerOpsCommand(program: Command): void {
     .description('List recent audit log entries')
     .option('--actor <member>', 'Filter by admin actor')
     .option('--action <action>', 'Filter by action name')
-    .option('--resource <resource>', 'Filter by resource type')
     .option('--since <date>', 'Start date (ISO or 24h, 7d)')
     .option('--until <date>', 'End date')
     .option('--follow', 'Poll for new entries continuously')
@@ -218,7 +253,6 @@ export function registerOpsCommand(program: Command): void {
       async (options: {
         actor?: string;
         action?: string;
-        resource?: string;
         since?: string;
         until?: string;
         follow?: boolean;
@@ -228,37 +262,40 @@ export function registerOpsCommand(program: Command): void {
         try {
           const client = await getClient(options.profile);
 
+          let actorId: string | undefined;
+          if (options.actor) {
+            const resolved = await resolveMember(client, options.actor);
+            actorId = resolved.discordId;
+          }
+
           const buildParams = () => {
             const params = new URLSearchParams();
+            if (actorId) params.set('actorId', actorId);
             if (options.action) params.set('actionType', options.action);
-            if (options.resource) params.set('resource', options.resource);
             if (options.since) params.set('dateFrom', options.since);
             if (options.until) params.set('dateTo', options.until);
             return params;
           };
 
-          const fetchLogs = async () => {
-            const p = buildParams();
-            const logs = await client.get<Record<string, unknown>[]>(
-              `/admin/audit/logs?${p.toString()}`,
-            );
-            return Array.isArray(logs) ? logs : [];
-          };
+          const fetchRaw = async () => client.get(`/admin/audit/logs?${buildParams().toString()}`);
+          const fetchLogs = async () => normalizeAuditLogs(await fetchRaw());
 
           const logs = await fetchLogs();
 
           if (options.json && !options.follow) {
-            printJson(logs);
+            printJson(await fetchRaw());
             return;
           }
 
-          const renderRow = (r: Record<string, unknown>) => {
-            const time = formatAge(typeof r['createdAt'] === 'string' ? r['createdAt'] : undefined);
-            const actor = `@${r['actorUsername'] || r['actorId'] || 'unknown'}`;
-            const action = colors.bold(String(r['actionType'] || r['action'] || ''));
-            const target = String(r['resourceId'] || r['target'] || '-');
+          const renderRow = (r: {
+            timestamp: string;
+            actor: string;
+            action: string;
+            entity: string;
+          }) => {
+            const time = formatAge(r.timestamp || undefined);
             process.stdout.write(
-              `  [${colors.dim(time)}] ${colors.cyan(actor)} ${action} ${colors.dim(target)}\n`,
+              `  [${colors.dim(time)}] ${colors.cyan(`@${r.actor}`)} ${colors.bold(r.action)} ${colors.dim(r.entity)}\n`,
             );
           };
 
@@ -271,15 +308,15 @@ export function registerOpsCommand(program: Command): void {
           }
 
           if (options.follow) {
-            let lastSeenId = logs[0]?.['id'];
+            let lastSeenId = logs[0]?.id;
             const interval = setInterval(async () => {
               try {
                 const fresh = await fetchLogs();
                 for (const row of fresh) {
-                  if (row['id'] === lastSeenId) break;
+                  if (row.id === lastSeenId) break;
                   renderRow(row);
                 }
-                if (fresh[0]) lastSeenId = fresh[0]['id'];
+                if (fresh[0]) lastSeenId = fresh[0].id;
               } catch {
                 // ignore polling hiccups
               }
@@ -304,8 +341,10 @@ export function registerOpsCommand(program: Command): void {
     .action(async (options: { file?: string; profile?: string }) => {
       try {
         const client = await getClient(options.profile);
-        const data = await client.get<Record<string, unknown>[]>('/admin/audit/logs/export');
-        const csvContent = toCsv(data);
+        const data = await client.get<Record<string, unknown>[] | string>(
+          '/admin/audit/logs/export',
+        );
+        const csvContent = typeof data === 'string' ? data : toCsv(data);
         const defaultFilename = `audit-${new Date().toISOString().slice(0, 10)}.csv`;
         const path = options.file || defaultFilename;
         await writeFile(path, csvContent, 'utf8');
@@ -359,33 +398,28 @@ export function registerOpsCommand(program: Command): void {
             const s = await resolveServer(client, options.server);
             path += `&serverId=${encodeURIComponent(s.id)}`;
           }
-          const data = await client.get<
-            { dates: string[]; values: number[] } | Record<string, unknown>[]
-          >(path);
+          const data = await client.get(path);
 
           if (options.json) {
             printJson(data);
             return;
           }
 
-          let values: number[] = [];
-          if (Array.isArray(data)) {
-            values = data.map((d) => Number(d['count'] ?? d['members'] ?? 0));
-          } else if (data.values) {
-            values = data.values;
-          }
+          const values = normalizeGrowthSeries(data);
 
           process.stdout.write(`\n${colors.bold('Member Growth Trend')} (${options.period}):\n\n`);
+          if (values.length === 0) {
+            process.stdout.write(colors.dim('  No growth data recorded for this period.\n\n'));
+            return;
+          }
           const spark = formatSparkline(values);
           process.stdout.write(`  ${colors.green(spark)}\n\n`);
-          if (values.length > 0) {
-            const min = Math.min(...values);
-            const max = Math.max(...values);
-            const latest = values[values.length - 1] ?? 0;
-            process.stdout.write(
-              `  Min: ${min} | Max: ${max} | Current: ${colors.bold(String(latest))}\n\n`,
-            );
-          }
+          const min = Math.min(...values);
+          const max = Math.max(...values);
+          const latest = values[values.length - 1] ?? 0;
+          process.stdout.write(
+            `  Min: ${min} | Max: ${max} | Current: ${colors.bold(String(latest))}\n\n`,
+          );
         } catch (err) {
           exitWithError('stats growth', err);
         }
@@ -402,12 +436,13 @@ export function registerOpsCommand(program: Command): void {
       try {
         const client = await getClient(options.profile);
         const resolved = await resolveServer(client, options.server);
-        const roles = await client.get<Record<string, unknown>[]>(
+        const raw = await client.get(
           `/admin/stats/roles?serverId=${encodeURIComponent(resolved.id)}`,
         );
+        const roles = normalizeRoleStats(raw);
 
         if (options.json) {
-          printJson(roles);
+          printJson(raw);
           return;
         }
 
@@ -419,6 +454,12 @@ export function registerOpsCommand(program: Command): void {
               key: 'memberCount',
               align: 'right',
               format: (v) => String(v ?? 0),
+            },
+            {
+              header: 'SHARE',
+              key: 'percentage',
+              align: 'right',
+              format: (v) => (v === undefined ? '-' : `${Number(v).toFixed(1)}%`),
             },
           ],
           data: roles,
@@ -436,21 +477,36 @@ export function registerOpsCommand(program: Command): void {
     .action(async (options: { profile?: string; json?: boolean }) => {
       try {
         const client = await getClient(options.profile);
-        const res = await client.get<Record<string, unknown>[]>('/admin/stats/servers');
+        const raw = await client.get('/admin/stats/servers');
+        const res = normalizeServerStats(raw);
         if (options.json) {
-          printJson(res);
+          printJson(raw);
           return;
         }
         printTable({
           columns: [
-            { header: 'SERVER', key: 'name', format: (v) => colors.bold(String(v)) },
+            {
+              header: 'SERVER',
+              key: 'serverName',
+              format: (v) => colors.bold(String(v)),
+            },
             {
               header: 'MEMBERS',
-              key: 'membersCount',
+              key: 'memberCount',
               align: 'right',
               format: (v) => String(v ?? 0),
             },
-            { header: 'ROLES', key: 'rolesCount', align: 'right', format: (v) => String(v ?? 0) },
+            { header: 'ROLES', key: 'roleCount', align: 'right', format: (v) => String(v ?? 0) },
+            {
+              header: 'SYNC',
+              key: 'syncStatus',
+              format: (v) => {
+                const st = String(v ?? 'never');
+                if (st === 'success') return colors.green(st);
+                if (st === 'failed') return colors.red(st);
+                return colors.yellow(st);
+              },
+            },
           ],
           data: res,
         });
@@ -477,22 +533,55 @@ export function registerOpsCommand(program: Command): void {
   statsCmd
     .command('export')
     .description('Export general statistics to CSV or JSON')
+    .option(
+      '--type <type>',
+      'Report to export (members, growth, roles, servers, cross-server)',
+      'members',
+    )
+    .option('--server <server>', 'Server scope (required for type=roles)')
     .option('-o, --output <format>', 'Format (csv|json)', 'csv')
     .option('--file <path>', 'Destination file path')
     .option('--profile <name>', 'Profile to use')
-    .action(async (options: { output?: 'csv' | 'json'; file?: string; profile?: string }) => {
-      try {
-        const client = await getClient(options.profile);
-        const data = await client.get<Record<string, unknown>[]>('/admin/stats/export');
-        const format = options.output || 'csv';
-        const content = format === 'json' ? JSON.stringify(data, null, 2) : toCsv(data);
-        const target = options.file || `stats-${new Date().toISOString().slice(0, 10)}.${format}`;
-        await writeFile(target, content, 'utf8');
-        printSuccess(`Exported stats to ${target}`);
-      } catch (err) {
-        exitWithError('stats export', err);
-      }
-    });
+    .action(
+      async (options: {
+        type?: string;
+        server?: string;
+        output?: 'csv' | 'json';
+        file?: string;
+        profile?: string;
+      }) => {
+        try {
+          const client = await getClient(options.profile);
+          const format = options.output || 'csv';
+          const params = new URLSearchParams({
+            type: options.type || 'members',
+            format,
+          });
+          if (options.server) {
+            const s = await resolveServer(client, options.server);
+            params.set('serverId', s.id);
+          }
+
+          const data = await client.get<Record<string, unknown>[] | string>(
+            `/admin/stats/export?${params.toString()}`,
+          );
+          const content =
+            typeof data === 'string'
+              ? data
+              : format === 'json'
+                ? JSON.stringify(data, null, 2)
+                : toCsv(data);
+          const target =
+            options.file ||
+            `stats-${options.type || 'members'}-${new Date().toISOString().slice(0, 10)}.${format}`;
+
+          await writeFile(target, content, 'utf8');
+          printSuccess(`Exported ${options.type || 'members'} stats to ${target}`);
+        } catch (err) {
+          exitWithError('stats export', err);
+        }
+      },
+    );
 
   // ── settings ───────────────────────────────────────────────────────
   const settingsCmd = program

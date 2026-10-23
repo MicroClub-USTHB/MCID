@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { configPath, loadConfig, resolveProfileName } from '../config.js';
 import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
+import { normalizeRoleStats } from '../lib/api-normalize.js';
 import { ApiClient } from '../lib/client.js';
 import {
   printJson,
@@ -16,15 +17,6 @@ import { resolveRole, resolveServer } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
 
-interface RoleStatItem {
-  id: string;
-  name: string;
-  color?: number | string;
-  memberCount?: number;
-  position?: number;
-  permissionsCount?: number;
-}
-
 interface RolePermissionItem {
   id: number;
   key: string;
@@ -32,8 +24,9 @@ interface RolePermissionItem {
 }
 
 interface ImpactPreviewResponse {
-  affectedMembersCount: number;
-  affectedMembers?: { id: string; username: string }[];
+  affectedMembersCount?: number;
+  affectedMembers?: number;
+  memberIds?: string[];
 }
 
 export function registerRoleCommand(program: Command): void {
@@ -52,9 +45,10 @@ export function registerRoleCommand(program: Command): void {
     try {
       const client = await getClient(options.profile);
       const resolvedServer = await resolveServer(client, options.server);
-      const roles = await client.get<RoleStatItem[]>(
+      const raw = await client.get(
         `/admin/stats/roles?serverId=${encodeURIComponent(resolvedServer.id)}`,
       );
+      const roles = normalizeRoleStats(raw);
 
       if (options.quiet) {
         printQuiet(roles.map((r) => r.id));
@@ -63,7 +57,7 @@ export function registerRoleCommand(program: Command): void {
 
       const outFormat = options.json ? 'json' : options.output || 'table';
       if (outFormat === 'json') {
-        printJson(roles);
+        printJson(raw);
         return;
       }
       if (outFormat === 'csv') {
@@ -225,7 +219,7 @@ export function registerRoleCommand(program: Command): void {
           );
 
           process.stdout.write(
-            `${colors.cyan('Impact Preview:')} this change will affect ${colors.bold(String(preview.affectedMembersCount))} member(s).\n`,
+            `${colors.cyan('Impact Preview:')} this change will affect ${colors.bold(String(preview.affectedMembersCount ?? preview.affectedMembers ?? preview.memberIds?.length ?? 0))} member(s).\n`,
           );
 
           if (options.dryRun) {
@@ -299,7 +293,7 @@ export function registerRoleCommand(program: Command): void {
           );
 
           process.stdout.write(
-            `${colors.cyan('Impact Preview:')} this removal will affect ${colors.bold(String(preview.affectedMembersCount))} member(s).\n`,
+            `${colors.cyan('Impact Preview:')} this removal will affect ${colors.bold(String(preview.affectedMembersCount ?? preview.affectedMembers ?? preview.memberIds?.length ?? 0))} member(s).\n`,
           );
 
           if (options.dryRun) {

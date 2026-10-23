@@ -1,12 +1,17 @@
 import { Command } from 'commander';
-import { ACCESS_LEVELS, ACCESS_RESOURCES, isAccessLevel, isAccessResource } from '@mcid/contracts';
+import { ACCESS_LEVELS, isAccessLevel, isAccessResource } from '@mcid/contracts';
 import { configPath, loadConfig, resolveProfileName } from '../config.js';
 import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
+import {
+  normalizeAccessCatalog,
+  normalizeAccessOverrides,
+  normalizeAccessRoles,
+} from '../lib/api-normalize.js';
 import { ApiClient } from '../lib/client.js';
 import { printJson, printKeyValue, printSuccess, printTable } from '../lib/output.js';
 import { promptConfirm } from '../lib/prompts.js';
-import { resolveMember, resolveRole } from '../lib/resolver.js';
+import { resolveMember } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
 
@@ -42,24 +47,25 @@ export function registerAccessCommand(program: Command): void {
     .action(async (options: { profile?: string; json?: boolean }) => {
       try {
         const client = await getClient(options.profile);
-        const catalog = await client.get<{
-          resources: string[];
-          levels: string[];
-        }>('/admin/access/catalog');
+        const raw = await client.get('/admin/access/catalog');
+        const catalog = normalizeAccessCatalog(raw);
 
         if (options.json) {
-          printJson(catalog);
+          printJson(raw);
           return;
         }
 
+        const label = (item: { key: string; description?: string | undefined }) =>
+          item.description ? `${item.key} — ${item.description}` : item.key;
+
         process.stdout.write(`${colors.bold('Admin Access Catalog')}\n\n`);
         process.stdout.write(`${colors.bold('Levels')} (ordered none < read < write < manage):\n`);
-        for (const l of catalog.levels || ACCESS_LEVELS) {
-          process.stdout.write(`  - ${l}\n`);
+        for (const l of catalog.levels) {
+          process.stdout.write(`  - ${label(l)}\n`);
         }
         process.stdout.write(`\n${colors.bold('Resources')}:\n`);
-        for (const r of catalog.resources || ACCESS_RESOURCES) {
-          process.stdout.write(`  - ${r}\n`);
+        for (const r of catalog.resources) {
+          process.stdout.write(`  - ${label(r)}\n`);
         }
       } catch (err) {
         exitWithError('access catalog', err);
@@ -79,6 +85,14 @@ export function registerAccessCommand(program: Command): void {
         const effective = await client.get<EffectiveAccessResponse>(
           `/admin/access/members/${encodeURIComponent(resolved.discordId)}/effective`,
         );
+        const roleNames = new Map<string, string>();
+        try {
+          for (const role of normalizeAccessRoles(await client.get('/admin/access/roles'))) {
+            roleNames.set(role.id, role.name);
+          }
+        } catch {
+          // Role names are cosmetic; the API's role id is still useful.
+        }
 
         if (options.json) {
           printJson(effective);
@@ -102,7 +116,9 @@ export function registerAccessCommand(program: Command): void {
             sourceText = 'root (MC_EXECUTIVE_ROLE_ID)';
           } else if (info.source) {
             if (info.source.type === 'role') {
-              sourceText = `from role "${info.source.roleName || info.source.roleId || 'role'}"`;
+              const roleId = info.source.roleId;
+              const roleName = info.source.roleName ?? (roleId ? roleNames.get(roleId) : undefined);
+              sourceText = `from role "${roleName || roleId || 'role'}"`;
             } else if (info.source.type === 'override') {
               sourceText = 'member override';
             }
@@ -143,20 +159,19 @@ export function registerAccessCommand(program: Command): void {
     .action(async (options: { profile?: string; json?: boolean }) => {
       try {
         const client = await getClient(options.profile);
-        const roles =
-          await client.get<{ roleId: string; roleName: string; grants: Record<string, string> }[]>(
-            '/admin/access/roles',
-          );
+        const raw = await client.get('/admin/access/roles');
 
         if (options.json) {
-          printJson(roles);
+          printJson(raw);
           return;
         }
 
+        const roles = normalizeAccessRoles(raw);
+
         printTable({
           columns: [
-            { header: 'ROLE', key: 'roleName', format: (v) => colors.bold(String(v)) },
-            { header: 'ROLE ID', key: 'roleId', format: (v) => colors.dim(String(v)) },
+            { header: 'ROLE', key: 'name', format: (v) => colors.bold(String(v)) },
+            { header: 'ROLE ID', key: 'id', format: (v) => colors.dim(String(v)) },
             {
               header: 'GRANTS',
               format: (_, r) => {
@@ -192,8 +207,27 @@ export function registerAccessCommand(program: Command): void {
       ) => {
         try {
           const client = await getClient(options.profile);
-          // Roles for access grants are always on main server
-          const resolvedRole = await resolveRole(client, '', roleArg);
+          // Access grants always target main-server roles. Use the access
+          // endpoint (id + name) rather than global role statistics, which
+          // cannot identify a role when several servers share a name.
+          const currentRoles = normalizeAccessRoles(await client.get('/admin/access/roles'));
+          const wanted = roleArg.startsWith('@') ? roleArg.slice(1) : roleArg;
+          const matches = currentRoles.filter(
+            (role) => role.id === wanted || role.name.toLowerCase() === wanted.toLowerCase(),
+          );
+          const resolvedRole = matches.find((role) => role.id === wanted) ?? matches[0];
+          if (!resolvedRole) {
+            throw new CliError(
+              `Role "${roleArg}" not found on the main server. Run \`mcid-cli access roles\` to list roles.`,
+              ExitCode.NotFound,
+            );
+          }
+          if (!wanted.match(/^\d+$/) && matches.length > 1) {
+            throw new CliError(
+              `Role name "${roleArg}" is ambiguous. Specify the role ID instead.`,
+              ExitCode.Usage,
+            );
+          }
 
           const newGrants: Record<string, string> = {};
           for (const pair of grantPairs) {
@@ -219,17 +253,10 @@ export function registerAccessCommand(program: Command): void {
             newGrants[res] = lvl;
           }
 
-          // Fetch current grants unless --replace is passed
+          // Merge with current grants unless --replace is passed
           let targetGrants: Record<string, string> = {};
-          if (!options.replace) {
-            const currentRoles =
-              await client.get<{ roleId: string; grants: Record<string, string> }[]>(
-                '/admin/access/roles',
-              );
-            const found = currentRoles.find((r) => r.roleId === resolvedRole.id);
-            if (found && found.grants) {
-              targetGrants = { ...found.grants };
-            }
+          if (!options.replace && Object.keys(resolvedRole.grants).length > 0) {
+            targetGrants = { ...resolvedRole.grants };
           }
           Object.assign(targetGrants, newGrants);
 
@@ -413,20 +440,14 @@ export function registerAccessCommand(program: Command): void {
     .action(async (options: { profile?: string; json?: boolean }) => {
       try {
         const client = await getClient(options.profile);
-        const overrides = await client.get<
-          {
-            memberId: string;
-            username: string;
-            resource: string;
-            level: string;
-            root?: boolean;
-          }[]
-        >('/admin/access/overrides');
+        const raw = await client.get('/admin/access/overrides');
 
         if (options.json) {
-          printJson(overrides);
+          printJson(raw);
           return;
         }
+
+        const overrides = normalizeAccessOverrides(raw);
 
         printTable({
           columns: [

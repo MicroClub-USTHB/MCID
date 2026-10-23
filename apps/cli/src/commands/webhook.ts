@@ -1,10 +1,10 @@
 import { createHmac } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
-import { validateSchema } from '@mcid/form-schema';
 import { Command } from 'commander';
 import { configPath, loadConfig, resolveProfileName } from '../config.js';
 import { defaultKeyProvider, decrypt, webhookSecretContext } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
+import { unwrapArray } from '../lib/api-normalize.js';
 import { ApiClient } from '../lib/client.js';
 import {
   formatAge,
@@ -45,7 +45,7 @@ export function registerWebhookCommand(program: Command): void {
     .command('create <schema-path>')
     .description('Create a webhook on MCID from a schema file and store its signing secret')
     .requiredOption('--name <name>', 'webhook display name')
-    .option('--project <projectId>', 'owning MCID project id (omit to pick interactively)')
+    .option('--project <project>', 'owning MCID project id or name (omit to pick interactively)')
     .requiredOption(
       '--roles <roleIds>',
       'comma-separated Discord role ids allowed to read submissions',
@@ -70,8 +70,9 @@ export function registerWebhookCommand(program: Command): void {
     .option('--active', 'mark the webhook active')
     .option('--inactive', 'mark the webhook inactive')
     .requiredOption('--profile <name>', 'profile to update on')
-    .action(async (id: string, options: WebhookUpdateOptions) => {
+    .action(async (idOrSlug: string, options: WebhookUpdateOptions) => {
       try {
+        const id = await resolveWebhookId(options.profile, idOrSlug);
         await webhookUpdate(id, options, defaultWebhookDeps());
       } catch (err) {
         exitWithError('webhook update', err);
@@ -98,8 +99,9 @@ export function registerWebhookCommand(program: Command): void {
     .option('--schema-only', 'print only the schema')
     .option('--json', 'emit machine-readable JSON')
     .option('--profile <name>', 'profile to use')
-    .action(async (id: string, options: WebhookGetOptions) => {
+    .action(async (idOrSlug: string, options: WebhookGetOptions) => {
       try {
+        const id = await resolveWebhookId(options.profile, idOrSlug);
         await webhookGet(id, options, defaultWebhookDeps());
       } catch (err) {
         exitWithError('webhook get', err);
@@ -112,8 +114,9 @@ export function registerWebhookCommand(program: Command): void {
     .description('Delete a webhook and all its submissions')
     .option('--yes', 'skip the confirmation prompt')
     .requiredOption('--profile <name>', 'profile to delete on')
-    .action(async (id: string, options: WebhookDeleteOptions) => {
+    .action(async (idOrSlug: string, options: WebhookDeleteOptions) => {
       try {
+        const id = await resolveWebhookId(options.profile, idOrSlug);
         await webhookDelete(id, options, defaultWebhookDeps());
       } catch (err) {
         exitWithError('webhook delete', err);
@@ -126,8 +129,9 @@ export function registerWebhookCommand(program: Command): void {
     .description('Replace the allowed-reader role list')
     .requiredOption('--roles <roleIds>', 'comma-separated Discord role ids')
     .requiredOption('--profile <name>', 'profile to update on')
-    .action(async (id: string, options: WebhookRolesSetOptions) => {
+    .action(async (idOrSlug: string, options: WebhookRolesSetOptions) => {
       try {
+        const id = await resolveWebhookId(options.profile, idOrSlug);
         await webhookRolesSet(id, options, defaultWebhookDeps());
       } catch (err) {
         exitWithError('webhook roles set', err);
@@ -140,8 +144,9 @@ export function registerWebhookCommand(program: Command): void {
     .option('--reveal', 'print the secret in plain text')
     .option('--yes', 'skip the confirmation prompt')
     .requiredOption('--profile <name>', 'profile to rotate on')
-    .action(async (id: string, options: WebhookRotateSecretOptions) => {
+    .action(async (idOrSlug: string, options: WebhookRotateSecretOptions) => {
       try {
+        const id = await resolveWebhookId(options.profile, idOrSlug);
         await webhookRotateSecret(id, options, defaultWebhookDeps());
       } catch (err) {
         exitWithError('webhook rotate-secret', err);
@@ -173,6 +178,8 @@ export function registerWebhookCommand(program: Command): void {
     .option('--data <file>', 'Payload JSON file or "-" for stdin')
     .option('--example', 'Generate a valid sample payload from the webhook schema')
     .option('--print-curl', 'Print equivalent signed curl command without sending')
+    .option('--api-key <key>', 'project API key for the ingest endpoint (or MCID_API_KEY)')
+    .option('--origin <origin>', "Origin header (defaults to the webhook's first accepted origin)")
     .option('--profile <name>', 'Profile to use')
     .action(
       async (
@@ -181,6 +188,8 @@ export function registerWebhookCommand(program: Command): void {
           data?: string;
           example?: boolean;
           printCurl?: boolean;
+          apiKey?: string;
+          origin?: string;
           profile?: string;
         },
       ) => {
@@ -191,6 +200,7 @@ export function registerWebhookCommand(program: Command): void {
             id: string;
             schema: Record<string, unknown>;
             requireSignature?: boolean;
+            acceptedOrigins?: string[];
           }>(`/admin/inbound-webhooks/${resolved.id}`);
 
           // Retrieve stored signing secret
@@ -212,21 +222,10 @@ export function registerWebhookCommand(program: Command): void {
             );
           }
 
-          // Validate JSON
-          let parsed: unknown;
           try {
-            parsed = JSON.parse(rawPayload);
+            JSON.parse(rawPayload);
           } catch {
             throw new CliError('Payload is not valid JSON', ExitCode.PrecheckFailed);
-          }
-
-          // Local Layer 1 validation against webhook schema
-          const schemaCheck = validateSchema(parsed);
-          if (!schemaCheck.ok && schemaCheck.errors.length > 0) {
-            process.stderr.write(`${colors.red('Local Schema Validation Errors:')}\n`);
-            for (const e of schemaCheck.errors) {
-              process.stderr.write(`  ${colors.red(e.path)}  ${e.code}  ${e.message}\n`);
-            }
           }
 
           // Sign payload
@@ -236,15 +235,26 @@ export function registerWebhookCommand(program: Command): void {
             .digest('hex');
           const signatureHeader = `t=${timestamp},v1=${sigHex}`;
           const submitUrl = `${client.origin}/api/inbound-webhooks/${resolved.id}/submit`;
+          const apiKey = options.apiKey ?? process.env.MCID_API_KEY;
+          const origin = options.origin ?? webhookDetail.acceptedOrigins?.[0];
 
           if (options.printCurl) {
             process.stdout.write(
               `curl -X POST "${submitUrl}" \\\n` +
                 `  -H "Content-Type: application/json" \\\n` +
+                `  -H "Authorization: Bearer ${apiKey ?? '<MCID_API_KEY>'}" \\\n` +
+                (origin ? `  -H "Origin: ${origin}" \\\n` : '') +
                 `  -H "X-MCID-Signature: ${signatureHeader}" \\\n` +
                 `  -d '${rawPayload.replace(/'/g, "'\\''")}'\n`,
             );
             return;
+          }
+
+          if (!apiKey) {
+            throw new CliError(
+              'A project API key is required to submit: pass --api-key <key> or set MCID_API_KEY',
+              ExitCode.Usage,
+            );
           }
 
           // Send submission
@@ -252,6 +262,8 @@ export function registerWebhookCommand(program: Command): void {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              Authorization: `Bearer ${apiKey}`,
+              ...(origin ? { Origin: origin } : {}),
               'X-MCID-Signature': signatureHeader,
             },
             body: rawPayload,
@@ -308,14 +320,15 @@ export function registerWebhookCommand(program: Command): void {
           const resolved = await resolveWebhook(client, webhookArg);
 
           const params = new URLSearchParams({ limit: options.limit });
-          if (options.since) params.set('since', options.since);
-          if (options.until) params.set('until', options.until);
+          if (options.since) params.set('dateFrom', options.since);
+          if (options.until) params.set('dateTo', options.until);
 
-          const subs = await client.get<Record<string, unknown>[]>(
+          const raw = await client.get(
             `/inbound-webhooks/${resolved.id}/submissions?${params.toString()}`,
           );
-
-          const flattened = Array.isArray(subs) ? subs.map(flattenSubmission) : [];
+          const flattened = unwrapArray<Record<string, unknown>>(raw, ['submissions', 'data']).map(
+            flattenSubmission,
+          );
 
           const outFormat = options.json ? 'json' : options.output || 'table';
           if (outFormat === 'json') {
@@ -413,11 +426,24 @@ export function registerWebhookCommand(program: Command): void {
         try {
           const client = await getClient(options.profile);
           const resolved = await resolveWebhook(client, webhookArg);
-          const subs = await client.get<Record<string, unknown>[]>(
-            `/inbound-webhooks/${resolved.id}/submissions?limit=1000`,
-          );
+          const pageSize = 200;
+          const rows: Record<string, unknown>[] = [];
+          for (let offset = 0; offset < pageSize * 100; offset += pageSize) {
+            const raw = await client.get(
+              `/inbound-webhooks/${resolved.id}/submissions?limit=${pageSize}&offset=${offset}`,
+            );
+            const page = unwrapArray<Record<string, unknown>>(raw, ['submissions', 'data']);
+            rows.push(...page);
+            const total =
+              raw && typeof raw === 'object' && 'total' in raw
+                ? Number((raw as { total?: number }).total)
+                : undefined;
+            if (page.length < pageSize || (total !== undefined && rows.length >= total)) {
+              break;
+            }
+          }
 
-          const flattened = Array.isArray(subs) ? subs.map(flattenSubmission) : [];
+          const flattened = rows.map(flattenSubmission);
           const format = options.output || 'csv';
           const content = format === 'json' ? JSON.stringify(flattened, null, 2) : toCsv(flattened);
           const target =
@@ -453,20 +479,19 @@ export function registerWebhookCommand(program: Command): void {
 
         // Initial fetch to populate seen set
         const initial = await client
-          .get<Record<string, unknown>[]>(`/inbound-webhooks/${resolved.id}/submissions?limit=20`)
+          .get(`/inbound-webhooks/${resolved.id}/submissions?limit=20`)
           .catch(() => []);
-        if (Array.isArray(initial)) {
-          for (const s of initial) {
-            if (typeof s['id'] === 'string') seenIds.add(s['id']);
-          }
+        for (const s of unwrapArray<Record<string, unknown>>(initial, ['submissions', 'data'])) {
+          if (typeof s['id'] === 'string') seenIds.add(s['id']);
         }
 
         const interval = setInterval(async () => {
           try {
-            const fresh = await client.get<Record<string, unknown>[]>(
-              `/inbound-webhooks/${resolved.id}/submissions?limit=20`,
+            const fresh = unwrapArray<Record<string, unknown>>(
+              await client.get(`/inbound-webhooks/${resolved.id}/submissions?limit=20`),
+              ['submissions', 'data'],
             );
-            if (Array.isArray(fresh)) {
+            {
               for (const row of fresh) {
                 const id = String(row['id'] || '');
                 if (id && !seenIds.has(id)) {
@@ -598,6 +623,14 @@ export function registerWebhookCommand(program: Command): void {
 
 function collect(value: string, previous: string[]): string[] {
   return [...previous, value];
+}
+
+async function resolveWebhookId(
+  profileFlag: string | undefined,
+  idOrSlug: string,
+): Promise<string> {
+  const client = await getClient(profileFlag);
+  return (await resolveWebhook(client, idOrSlug)).id;
 }
 
 async function getClient(profileFlag?: string): Promise<ApiClient> {

@@ -151,7 +151,10 @@ export async function runDoctor(profileFlag?: string | undefined): Promise<boole
         const healthUrl = `${session.baseUrl}/api/admin/monitoring/health`;
         const res = await fetch(healthUrl, {
           signal: AbortSignal.timeout(5000),
-          headers: { Accept: 'application/json' },
+          headers: {
+            Accept: 'application/json',
+            Authorization: `Bearer ${session.token}`,
+          },
         });
 
         if (res.ok) {

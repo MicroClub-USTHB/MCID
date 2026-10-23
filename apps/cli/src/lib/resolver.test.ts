@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ApiClient } from './client.js';
-import { resolveProject, resolveServer } from './resolver.js';
+import { resolveProject, resolveRole, resolveServer } from './resolver.js';
 
 describe('resolver', () => {
   it('resolves project by exact ID', async () => {
@@ -58,5 +58,16 @@ describe('resolver', () => {
     const res = await resolveServer(fakeClient);
     expect(res.id).toBe('s2');
     expect(res.name).toBe('Micro Club Official');
+  });
+
+  it('reports a missing role instead of crashing on id-less global statistics', async () => {
+    const fakeClient = {
+      get: vi.fn().mockResolvedValue({
+        scope: 'global',
+        roles: [{ roleName: 'Lead', memberCount: 1 }],
+      }),
+    } as unknown as ApiClient;
+
+    await expect(resolveRole(fakeClient, '', 'Lead')).rejects.toThrow('not found on server');
   });
 });
