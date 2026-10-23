@@ -1,11 +1,12 @@
 import { CliError, ExitCode } from '../errors.js';
-import { promptInput } from './prompts.js';
+import { promptConfirm, promptInput } from './prompts.js';
 import { colors } from './tui.js';
 
 export interface ConfirmDestructiveOptions {
   resourceType: string;
   resourceName: string;
   yesFlag?: boolean | undefined;
+  action?: string | undefined;
 }
 
 export async function confirmDestructive(options: ConfirmDestructiveOptions): Promise<void> {
@@ -20,8 +21,9 @@ export async function confirmDestructive(options: ConfirmDestructiveOptions): Pr
     );
   }
 
+  const action = options.action ?? 'permanently delete';
   process.stdout.write(
-    `${colors.yellow('!')} This action cannot be undone. This will permanently delete ${resourceType} "${colors.bold(resourceName)}".\n`,
+    `${colors.yellow('!')} This action cannot be undone. This will ${action} ${resourceType} "${colors.bold(resourceName)}".\n`,
   );
 
   const answer = await promptInput({
@@ -31,4 +33,16 @@ export async function confirmDestructive(options: ConfirmDestructiveOptions): Pr
   if (answer !== resourceName) {
     throw new CliError('Confirmation text did not match; action aborted', ExitCode.Ok);
   }
+}
+
+/** Confirm a state-changing action; unattended callers must opt in explicitly. */
+export async function confirmAction(message: string, yesFlag?: boolean): Promise<boolean> {
+  if (yesFlag) return true;
+  if (!process.stdin.isTTY) {
+    throw new CliError(
+      `This command requires confirmation on a non-interactive terminal\n  hint: pass --yes to confirm`,
+      ExitCode.Usage,
+    );
+  }
+  return promptConfirm({ message });
 }

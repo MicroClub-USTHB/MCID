@@ -12,7 +12,7 @@ import {
   normalizeUsage,
 } from '../lib/api-normalize.js';
 import { ApiClient } from '../lib/client.js';
-import { confirmDestructive } from '../lib/confirm.js';
+import { confirmAction, confirmDestructive } from '../lib/confirm.js';
 import {
   formatAge,
   printJson,
@@ -21,7 +21,6 @@ import {
   printTable,
   toCsv,
 } from '../lib/output.js';
-import { promptConfirm } from '../lib/prompts.js';
 import { resolveMember, resolveProject, resolveServer } from '../lib/resolver.js';
 import { colors, formatSparkline } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
@@ -244,6 +243,7 @@ export function registerOpsCommand(program: Command): void {
     .description('List recent audit log entries')
     .option('--actor <member>', 'Filter by admin actor')
     .option('--action <action>', 'Filter by action name')
+    .option('--resource <resource>', 'Filter by resource/entity type')
     .option('--since <date>', 'Start date (ISO or 24h, 7d)')
     .option('--until <date>', 'End date')
     .option('--follow', 'Poll for new entries continuously')
@@ -253,6 +253,7 @@ export function registerOpsCommand(program: Command): void {
       async (options: {
         actor?: string;
         action?: string;
+        resource?: string;
         since?: string;
         until?: string;
         follow?: boolean;
@@ -270,6 +271,7 @@ export function registerOpsCommand(program: Command): void {
 
           const buildParams = () => {
             const params = new URLSearchParams();
+            params.set('limit', '500');
             if (actorId) params.set('actorId', actorId);
             if (options.action) params.set('actionType', options.action);
             if (options.since) params.set('dateFrom', options.since);
@@ -278,7 +280,14 @@ export function registerOpsCommand(program: Command): void {
           };
 
           const fetchRaw = async () => client.get(`/admin/audit/logs?${buildParams().toString()}`);
-          const fetchLogs = async () => normalizeAuditLogs(await fetchRaw());
+          const fetchLogs = async () => {
+            const rows = normalizeAuditLogs(await fetchRaw());
+            return options.resource
+              ? rows.filter(
+                  (row) => row.entityType.toLowerCase() === options.resource!.toLowerCase(),
+                )
+              : rows;
+          };
 
           const logs = await fetchLogs();
 
@@ -616,12 +625,24 @@ export function registerOpsCommand(program: Command): void {
       try {
         const client = await getClient(options.profile);
         const patchObj: Record<string, unknown> = {};
+        const allowedPaths = new Set([
+          'cache.permissionTtlMs',
+          'cache.statsTtlMs',
+          'rateLimit.maxWebhooksPerProject',
+          'preferences.memberActivityThresholdDays',
+        ]);
 
         for (const pair of pairs) {
           const [k, v] = pair.split('=');
           if (!k || v === undefined) {
             throw new CliError(
               `Invalid setting format "${pair}". Expected <key>=<value>`,
+              ExitCode.Usage,
+            );
+          }
+          if (!allowedPaths.has(k)) {
+            throw new CliError(
+              `Setting "${k}" is not editable. Editable settings: ${[...allowedPaths].join(', ')}`,
               ExitCode.Usage,
             );
           }
@@ -635,26 +656,31 @@ export function registerOpsCommand(program: Command): void {
                 : v;
 
           // Nested key support, e.g. cache.permissionTtlMs
-          if (k.includes('.')) {
-            const [grp = '', sub = ''] = k.split('.');
-            if (!patchObj[grp]) patchObj[grp] = {};
-            (patchObj[grp] as Record<string, unknown>)[sub] = parsedVal;
-          } else {
-            patchObj[k] = parsedVal;
-          }
+          const [grp = '', sub = ''] = k.split('.');
+          if (!patchObj[grp]) patchObj[grp] = {};
+          (patchObj[grp] as Record<string, unknown>)[sub] = parsedVal;
         }
 
         process.stdout.write(`${colors.bold('Applying settings updates:')}\n`);
+        const current = await client.get<Record<string, unknown>>('/admin/settings');
+        const readValue = (path: string): unknown =>
+          path.split('.').reduce<unknown>((value, part) => {
+            if (!value || typeof value !== 'object') return undefined;
+            const node = (value as Record<string, unknown>)[part];
+            return node && typeof node === 'object' && 'value' in node
+              ? (node as { value: unknown }).value
+              : node;
+          }, current);
         for (const [k, v] of Object.entries(patchObj)) {
-          process.stdout.write(`  ${colors.cyan('●')} ${k}: ${JSON.stringify(v)}\n`);
+          for (const [field, next] of Object.entries(v as Record<string, unknown>)) {
+            const path = `${k}.${field}`;
+            process.stdout.write(
+              `  ${colors.cyan('●')} ${path}: ${JSON.stringify(readValue(path))} → ${JSON.stringify(next)}\n`,
+            );
+          }
         }
 
-        if (!options.yes && process.stdin.isTTY) {
-          const ok = await promptConfirm({
-            message: 'Apply these setting changes?',
-          });
-          if (!ok) return;
-        }
+        if (!(await confirmAction('Apply these setting changes?', options.yes))) return;
 
         await client.patch('/admin/settings', patchObj);
         printSuccess('Settings updated successfully');
@@ -671,12 +697,7 @@ export function registerOpsCommand(program: Command): void {
     .action(async (keys: string[], options: { yes?: boolean; profile?: string }) => {
       try {
         const client = await getClient(options.profile);
-        if (!options.yes && process.stdin.isTTY) {
-          const ok = await promptConfirm({
-            message: 'Reset settings to environment defaults?',
-          });
-          if (!ok) return;
-        }
+        if (!(await confirmAction('Reset settings to environment defaults?', options.yes))) return;
 
         await client.post('/admin/settings/reset', { keys: keys.length > 0 ? keys : undefined });
         printSuccess('Settings reset to defaults');

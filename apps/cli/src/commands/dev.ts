@@ -1,21 +1,22 @@
 import { createServer } from 'node:http';
+import { randomBytes } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { Command } from 'commander';
 import { openBrowser } from '../browser.js';
-import { configPath, loadConfig, resolveProfileName } from '../config.js';
+import { configPath, loadConfig, normalizeBaseUrl, resolveProfileName } from '../config.js';
 import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
 import { ApiClient } from '../lib/client.js';
 import { formatDate, printJson, printKeyValue, printSuccess } from '../lib/output.js';
 import { resolveMember, resolveProject, resolveServer } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
-import { createPkcePair } from '../pkce.js';
 import { resolveSession } from '../session.js';
 
 export interface ProjectKeyLookup {
   apiKey: string;
   source: string;
   projectId?: string;
+  serverId?: string;
   baseUrl?: string;
 }
 
@@ -28,7 +29,8 @@ export function registerDevCommand(program: Command): void {
   devCmd
     .command('sso')
     .description('Test SSO authorization flow end to end with a local callback listener')
-    .option('--project <project>', 'Target project (reads key from flags/env/file if omitted)')
+    .requiredOption('--project <project>', 'Target project name or ID')
+    .option('--server <server>', 'Discord server to authenticate against')
     .option('--port <port>', 'Local callback listener port (default 3000)', '3000')
     .option('--silent', 'Test silent login (prompt=none)')
     .option('--reveal', 'Print the full session token')
@@ -38,6 +40,7 @@ export function registerDevCommand(program: Command): void {
     .action(
       async (options: {
         project?: string;
+        server?: string;
         port: string;
         silent?: boolean;
         reveal?: boolean;
@@ -50,16 +53,48 @@ export function registerDevCommand(program: Command): void {
           const redirectUri = `http://localhost:${port}/callback`;
 
           // 1. Resolve project key and base URL
-          const keyInfo = await resolveProjectKey(options.apiKey, options.profile, options.project);
-          const baseUrl = keyInfo.baseUrl || 'http://localhost:3000';
+          const keyInfo = await resolveProjectKey(options.apiKey, options.profile);
+          if (!options.project) {
+            throw new CliError('dev sso requires --project <project>', ExitCode.Usage);
+          }
+          const adminClient = await getAdminClient(options.profile);
+          const baseUrl = keyInfo.baseUrl || adminClient.origin;
+          const project = await resolveProject(adminClient, options.project);
+          const projectInfo = await adminClient.get<{ redirectUri?: string | null }>(
+            `/admin/projects/${project.id}`,
+          );
+          const allowedRedirectUris = (projectInfo.redirectUri ?? '')
+            .split(',')
+            .map((uri) => uri.trim())
+            .filter(Boolean);
+          if (!allowedRedirectUris.includes(redirectUri)) {
+            throw new CliError(
+              `Redirect URI "${redirectUri}" is not registered for project "${project.name}"\n  hint: run \`mcid-cli project redirect-uri add ${project.id} ${redirectUri}\``,
+              ExitCode.Rejected,
+            );
+          }
+          const grants = await adminClient.get<{ serverId: string }[]>(
+            `/admin/projects/${project.id}/servers`,
+          );
+          let serverId = options.server
+            ? (await resolveServer(adminClient, options.server)).id
+            : (await resolveServer(adminClient)).id;
+          if (!grants.some((grant) => grant.serverId === serverId)) {
+            const firstGrant = grants[0];
+            if (options.server || !firstGrant) {
+              throw new CliError(
+                `Project "${project.name}" has no access to the selected server. Grant project server access first.`,
+                ExitCode.Rejected,
+              );
+            }
+            serverId = firstGrant.serverId;
+          }
 
           process.stdout.write(
             `${colors.bold('Testing MCID Project SSO')} [key source: ${colors.cyan(keyInfo.source)}]\n\n`,
           );
 
-          // 2. PKCE setup
-          const pkce = createPkcePair();
-          const state = Math.random().toString(36).slice(2);
+          const state = randomBytes(24).toString('base64url');
 
           // 3. Start local callback listener
           let resolveCallback: (code: string) => void;
@@ -113,9 +148,9 @@ export function registerDevCommand(program: Command): void {
           });
 
           const authParams = new URLSearchParams({
+            client_id: project.id,
             redirect_uri: redirectUri,
-            code_challenge: pkce.challenge,
-            code_challenge_method: 'S256',
+            server_id: serverId,
             state,
             ...(options.silent ? { prompt: 'none' } : {}),
           });
@@ -151,8 +186,8 @@ export function registerDevCommand(program: Command): void {
               'X-API-Key': keyInfo.apiKey,
             },
             body: JSON.stringify({
+              clientId: project.id,
               code,
-              codeVerifier: pkce.verifier,
               redirectUri,
             }),
           });
@@ -227,7 +262,7 @@ export function registerDevCommand(program: Command): void {
       async (token: string, options: { apiKey?: string; profile?: string; json?: boolean }) => {
         try {
           const keyInfo = await resolveProjectKey(options.apiKey, options.profile);
-          const baseUrl = keyInfo.baseUrl || 'http://localhost:3000';
+          const baseUrl = keyInfo.baseUrl || (await resolveApiBaseUrl(options.profile));
 
           const res = await fetch(`${baseUrl}/api/auth/validate`, {
             method: 'POST',
@@ -264,7 +299,7 @@ export function registerDevCommand(program: Command): void {
     .command('token-refresh <refreshToken>')
     .alias('token refresh')
     .description('Refresh an active session using refresh token')
-    .option('--token <sessionToken>', 'Active session token')
+    .requiredOption('--token <sessionToken>', 'Active session token')
     .option('--profile <name>', 'Profile to use')
     .option('--reveal', 'Show full token in output')
     .option('--json', 'Output as JSON')
@@ -276,12 +311,13 @@ export function registerDevCommand(program: Command): void {
         try {
           const cfg = await loadConfig(configPath());
           const profile = resolveProfileName(cfg, options.profile);
-          const baseUrl = cfg.profiles[profile]?.baseUrl || 'http://localhost:3000';
-
-          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-          if (options.token) {
-            headers.Authorization = `Bearer ${options.token}`;
-          }
+          const baseUrl = normalizeBaseUrl(
+            process.env.MCID_API_URL || cfg.profiles[profile]?.baseUrl || 'http://localhost:3000',
+          );
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${options.token}`,
+          };
 
           const res = await fetch(`${baseUrl}/api/auth/token/refresh`, {
             method: 'POST',
@@ -323,11 +359,19 @@ export function registerDevCommand(program: Command): void {
       ) => {
         try {
           const keyInfo = await resolveProjectKey(options.apiKey, options.profile);
-          const baseUrl = keyInfo.baseUrl || 'http://localhost:3000';
+          const baseUrl = keyInfo.baseUrl || (await resolveApiBaseUrl(options.profile));
 
-          const client = await getAdminClient(options.profile);
-          const resolvedServer = await resolveServer(client, options.server);
-          const resolvedMember = await resolveMember(client, memberArg);
+          const snowflake = /^\d{17,20}$/;
+          let resolvedServer: { id: string; name: string };
+          let resolvedMember: { discordId: string; username: string };
+          if (options.server && snowflake.test(options.server) && snowflake.test(memberArg)) {
+            resolvedServer = { id: options.server, name: options.server };
+            resolvedMember = { discordId: memberArg, username: memberArg };
+          } else {
+            const client = await getAdminClient(options.profile);
+            resolvedServer = await resolveServer(client, options.server);
+            resolvedMember = await resolveMember(client, memberArg);
+          }
 
           let anyDenied = false;
           const results: Record<string, boolean> = {};
@@ -365,6 +409,7 @@ export function registerDevCommand(program: Command): void {
                 discordId: resolvedMember.discordId,
                 serverId: resolvedServer.id,
                 permissions: permArgs,
+                mode: 'ALL',
               }),
             });
 
@@ -375,16 +420,14 @@ export function registerDevCommand(program: Command): void {
               );
             }
 
-            const batchData = (await res.json()) as {
-              allowed?: boolean;
-              results?: Record<string, boolean>;
-            };
-            const rawResults = batchData.results || {};
-            for (const p of permArgs) {
-              const isAllowed = Boolean(rawResults[p]);
-              results[p] = isAllowed;
-              if (!isAllowed) anyDenied = true;
+            const batchData = (await res.json()) as { allowed: boolean; missing?: string[] };
+            const missing = new Set(
+              (batchData.missing ?? []).map((permission) => permission.toUpperCase()),
+            );
+            for (const permission of permArgs) {
+              results[permission] = !missing.has(permission.toUpperCase());
             }
+            anyDenied = !batchData.allowed;
           }
 
           if (options.json) {
@@ -426,7 +469,7 @@ export function registerDevCommand(program: Command): void {
       async (options: { project?: string; file?: string; apiKey?: string; profile?: string }) => {
         try {
           const keyInfo = await resolveProjectKey(options.apiKey, options.profile, options.project);
-          const baseUrl = keyInfo.baseUrl || 'http://localhost:3000';
+          const baseUrl = keyInfo.baseUrl || (await resolveApiBaseUrl(options.profile));
 
           const envBlock = [
             `MCID_API_URL=${baseUrl}/api`,
@@ -452,14 +495,15 @@ export async function resolveProjectKey(
   profileFlag?: string,
   projectArg?: string,
 ): Promise<ProjectKeyLookup> {
+  const baseUrl = await resolveApiBaseUrl(profileFlag);
   // 1. --api-key flag
   if (flagKey) {
-    return { apiKey: flagKey, source: '--api-key flag' };
+    return { apiKey: flagKey, source: '--api-key flag', baseUrl };
   }
 
   // 2. MCID_API_KEY env var
   if (process.env.MCID_API_KEY) {
-    return { apiKey: process.env.MCID_API_KEY, source: 'MCID_API_KEY env' };
+    return { apiKey: process.env.MCID_API_KEY, source: 'MCID_API_KEY env', baseUrl };
   }
 
   // 3. Local .env file
@@ -467,36 +511,25 @@ export async function resolveProjectKey(
     const envContent = await readFile('.env', 'utf8');
     const match = envContent.match(/^MCID_API_KEY=(.+)$/m);
     if (match && match[1]) {
-      return { apiKey: match[1].trim(), source: 'local .env file' };
+      return { apiKey: match[1].trim(), source: 'local .env file', baseUrl };
     }
   } catch {
     // no .env file
   }
 
-  // 4. Fetch project key if projectArg passed and session is available
-  if (projectArg) {
-    try {
-      const client = await getAdminClient(profileFlag);
-      const proj = await resolveProject(client, projectArg);
-      const keyInfo = await client.get<{ apiKey?: string; apiKeyPrefix?: string }>(
-        `/admin/projects/${proj.id}/api-key`,
-      );
-      if (keyInfo.apiKey) {
-        return {
-          apiKey: keyInfo.apiKey,
-          source: `project "${proj.name}"`,
-          baseUrl: client.origin,
-          projectId: proj.id,
-        };
-      }
-    } catch {
-      // ignore
-    }
-  }
-
   throw new CliError(
-    'No project API key found\n  hint: specify --api-key <key>, set MCID_API_KEY, or place it in .env',
+    projectArg
+      ? `No recoverable API key is available for project "${projectArg}"\n  hint: pass --api-key <key>, set MCID_API_KEY, or place it in .env`
+      : 'No project API key found\n  hint: specify --api-key <key>, set MCID_API_KEY, or place it in .env',
     ExitCode.Usage,
+  );
+}
+
+async function resolveApiBaseUrl(profileFlag?: string): Promise<string> {
+  const config = await loadConfig(configPath());
+  const profileName = resolveProfileName(config, profileFlag);
+  return normalizeBaseUrl(
+    process.env.MCID_API_URL || config.profiles[profileName]?.baseUrl || 'http://localhost:3000',
   );
 }
 

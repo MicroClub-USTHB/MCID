@@ -3,6 +3,7 @@ import { ACCESS_LEVELS, isAccessLevel, isAccessResource } from '@mcid/contracts'
 import { configPath, loadConfig, resolveProfileName } from '../config.js';
 import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
+import { confirmAction } from '../lib/confirm.js';
 import {
   normalizeAccessCatalog,
   normalizeAccessOverrides,
@@ -10,7 +11,6 @@ import {
 } from '../lib/api-normalize.js';
 import { ApiClient } from '../lib/client.js';
 import { printJson, printKeyValue, printSuccess, printTable } from '../lib/output.js';
-import { promptConfirm } from '../lib/prompts.js';
 import { resolveMember } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
@@ -268,11 +268,13 @@ export function registerAccessCommand(program: Command): void {
             process.stdout.write(`  ${colors.cyan('●')} ${r}: ${l}\n`);
           }
 
-          if (!options.yes && process.stdin.isTTY) {
-            const ok = await promptConfirm({
-              message: `Apply grant changes to role "${resolvedRole.name}"?`,
-            });
-            if (!ok) return;
+          if (
+            !(await confirmAction(
+              `Apply grant changes to role "${resolvedRole.name}"?`,
+              options.yes,
+            ))
+          ) {
+            return;
           }
 
           await client.put(`/admin/access/roles/${encodeURIComponent(resolvedRole.id)}`, {
@@ -366,11 +368,9 @@ export function registerAccessCommand(program: Command): void {
 
           let targetOverrides: Record<string, string> = {};
           if (!options.replace) {
-            const current = await client
-              .get<{ overrides: Record<string, string> }>(
-                `/admin/access/members/${encodeURIComponent(resolved.discordId)}`,
-              )
-              .catch(() => ({ overrides: {} }));
+            const current = await client.get<{ overrides: Record<string, string> }>(
+              `/admin/access/members/${encodeURIComponent(resolved.discordId)}`,
+            );
             targetOverrides = { ...(current.overrides || {}) };
           }
           Object.assign(targetOverrides, newOverrides);
@@ -382,11 +382,10 @@ export function registerAccessCommand(program: Command): void {
             process.stdout.write(`  ${colors.cyan('●')} ${r}: ${l}\n`);
           }
 
-          if (!options.yes && process.stdin.isTTY) {
-            const ok = await promptConfirm({
-              message: `Apply overrides to member @${resolved.username}?`,
-            });
-            if (!ok) return;
+          if (
+            !(await confirmAction(`Apply overrides to member @${resolved.username}?`, options.yes))
+          ) {
+            return;
           }
 
           await client.put(`/admin/access/members/${encodeURIComponent(resolved.discordId)}`, {
@@ -413,11 +412,13 @@ export function registerAccessCommand(program: Command): void {
           const client = await getClient(options.profile);
           const resolved = await resolveMember(client, memberArg);
 
-          if (!options.yes && process.stdin.isTTY) {
-            const ok = await promptConfirm({
-              message: `Remove override for "${resource}" from member @${resolved.username}?`,
-            });
-            if (!ok) return;
+          if (
+            !(await confirmAction(
+              `Remove override for "${resource}" from member @${resolved.username}?`,
+              options.yes,
+            ))
+          ) {
+            return;
           }
 
           await client.delete(

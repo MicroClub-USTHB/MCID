@@ -244,8 +244,11 @@ export function registerWebhookCommand(program: Command): void {
                 `  -H "Content-Type: application/json" \\\n` +
                 `  -H "Authorization: Bearer ${apiKey ?? '<MCID_API_KEY>'}" \\\n` +
                 (origin ? `  -H "Origin: ${origin}" \\\n` : '') +
-                `  -H "X-MCID-Signature: ${signatureHeader}" \\\n` +
+                '  -H "X-MCID-Signature: t=<UNIX_TIMESTAMP>,v1=<HMAC_SHA256>" \\\n' +
                 `  -d '${rawPayload.replace(/'/g, "'\\''")}'\n`,
+            );
+            process.stdout.write(
+              `${colors.dim('# Generate a fresh HMAC over <timestamp>.<exact raw body> with the locally stored secret; signatures expire after five minutes and can only be used once.')}\n`,
             );
             return;
           }

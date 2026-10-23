@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { configPath, loadConfig, resolveProfileName } from '../config.js';
 import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
+import { confirmAction } from '../lib/confirm.js';
 import { normalizeRoleStats } from '../lib/api-normalize.js';
 import { ApiClient } from '../lib/client.js';
 import {
@@ -12,7 +13,6 @@ import {
   printTable,
   toCsv,
 } from '../lib/output.js';
-import { promptConfirm } from '../lib/prompts.js';
 import { resolveRole, resolveServer } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
@@ -198,7 +198,6 @@ export function registerRoleCommand(program: Command): void {
           const resolvedServer = await resolveServer(client, options.server);
           const resolvedRole = await resolveRole(client, resolvedServer.id, roleArg);
 
-          // Parse permission IDs (numbers)
           const permissionIds = permArgs.map((p) => {
             const n = Number(p);
             if (isNaN(n))
@@ -228,14 +227,14 @@ export function registerRoleCommand(program: Command): void {
           }
 
           // 2. Confirmation
-          if (!options.yes && process.stdin.isTTY) {
-            const ok = await promptConfirm({
-              message: `Apply ${permissionIds.length} permission(s) to role "${resolvedRole.name}"?`,
-            });
-            if (!ok) {
-              process.stdout.write('Cancelled.\n');
-              return;
-            }
+          if (
+            !(await confirmAction(
+              `Apply ${permissionIds.length} permission(s) to role "${resolvedRole.name}"?`,
+              options.yes,
+            ))
+          ) {
+            process.stdout.write('Cancelled.\n');
+            return;
           }
 
           // 3. Apply
@@ -302,11 +301,13 @@ export function registerRoleCommand(program: Command): void {
           }
 
           // 2. Confirmation
-          if (!options.yes && process.stdin.isTTY) {
-            const ok = await promptConfirm({
-              message: `Remove ${permissionIds.length} permission(s) from role "${resolvedRole.name}"?`,
-            });
-            if (!ok) return;
+          if (
+            !(await confirmAction(
+              `Remove ${permissionIds.length} permission(s) from role "${resolvedRole.name}"?`,
+              options.yes,
+            ))
+          ) {
+            return;
           }
 
           // 3. Apply each removal
