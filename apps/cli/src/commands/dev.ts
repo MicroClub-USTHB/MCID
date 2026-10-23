@@ -12,7 +12,7 @@ import { colors } from '../lib/tui.js';
 import { createPkcePair } from '../pkce.js';
 import { resolveSession } from '../session.js';
 
-interface ProjectKeyLookup {
+export interface ProjectKeyLookup {
   apiKey: string;
   source: string;
   projectId?: string;
@@ -447,7 +447,7 @@ export function registerDevCommand(program: Command): void {
     );
 }
 
-async function resolveProjectKey(
+export async function resolveProjectKey(
   flagKey?: string,
   profileFlag?: string,
   projectArg?: string,

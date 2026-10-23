@@ -20,9 +20,11 @@ export interface RoleEntity {
 
 export interface MemberEntity {
   id?: string | undefined;
+  memberId?: string | undefined;
   discordId?: string | undefined;
   username: string;
   displayName?: string | null | undefined;
+  globalName?: string | null | undefined;
 }
 
 export interface WebhookEntity {
@@ -126,12 +128,22 @@ export async function resolveRole(
   idOrName: string,
 ): Promise<RoleEntity> {
   // Use stats/roles which lists all roles on the server with names and counts
-  const roles = await client.get<RoleEntity[]>(
-    `/admin/stats/roles?serverId=${encodeURIComponent(serverId)}`,
-    {
-      resource: 'role',
-    },
-  );
+  const response = await client.get<
+    RoleEntity[] | { roles?: { roleId?: string; roleName?: string; id?: string; name?: string }[] }
+  >(`/admin/stats/roles?serverId=${encodeURIComponent(serverId)}`, {
+    resource: 'role',
+  });
+  // Global role statistics omit `roleId`, so never assume the fields exist.
+  const rawRoles = Array.isArray(response) ? response : (response.roles ?? []);
+  const roles: RoleEntity[] = rawRoles
+    .map((role) => {
+      const r = role as { roleId?: string; roleName?: string; id?: string; name?: string };
+      return {
+        id: String(r.roleId ?? r.id ?? ''),
+        name: String(r.roleName ?? r.name ?? ''),
+      };
+    })
+    .filter((r) => r.id.length > 0 && r.name.length > 0);
 
   const exactId = roles.find((r) => r.id === idOrName);
   if (exactId) return exactId;
@@ -188,14 +200,14 @@ export async function resolveMember(
   const firstMatch = matches[0];
   if (matches.length === 1 && firstMatch) {
     return {
-      discordId: firstMatch.discordId || firstMatch.id || clean,
+      discordId: firstMatch.memberId || firstMatch.discordId || firstMatch.id || clean,
       username: firstMatch.username,
     };
   }
 
   if (matches.length > 1) {
     const candList = matches
-      .map((m) => `  - @${m.username} (id: ${m.discordId || m.id})`)
+      .map((m) => `  - @${m.username} (id: ${m.memberId || m.discordId || m.id})`)
       .join('\n');
     throw new CliError(
       `Member "${idOrUsername}" is ambiguous, matches multiple members:\n${candList}\n  hint: specify the Discord ID directly`,

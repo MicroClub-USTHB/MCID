@@ -157,7 +157,7 @@ export function registerServerCommand(program: Command): void {
       try {
         const client = await getClient(options.profile);
         const res = await client.post<ServerRecord>('/servers', {
-          serverId: guildId,
+          guildId,
           name: options.name || guildId,
         });
         printSuccess(`Server "${res.name}" registered (ID: ${res.id})`);

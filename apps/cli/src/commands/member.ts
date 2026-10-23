@@ -2,7 +2,7 @@ import { writeFile } from 'node:fs/promises';
 import { Command } from 'commander';
 import { configPath, loadConfig, resolveProfileName } from '../config.js';
 import { defaultKeyProvider } from '../crypto-store.js';
-import { exitWithError } from '../errors.js';
+import { CliError, ExitCode, exitWithError } from '../errors.js';
 import { ApiClient } from '../lib/client.js';
 import {
   formatAge,
@@ -13,26 +13,28 @@ import {
   printTable,
   toCsv,
 } from '../lib/output.js';
+import { normalizeMemberDetail, normalizeMemberList, unwrapArray } from '../lib/api-normalize.js';
 import { resolveMember, resolveServer } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
+import { resolveProjectKey } from './dev.js';
 
-interface MemberListItem {
-  id: string;
-  discordId: string;
-  username: string;
-  displayName?: string | null;
-  nickname?: string | null;
-  avatar?: string | null;
-  joinedAt?: string | null;
-  roles?: { id: string; name: string }[];
-}
-
-interface MemberCrossServerItem {
-  discordId: string;
-  username: string;
-  serversCount: number;
-  servers: { serverId: string; serverName: string; roles: string[] }[];
+function sourceOf(
+  code: string,
+  sources:
+    | {
+        global?: string[];
+        server?: string[];
+        hierarchy?: string[];
+        inherited?: string[];
+      }
+    | undefined,
+): string {
+  if (sources?.global?.includes(code)) return 'global role';
+  if (sources?.server?.includes(code)) return 'server role';
+  if (sources?.hierarchy?.includes(code)) return 'role hierarchy';
+  if (sources?.inherited?.includes(code)) return 'inherited role';
+  return 'direct grant';
 }
 
 export function registerMemberCommand(program: Command): void {
@@ -56,35 +58,38 @@ export function registerMemberCommand(program: Command): void {
       const client = await getClient(options.profile);
 
       if (options.crossServer) {
-        const res = await client.get<MemberCrossServerItem[]>('/admin/members/cross-server');
+        const raw = await client.get('/admin/members/cross-server');
+        const res = normalizeMemberList(raw);
+
         if (options.quiet) {
-          printQuiet(res.map((m) => m.discordId));
+          printQuiet(res.map((m) => m.memberId));
           return;
         }
         if (options.json || options.output === 'json') {
-          printJson(res);
+          printJson(raw);
           return;
         }
+
+        const crossServerRows = res.map((m) => ({
+          memberId: m.memberId,
+          username: m.username,
+          serversCount: m.serversCount,
+          servers: m.serverNames.join(', '),
+        }));
+
         if (options.output === 'csv') {
-          process.stdout.write(toCsv(res as unknown as Record<string, unknown>[]));
+          process.stdout.write(toCsv(crossServerRows));
           return;
         }
 
         printTable({
           columns: [
-            { header: 'DISCORD ID', key: 'discordId', format: (v) => colors.dim(String(v)) },
+            { header: 'DISCORD ID', key: 'memberId', format: (v) => colors.dim(String(v)) },
             { header: 'USERNAME', key: 'username', format: (v) => colors.bold(`@${v}`) },
             { header: 'SERVERS', key: 'serversCount', format: (v) => `${v} server(s)` },
-            {
-              header: 'MEMBERSHIPS',
-              format: (_, r) => {
-                const sList = r['servers'] as
-                  { serverName?: string; serverId?: string }[] | undefined;
-                return sList ? sList.map((s) => s.serverName || s.serverId).join(', ') : '-';
-              },
-            },
+            { header: 'MEMBERSHIPS', key: 'servers' },
           ],
-          data: res as unknown as Record<string, unknown>[],
+          data: crossServerRows,
         });
         return;
       }
@@ -97,46 +102,42 @@ export function registerMemberCommand(program: Command): void {
         for (const r of options.role) params.append('roleId', r);
       }
 
-      const res = await client.get<
-        { data?: MemberListItem[]; members?: MemberListItem[] } | MemberListItem[]
-      >(`/admin/members?${params.toString()}`);
-
-      const members: MemberListItem[] = Array.isArray(res) ? res : res.data || res.members || [];
+      const raw = await client.get(`/admin/members?${params.toString()}`);
+      const members = normalizeMemberList(raw);
 
       if (options.quiet) {
-        printQuiet(members.map((m) => m.discordId || m.id));
+        printQuiet(members.map((m) => m.memberId));
         return;
       }
 
       const outFormat = options.json ? 'json' : options.output || 'table';
       if (outFormat === 'json') {
-        printJson(members);
+        printJson(raw);
         return;
       }
+
+      const rows = members.map((m) => ({
+        memberId: m.memberId,
+        username: m.username,
+        nickname: m.displayName || '-',
+        roles: m.roles.join(', '),
+        joinedAt: m.joinedAt,
+      }));
+
       if (outFormat === 'csv') {
-        process.stdout.write(toCsv(members as unknown as Record<string, unknown>[]));
+        process.stdout.write(toCsv(rows));
         return;
       }
 
       printTable({
         columns: [
-          {
-            header: 'DISCORD ID',
-            format: (_, r) => colors.dim(String(r['discordId'] || r['id'] || '')),
-          },
+          { header: 'DISCORD ID', key: 'memberId', format: (v) => colors.dim(String(v)) },
           { header: 'USERNAME', key: 'username', format: (v) => colors.bold(`@${v}`) },
-          {
-            header: 'NICKNAME',
-            format: (_, r) => String(r['nickname'] || r['displayName'] || '-'),
-          },
+          { header: 'NICKNAME', key: 'nickname' },
           {
             header: 'ROLES',
-            format: (_, r) => {
-              const rList = r['roles'] as { name: string }[] | undefined;
-              return rList && rList.length > 0
-                ? rList.map((ro) => ro.name).join(', ')
-                : colors.dim('none');
-            },
+            key: 'roles',
+            format: (v) => (v ? String(v) : colors.dim('none')),
           },
           {
             header: 'JOINED',
@@ -144,7 +145,7 @@ export function registerMemberCommand(program: Command): void {
             format: (v) => colors.dim(formatAge(typeof v === 'string' ? v : undefined)),
           },
         ],
-        data: members as unknown as Record<string, unknown>[],
+        data: rows,
       });
     } catch (err) {
       exitWithError('member list', err);
@@ -176,38 +177,36 @@ export function registerMemberCommand(program: Command): void {
       try {
         const client = await getClient(options.profile);
         const resolved = await resolveMember(client, memberArg);
-        const serversInfo = await client.get<{
-          member: MemberListItem;
-          servers: {
-            serverId: string;
-            serverName: string;
-            joinedAt?: string;
-            roles: { id: string; name: string }[];
-          }[];
-        }>(`/admin/members/${encodeURIComponent(resolved.discordId)}/servers`);
+        const raw = await client.get(
+          `/admin/members/${encodeURIComponent(resolved.discordId)}/servers`,
+        );
 
         if (options.json) {
-          printJson(serversInfo);
+          printJson(raw);
           return;
         }
 
-        const m = serversInfo.member || {
-          username: resolved.username,
-          discordId: resolved.discordId,
-        };
+        const m = normalizeMemberDetail(raw);
+        const memberId = m.memberId || resolved.discordId;
+        const avatar = (raw as { avatar?: string | null }).avatar;
 
         // Render readable card
-        process.stdout.write(`\n${colors.bold(`@${m.username}`)} (${colors.dim(m.discordId)})\n`);
-        if (m.nickname || m.displayName) {
-          process.stdout.write(`Nickname: ${m.nickname || m.displayName}\n`);
+        process.stdout.write(`\n${colors.bold(`@${m.username}`)} (${colors.dim(memberId)})\n`);
+        if (m.displayName) {
+          process.stdout.write(`Nickname: ${m.displayName}\n`);
         }
-        if (m.avatar) {
-          process.stdout.write(`Avatar:   ${colors.dim(m.avatar)}\n`);
+        if (avatar) {
+          process.stdout.write(`Avatar:   ${colors.dim(avatar)}\n`);
         }
         process.stdout.write('\n');
 
         process.stdout.write(`${colors.bold('Server Memberships & Roles:')}\n`);
-        const serverList = serversInfo.servers || [];
+        const serverList = unwrapArray<{
+          serverId: string;
+          serverName: string;
+          joinedAt?: string | null;
+          roles?: { id: string; name: string }[];
+        }>(raw, ['servers']);
         if (serverList.length === 0) {
           process.stdout.write(colors.dim('  No server memberships found.\n'));
         } else {
@@ -238,32 +237,71 @@ export function registerMemberCommand(program: Command): void {
     .command('permissions <member>')
     .description('Show resolved permissions for a member on a server')
     .option('--server <server>', 'Server to evaluate (defaults to main server)')
+    .option('--api-key <key>', 'Project API key with check_permissions scope')
+    .option('--project <project>', 'Project whose API key to use')
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as JSON')
     .action(
-      async (memberArg: string, options: { server?: string; profile?: string; json?: boolean }) => {
+      async (
+        memberArg: string,
+        options: {
+          server?: string;
+          apiKey?: string;
+          project?: string;
+          profile?: string;
+          json?: boolean;
+        },
+      ) => {
         try {
           const client = await getClient(options.profile);
           const resolvedServer = await resolveServer(client, options.server);
           const resolvedMember = await resolveMember(client, memberArg);
+          const keyInfo = await resolveProjectKey(options.apiKey, options.profile, options.project);
 
-          const permissions = await client.get<{
-            permissions: {
-              name: string;
-              code?: string;
-              inheritedFrom?: string;
-              sourceRole?: string;
-            }[];
-          }>(
-            `/permissions/${encodeURIComponent(resolvedServer.id)}/${encodeURIComponent(resolvedMember.discordId)}`,
-          );
+          const permissionsUrl = `${keyInfo.baseUrl || client.origin}/api/permissions/${encodeURIComponent(resolvedServer.id)}/${encodeURIComponent(resolvedMember.discordId)}`;
+          const response = await fetch(permissionsUrl, {
+            headers: {
+              Accept: 'application/json',
+              'X-API-Key': keyInfo.apiKey,
+            },
+            signal: AbortSignal.timeout(15_000),
+          });
+          const raw = await response.json().catch(() => null);
+
+          if (!response.ok) {
+            const message =
+              (raw as { message?: string } | null)?.message || `HTTP ${response.status}`;
+            throw new CliError(
+              `Permission check failed: ${message}\n  hint: the project key needs the check_permissions scope for this server`,
+              response.status === 401 || response.status === 403
+                ? ExitCode.Auth
+                : ExitCode.Rejected,
+            );
+          }
 
           if (options.json) {
-            printJson(permissions);
+            printJson(raw);
             return;
           }
 
-          const list = permissions.permissions || [];
+          const data = raw as {
+            permissions?: (string | { name?: string; code?: string })[];
+            sources?: {
+              global?: string[];
+              server?: string[];
+              hierarchy?: string[];
+              inherited?: string[];
+            };
+          };
+          const list = (data.permissions || []).map((permission) =>
+            typeof permission === 'string'
+              ? { code: permission, source: sourceOf(permission, data.sources) }
+              : {
+                  code: permission.code || permission.name || '-',
+                  source: sourceOf(permission.code || permission.name || '', data.sources),
+                },
+          );
+
           process.stdout.write(
             `Resolved permissions for ${colors.bold(`@${resolvedMember.username}`)} on ${colors.bold(resolvedServer.name)}:\n\n`,
           );
@@ -277,20 +315,12 @@ export function registerMemberCommand(program: Command): void {
             columns: [
               {
                 header: 'PERMISSION',
-                format: (_, r) => colors.bold(String(r['code'] || r['name'] || '-')),
+                key: 'code',
+                format: (v) => colors.bold(String(v)),
               },
-              {
-                header: 'SOURCE',
-                format: (_, r) => {
-                  const inh = r['inheritedFrom'];
-                  const src = r['sourceRole'];
-                  if (inh) return `inherited via ${inh}`;
-                  if (src) return `role "${src}"`;
-                  return 'direct grant';
-                },
-              },
+              { header: 'SOURCE', key: 'source' },
             ],
-            data: list as unknown as Record<string, unknown>[],
+            data: list,
           });
         } catch (err) {
           exitWithError('member permissions', err);
@@ -319,22 +349,33 @@ export function registerMemberCommand(program: Command): void {
           const client = await getClient(options.profile);
           const resolvedServer = await resolveServer(client, options.server);
 
-          const params = new URLSearchParams({ serverId: resolvedServer.id });
+          const format = options.output || 'csv';
+          const params = new URLSearchParams({
+            serverId: resolvedServer.id,
+            format,
+          });
           if (options.role && options.role.length > 0) {
             for (const r of options.role) params.append('roleId', r);
           }
 
-          const data = await client.get<Record<string, unknown>[]>(
+          const data = await client.get<Record<string, unknown>[] | string>(
             `/admin/members/export?${params.toString()}`,
           );
 
-          const format = options.output || 'csv';
-          const content = format === 'json' ? JSON.stringify(data, null, 2) : toCsv(data);
+          const content =
+            typeof data === 'string'
+              ? data
+              : format === 'json'
+                ? JSON.stringify(data, null, 2)
+                : toCsv(data);
           const defaultFilename = `members-${resolvedServer.id}-${new Date().toISOString().slice(0, 10)}.${format}`;
           const targetFile = options.file || defaultFilename;
 
           await writeFile(targetFile, content, 'utf8');
-          printSuccess(`Exported ${data.length} member(s) to ${targetFile}`);
+          const count = typeof data === 'string' ? undefined : data.length;
+          printSuccess(
+            `Exported ${count !== undefined ? `${count} member row(s)` : 'members'} to ${targetFile}`,
+          );
         } catch (err) {
           exitWithError('member export', err);
         }

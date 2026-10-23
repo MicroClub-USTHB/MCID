@@ -3,6 +3,14 @@ import { Command } from 'commander';
 import { configPath, loadConfig, resolveProfileName } from '../config.js';
 import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
+import {
+  isProjectKeyActive,
+  normalizeAccessMatrix,
+  normalizeCreatedProject,
+  normalizeProjectAccessLogs,
+  normalizeProjectKeyInfo,
+  unwrapArray,
+} from '../lib/api-normalize.js';
 import { ApiClient } from '../lib/client.js';
 import { confirmDestructive } from '../lib/confirm.js';
 import {
@@ -27,6 +35,7 @@ interface ProjectRecord {
   redirectUri?: string | null;
   apiKeyPrefix?: string | null;
   apiKeyCreatedAt?: string | null;
+  isActive?: boolean;
   isKeyRevoked?: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -72,7 +81,10 @@ export function registerProjectCommand(program: Command): void {
           { header: 'NAME', key: 'name', format: (v) => colors.bold(String(v)) },
           {
             header: 'KEY STATUS',
-            format: (_, r) => (r.isKeyRevoked ? colors.red('revoked') : colors.green('active')),
+            format: (_, r) =>
+              isProjectKeyActive(r as unknown as ProjectRecord)
+                ? colors.green('active')
+                : colors.red('revoked'),
           },
           {
             header: 'REDIRECT URIS',
@@ -135,7 +147,9 @@ export function registerProjectCommand(program: Command): void {
           Name: project.name,
           Description: project.description || '-',
           'Key Prefix': project.apiKeyPrefix ? `${project.apiKeyPrefix}...` : '-',
-          'Key Status': project.isKeyRevoked ? colors.red('revoked') : colors.green('active'),
+          'Key Status': isProjectKeyActive(project)
+            ? colors.green('active')
+            : colors.red('revoked'),
           'Redirect URIs': uris.length > 0 ? uris.join(', ') : colors.dim('none'),
           'Granted Servers':
             servers.length > 0
@@ -196,16 +210,21 @@ export function registerProjectCommand(program: Command): void {
           }
 
           const commaUris = redirectUris ? redirectUris.join(',') : undefined;
-          const res = await client.post<{
-            id: string;
-            name: string;
-            apiKey: string;
-            redirectUri?: string;
-          }>('/admin/projects', {
-            name,
-            description: options.description,
-            redirectUri: commaUris,
-          });
+          // The API returns `{ apiKey, project }`, not a flattened project.
+          const res = normalizeCreatedProject<ProjectRecord>(
+            await client.post('/admin/projects', {
+              name,
+              description: options.description,
+            }),
+          );
+          const project = res.project;
+
+          if (commaUris) {
+            await client.patch(`/admin/projects/${project.id}/redirect-uri`, {
+              redirectUri: commaUris,
+            });
+            project.redirectUri = commaUris;
+          }
 
           if (options.json) {
             printJson(res, true);
@@ -213,8 +232,8 @@ export function registerProjectCommand(program: Command): void {
           }
 
           printSuccess(
-            `Project "${colors.bold(res.name)}" created (id: ${res.id})`,
-            `mcid-cli project key show ${res.id}`,
+            `Project "${colors.bold(project.name)}" created (id: ${project.id})`,
+            `mcid-cli project key show ${project.id}`,
           );
 
           process.stdout.write('\n');
@@ -413,23 +432,18 @@ export function registerProjectCommand(program: Command): void {
         try {
           const client = await getClient(options.profile);
           const resolved = await resolveProject(client, projectIdOrName);
-          const keyInfo = await client.get<{
-            prefix?: string;
-            apiKeyPrefix?: string;
-            isKeyRevoked?: boolean;
-            createdAt?: string;
-          }>(`/admin/projects/${resolved.id}/api-key`);
+          const rawKeyInfo = await client.get(`/admin/projects/${resolved.id}/api-key`);
 
           if (options.json) {
-            printJson(keyInfo, options.reveal);
+            printJson(rawKeyInfo, options.reveal);
             return;
           }
 
-          const prefix = keyInfo.apiKeyPrefix || keyInfo.prefix || 'unknown';
+          const keyInfo = normalizeProjectKeyInfo(rawKeyInfo);
           printKeyValue({
             Project: resolved.name,
-            Status: keyInfo.isKeyRevoked ? colors.red('revoked') : colors.green('active'),
-            Prefix: `${prefix}...`,
+            Status: keyInfo.active ? colors.green('active') : colors.red('revoked'),
+            Prefix: `${keyInfo.prefix}...`,
             Created: formatDate(keyInfo.createdAt),
           });
         } catch (err) {
@@ -496,11 +510,20 @@ export function registerProjectCommand(program: Command): void {
   keyCmd
     .command('restore <project>')
     .description('Restore a revoked API key')
+    .option('--yes', 'Skip confirmation')
     .option('--profile <name>', 'Profile to use')
-    .action(async (projectIdOrName: string, options: { profile?: string }) => {
+    .action(async (projectIdOrName: string, options: { yes?: boolean; profile?: string }) => {
       try {
         const client = await getClient(options.profile);
         const resolved = await resolveProject(client, projectIdOrName);
+
+        if (!options.yes && process.stdin.isTTY) {
+          const ok = await promptConfirm({
+            message: `Restore the API key for "${resolved.name}"?`,
+          });
+          if (!ok) return;
+        }
+
         await client.post(`/admin/projects/${resolved.id}/restore-key`);
         printSuccess(`API key restored for project "${resolved.name}"`);
       } catch (err) {
@@ -638,8 +661,41 @@ export function registerProjectCommand(program: Command): void {
     .action(async (options: { profile?: string; json?: boolean }) => {
       try {
         const client = await getClient(options.profile);
-        const matrix = await client.get<unknown>('/admin/projects/access/matrix');
-        printJson(matrix);
+        const raw = await client.get('/admin/projects/access/matrix');
+        if (options.json) {
+          printJson(raw);
+          return;
+        }
+
+        printTable({
+          columns: [
+            {
+              header: 'PROJECT',
+              key: 'projectName',
+              format: (v) => colors.bold(String(v)),
+            },
+            { header: 'SERVER', key: 'serverName' },
+            {
+              header: 'SCOPES',
+              key: 'scopes',
+              format: (v) => (Array.isArray(v) ? v.join(', ') : colors.dim('-')),
+            },
+            {
+              header: 'OPERATIONS',
+              key: 'operations',
+              format: (v) => {
+                if (!v || typeof v !== 'object') return colors.dim('none');
+                return (
+                  Object.entries(v as Record<string, boolean>)
+                    .filter(([, active]) => active)
+                    .map(([op]) => op)
+                    .join(', ') || colors.dim('none')
+                );
+              },
+            },
+          ],
+          data: normalizeAccessMatrix(raw) as unknown as Record<string, unknown>[],
+        });
       } catch (err) {
         exitWithError('project access matrix', err);
       }
@@ -659,20 +715,44 @@ export function registerProjectCommand(program: Command): void {
           const p = await resolveProject(client, options.project);
           path += `?projectId=${encodeURIComponent(p.id)}`;
         }
-        const logs = await client.get<Record<string, unknown>[]>(path);
+        const raw = await client.get(path);
         if (options.json) {
-          printJson(logs);
+          printJson(raw);
           return;
         }
+
+        const projectNames = new Map<string, string>();
+        const serverNames = new Map<string, string>();
+        try {
+          const projects = await client.get<{ id: string; name: string }[]>('/admin/projects');
+          for (const project of projects) projectNames.set(project.id, project.name);
+          const servers = unwrapArray<{ id: string; name: string }>(await client.get('/servers'), [
+            'servers',
+            'data',
+          ]);
+          for (const server of servers) serverNames.set(server.id, server.name);
+        } catch {
+          // Names are cosmetic; IDs still identify the rows.
+        }
+
+        const logs = normalizeProjectAccessLogs(raw);
         printTable({
           columns: [
-            { header: 'TIME', key: 'createdAt', format: (v) => formatAge(v as string) },
+            { header: 'TIME', key: 'timestamp', format: (v) => formatAge(String(v)) },
             { header: 'ACTION', key: 'action', format: (v) => colors.bold(String(v)) },
             { header: 'ACTOR', key: 'actor', format: (v) => colors.dim(String(v)) },
-            { header: 'PROJECT', key: 'projectId', format: (v) => colors.dim(String(v)) },
-            { header: 'SERVER', key: 'serverId', format: (v) => colors.dim(String(v)) },
+            {
+              header: 'PROJECT',
+              key: 'projectId',
+              format: (v) => projectNames.get(String(v)) ?? colors.dim(String(v)),
+            },
+            {
+              header: 'SERVER',
+              key: 'serverId',
+              format: (v) => serverNames.get(String(v)) ?? colors.dim(String(v)),
+            },
           ],
-          data: logs,
+          data: logs as unknown as Record<string, unknown>[],
         });
       } catch (err) {
         exitWithError('project access log', err);

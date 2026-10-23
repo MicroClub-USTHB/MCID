@@ -2,36 +2,17 @@ import { Command } from 'commander';
 import { configPath, loadConfig, resolveProfileName } from '../config.js';
 import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
+import {
+  normalizeSyncChanges,
+  normalizeSyncLogs,
+  normalizeSyncStatus,
+  unwrapArray,
+} from '../lib/api-normalize.js';
 import { ApiClient } from '../lib/client.js';
 import { formatAge, printJson, printSuccess, printTable, toCsv } from '../lib/output.js';
 import { resolveServer } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
-
-interface SyncStatusRecord {
-  serverId: string;
-  serverName?: string;
-  status: string;
-  lastSyncedAt?: string | null;
-  durationMs?: number | null;
-  membersSynced?: number;
-  rolesSynced?: number;
-  membersAdded?: number;
-  membersRemoved?: number;
-  membersUpdated?: number;
-}
-
-interface SyncLogRecord {
-  id: string;
-  serverId: string;
-  syncType: string;
-  status: string;
-  startedAt: string;
-  completedAt?: string | null;
-  membersSynced?: number;
-  rolesSynced?: number;
-  error?: string | null;
-}
 
 export function registerSyncCommand(program: Command): void {
   const syncCmd = program
@@ -59,12 +40,21 @@ export function registerSyncCommand(program: Command): void {
           const client = await getClient(options.profile);
           const resolved = await resolveServer(client, options.server);
 
-          const trigger = await client.post<{ syncLogId?: string; id?: string; status?: string }>(
-            '/admin/sync/full',
-            { serverId: resolved.id },
-          );
+          const trigger = await client.post<{
+            syncLogId?: string;
+            id?: string;
+            status?: string;
+            results?: { serverId: string; syncId?: number; error?: string }[];
+          }>('/admin/sync/full', { serverIds: [resolved.id] });
 
-          const syncLogId = trigger.syncLogId || trigger.id;
+          const result = trigger.results?.[0];
+          if (result?.error) {
+            throw new CliError(
+              `Sync could not be queued for "${resolved.name}": ${result.error}`,
+              ExitCode.Rejected,
+            );
+          }
+          const syncLogId = trigger.syncLogId || trigger.id || String(result?.syncId ?? '');
 
           if (!options.wait) {
             if (options.json) {
@@ -89,8 +79,8 @@ export function registerSyncCommand(program: Command): void {
           process.stdout.write(`Syncing server "${colors.bold(resolved.name)}"...\n`);
 
           while (Date.now() - startTime < timeoutMs) {
-            const statusRes = await client.get<SyncStatusRecord>(
-              `/admin/sync/status?serverId=${encodeURIComponent(resolved.id)}`,
+            const statusRes = normalizeSyncStatus(
+              await client.get(`/admin/sync/status?serverId=${encodeURIComponent(resolved.id)}`),
             );
 
             const elapsedSec = Math.floor((Date.now() - startTime) / 1000);
@@ -98,21 +88,14 @@ export function registerSyncCommand(program: Command): void {
 
             if (process.stdout.isTTY) {
               process.stdout.write(
-                `\r  ${colors.cyan(spin)} [${elapsedSec}s] Status: ${statusRes.status} (members: ${statusRes.membersSynced ?? 0}, roles: ${statusRes.rolesSynced ?? 0})   `,
+                `\r  ${colors.cyan(spin)} [${elapsedSec}s] Status: ${statusRes.status} (members: ${statusRes.membersSynced}, roles: ${statusRes.rolesSynced})   `,
               );
             }
 
             if (statusRes.status === 'success') {
               if (process.stdout.isTTY) process.stdout.write('\r\x1b[2K');
-              const dur = statusRes.durationMs
-                ? `${(statusRes.durationMs / 1000).toFixed(1)}s`
-                : `${elapsedSec}s`;
-              const added =
-                statusRes.membersAdded !== undefined
-                  ? ` (+${statusRes.membersAdded}, -${statusRes.membersRemoved ?? 0})`
-                  : '';
               printSuccess(
-                `Synced ${resolved.name} in ${dur}: ${statusRes.membersSynced ?? 0} members${added}, ${statusRes.rolesSynced ?? 0} roles`,
+                `Synced ${resolved.name} in ${elapsedSec}s: ${statusRes.membersSynced} members, ${statusRes.rolesSynced} roles`,
               );
               if (options.json) {
                 printJson(statusRes);
@@ -163,14 +146,15 @@ export function registerSyncCommand(program: Command): void {
           const client = await getClient(options.profile);
 
           if (options.all) {
-            const list = await client.get<SyncStatusRecord[]>('/admin/sync/status/all');
+            const raw = await client.get('/admin/sync/status/all');
+            const list = unwrapArray<unknown>(raw, ['servers', 'data']).map(normalizeSyncStatus);
             const outFormat = options.json ? 'json' : options.output || 'table';
             if (outFormat === 'json') {
-              printJson(list);
+              printJson(raw);
               return;
             }
             if (outFormat === 'csv') {
-              process.stdout.write(toCsv(list as unknown as Record<string, unknown>[]));
+              process.stdout.write(toCsv(list));
               return;
             }
 
@@ -192,8 +176,7 @@ export function registerSyncCommand(program: Command): void {
                 },
                 {
                   header: 'LAST SYNC',
-                  key: 'lastSyncedAt',
-                  format: (v) => formatAge(typeof v === 'string' ? v : undefined),
+                  format: (_, r) => formatAge(r['lastSyncAt'] as string | null | undefined),
                 },
                 {
                   header: 'MEMBERS',
@@ -212,12 +195,22 @@ export function registerSyncCommand(program: Command): void {
           }
 
           const resolved = await resolveServer(client, options.server);
-          const status = await client.get<SyncStatusRecord>(
-            `/admin/sync/status?serverId=${encodeURIComponent(resolved.id)}`,
-          );
+          let raw: unknown;
+          try {
+            raw = await client.get(
+              `/admin/sync/status?serverId=${encodeURIComponent(resolved.id)}`,
+            );
+          } catch (err) {
+            if (err instanceof CliError && err.exitCode === ExitCode.NotFound) {
+              raw = { serverId: resolved.id, status: 'never' };
+            } else {
+              throw err;
+            }
+          }
+          const status = normalizeSyncStatus(raw);
 
           if (options.json) {
-            printJson(status);
+            printJson(raw);
             return;
           }
 
@@ -235,8 +228,7 @@ export function registerSyncCommand(program: Command): void {
               },
               {
                 header: 'LAST SYNC',
-                key: 'lastSyncedAt',
-                format: (v) => formatAge(typeof v === 'string' ? v : undefined),
+                format: () => formatAge(status.lastSyncAt),
               },
               { header: 'MEMBERS', key: 'membersSynced', format: (v) => String(v ?? '-') },
               { header: 'ROLES', key: 'rolesSynced', format: (v) => String(v ?? '-') },
@@ -260,12 +252,13 @@ export function registerSyncCommand(program: Command): void {
       try {
         const client = await getClient(options.profile);
         const resolved = await resolveServer(client, options.server);
-        const logs = await client.get<SyncLogRecord[]>(
+        const raw = await client.get(
           `/admin/sync/logs?serverId=${encodeURIComponent(resolved.id)}`,
         );
+        const logs = normalizeSyncLogs(raw);
 
         if (options.json) {
-          printJson(logs);
+          printJson(raw);
           return;
         }
 
@@ -321,11 +314,12 @@ export function registerSyncCommand(program: Command): void {
           if (options.type) {
             path += `?type=${encodeURIComponent(options.type)}`;
           }
-          const changes = await client.get<Record<string, unknown>[]>(path);
+          const raw = await client.get(path);
+          const changes = normalizeSyncChanges(raw);
 
           const outFormat = options.json ? 'json' : options.output || 'table';
           if (outFormat === 'json') {
-            printJson(changes);
+            printJson(raw);
             return;
           }
           if (outFormat === 'csv') {
@@ -338,7 +332,10 @@ export function registerSyncCommand(program: Command): void {
               { header: 'ENTITY', key: 'entityType', format: (v) => colors.bold(String(v)) },
               { header: 'ACTION', key: 'action', format: (v) => String(v) },
               { header: 'IDENTIFIER', key: 'entityId', format: (v) => colors.dim(String(v)) },
-              { header: 'NAME', key: 'entityName', format: (v) => String(v ?? '-') },
+              {
+                header: 'DESCRIPTION',
+                format: (_, r) => String(r['description'] ?? r['entityName'] ?? '-'),
+              },
             ],
             data: changes,
           });
