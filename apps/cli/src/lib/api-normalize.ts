@@ -339,6 +339,7 @@ export interface NormalizedAuditLog {
   actor: string;
   action: string;
   entity: string;
+  entityType: string;
 }
 
 export function normalizeAuditLogs(response: unknown): NormalizedAuditLog[] {
@@ -349,6 +350,7 @@ export function normalizeAuditLogs(response: unknown): NormalizedAuditLog[] {
     action: [log['actionType'], log['action']]
       .filter((part) => typeof part === 'string' && part.length > 0)
       .join(':'),
+    entityType: String(log['entityType'] ?? ''),
     entity: String(
       log['entityType']
         ? `${log['entityType']}:${log['entityId'] ?? '-'}`

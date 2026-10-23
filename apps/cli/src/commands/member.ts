@@ -1,6 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import { Command } from 'commander';
-import { configPath, loadConfig, resolveProfileName } from '../config.js';
+import { configPath, loadConfig, normalizeBaseUrl, resolveProfileName } from '../config.js';
 import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
 import { ApiClient } from '../lib/client.js';
@@ -253,12 +253,32 @@ export function registerMemberCommand(program: Command): void {
         },
       ) => {
         try {
-          const client = await getClient(options.profile);
-          const resolvedServer = await resolveServer(client, options.server);
-          const resolvedMember = await resolveMember(client, memberArg);
           const keyInfo = await resolveProjectKey(options.apiKey, options.profile, options.project);
+          const config = await loadConfig(configPath());
+          const profileName = resolveProfileName(config, options.profile);
+          const baseUrl =
+            keyInfo.baseUrl ||
+            normalizeBaseUrl(
+              process.env.MCID_API_URL ||
+                config.profiles[profileName]?.baseUrl ||
+                'http://localhost:3000',
+            );
+          const snowflake = /^\d{17,20}$/;
+          let resolvedServer: { id: string; name: string };
+          let resolvedMember: { discordId: string; username: string };
 
-          const permissionsUrl = `${keyInfo.baseUrl || client.origin}/api/permissions/${encodeURIComponent(resolvedServer.id)}/${encodeURIComponent(resolvedMember.discordId)}`;
+          if (snowflake.test(options.server ?? '') && snowflake.test(memberArg)) {
+            // Project API keys cannot enumerate admin resources. Accept explicit
+            // snowflakes so project-only callers do not need an admin session.
+            resolvedServer = { id: options.server, name: options.server };
+            resolvedMember = { discordId: memberArg, username: memberArg };
+          } else {
+            const client = await getClient(options.profile);
+            resolvedServer = await resolveServer(client, options.server);
+            resolvedMember = await resolveMember(client, memberArg);
+          }
+
+          const permissionsUrl = `${baseUrl}/api/permissions/${encodeURIComponent(resolvedServer.id)}/${encodeURIComponent(resolvedMember.discordId)}`;
           const response = await fetch(permissionsUrl, {
             headers: {
               Accept: 'application/json',

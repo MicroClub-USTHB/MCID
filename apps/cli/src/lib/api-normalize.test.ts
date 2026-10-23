@@ -364,6 +364,7 @@ describe('API response contracts', () => {
         timestamp: '2026-10-22T23:00:00.000Z',
         actor: 'ben_abdou5094',
         action: 'permission:updated',
+        entityType: 'role',
         entity: 'role:990000000000200002',
       },
     ]);

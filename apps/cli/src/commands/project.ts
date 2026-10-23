@@ -12,7 +12,7 @@ import {
   unwrapArray,
 } from '../lib/api-normalize.js';
 import { ApiClient } from '../lib/client.js';
-import { confirmDestructive } from '../lib/confirm.js';
+import { confirmAction, confirmDestructive } from '../lib/confirm.js';
 import {
   formatAge,
   formatDate,
@@ -23,7 +23,7 @@ import {
   printTable,
   toCsv,
 } from '../lib/output.js';
-import { promptConfirm, promptInput } from '../lib/prompts.js';
+import { promptInput } from '../lib/prompts.js';
 import { resolveProject, resolveServer } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
@@ -172,6 +172,7 @@ export function registerProjectCommand(program: Command): void {
     .option('--redirect-uri <urls...>', 'Allowed redirect URI(s)')
     .option('--env-file <path>', 'Write .env block to file')
     .option('--force', 'Overwrite existing MCID_API_KEY in env file')
+    .option('--reveal', 'Include the full API key in JSON output')
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as raw JSON')
     .action(
@@ -181,6 +182,7 @@ export function registerProjectCommand(program: Command): void {
         redirectUri?: string[];
         envFile?: string;
         force?: boolean;
+        reveal?: boolean;
         profile?: string;
         json?: boolean;
       }) => {
@@ -210,6 +212,7 @@ export function registerProjectCommand(program: Command): void {
           }
 
           const commaUris = redirectUris ? redirectUris.join(',') : undefined;
+          let redirectUriError: string | undefined;
           // The API returns `{ apiKey, project }`, not a flattened project.
           const res = normalizeCreatedProject<ProjectRecord>(
             await client.post('/admin/projects', {
@@ -220,14 +223,18 @@ export function registerProjectCommand(program: Command): void {
           const project = res.project;
 
           if (commaUris) {
-            await client.patch(`/admin/projects/${project.id}/redirect-uri`, {
-              redirectUri: commaUris,
-            });
-            project.redirectUri = commaUris;
+            try {
+              await client.patch(`/admin/projects/${project.id}/redirect-uri`, {
+                redirectUri: commaUris,
+              });
+            } catch (err) {
+              redirectUriError = err instanceof Error ? err.message : String(err);
+            }
+            if (!redirectUriError) project.redirectUri = commaUris;
           }
 
           if (options.json) {
-            printJson(res, true);
+            printJson(res, options.reveal);
             return;
           }
 
@@ -235,6 +242,13 @@ export function registerProjectCommand(program: Command): void {
             `Project "${colors.bold(project.name)}" created (id: ${project.id})`,
             `mcid-cli project key show ${project.id}`,
           );
+
+          if (redirectUriError) {
+            process.stderr.write(
+              `${colors.red('!')} Project was created, but redirect URI setup failed: ${redirectUriError}\n` +
+                `  hint: save the API key below, then retry with \`mcid-cli project redirect-uri add ${project.id} <url>\`\n`,
+            );
+          }
 
           process.stdout.write('\n');
           process.stdout.write(
@@ -258,16 +272,19 @@ export function registerProjectCommand(program: Command): void {
               // file doesn't exist
             }
 
-            if (existing.includes('MCID_API_KEY=') && !options.force) {
+            const hasApiKey = /^\s*MCID_API_KEY\s*=/m.test(existing);
+            if (hasApiKey && !options.force) {
               throw new CliError(
                 `File "${options.envFile}" already contains MCID_API_KEY\n  hint: pass --force to overwrite`,
                 ExitCode.Rejected,
               );
             }
 
-            const newContent = existing
-              ? `${existing.trimEnd()}\n\n${envBlock}\n`
-              : `${envBlock}\n`;
+            const newContent = hasApiKey
+              ? `${existing.replace(/^\s*MCID_API_KEY\s*=.*$/m, `MCID_API_KEY=${res.apiKey}`).trimEnd()}\n`
+              : existing
+                ? `${existing.trimEnd()}\n\n${envBlock}\n`
+                : `${envBlock}\n`;
             await writeFile(options.envFile, newContent, 'utf8');
             printSuccess(`Saved environment configuration to ${options.envFile}`);
           } else {
@@ -421,36 +438,30 @@ export function registerProjectCommand(program: Command): void {
   keyCmd
     .command('show <project>')
     .description('Show project API key status and prefix')
-    .option('--reveal', 'Reveal full key (if supported)')
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as JSON')
-    .action(
-      async (
-        projectIdOrName: string,
-        options: { reveal?: boolean; profile?: string; json?: boolean },
-      ) => {
-        try {
-          const client = await getClient(options.profile);
-          const resolved = await resolveProject(client, projectIdOrName);
-          const rawKeyInfo = await client.get(`/admin/projects/${resolved.id}/api-key`);
+    .action(async (projectIdOrName: string, options: { profile?: string; json?: boolean }) => {
+      try {
+        const client = await getClient(options.profile);
+        const resolved = await resolveProject(client, projectIdOrName);
+        const rawKeyInfo = await client.get(`/admin/projects/${resolved.id}/api-key`);
 
-          if (options.json) {
-            printJson(rawKeyInfo, options.reveal);
-            return;
-          }
-
-          const keyInfo = normalizeProjectKeyInfo(rawKeyInfo);
-          printKeyValue({
-            Project: resolved.name,
-            Status: keyInfo.active ? colors.green('active') : colors.red('revoked'),
-            Prefix: `${keyInfo.prefix}...`,
-            Created: formatDate(keyInfo.createdAt),
-          });
-        } catch (err) {
-          exitWithError('project key show', err);
+        if (options.json) {
+          printJson(rawKeyInfo);
+          return;
         }
-      },
-    );
+
+        const keyInfo = normalizeProjectKeyInfo(rawKeyInfo);
+        printKeyValue({
+          Project: resolved.name,
+          Status: keyInfo.active ? colors.green('active') : colors.red('revoked'),
+          Prefix: `${keyInfo.prefix}...`,
+          Created: formatDate(keyInfo.createdAt),
+        });
+      } catch (err) {
+        exitWithError('project key show', err);
+      }
+    });
 
   keyCmd
     .command('rotate <project>')
@@ -462,15 +473,12 @@ export function registerProjectCommand(program: Command): void {
         const client = await getClient(options.profile);
         const resolved = await resolveProject(client, projectIdOrName);
 
-        if (!options.yes && process.stdin.isTTY) {
-          const ok = await promptConfirm({
-            message: `Rotate API key for "${resolved.name}"? The current key will stop working immediately`,
-          });
-          if (!ok) {
-            process.stdout.write('Key rotation cancelled.\n');
-            return;
-          }
-        }
+        await confirmDestructive({
+          resourceType: 'API key for project',
+          resourceName: resolved.name,
+          action: 'rotate',
+          yesFlag: options.yes,
+        });
 
         const res = await client.post<{ apiKey: string }>(
           `/admin/projects/${resolved.id}/regenerate-api-key`,
@@ -493,12 +501,12 @@ export function registerProjectCommand(program: Command): void {
         const client = await getClient(options.profile);
         const resolved = await resolveProject(client, projectIdOrName);
 
-        if (!options.yes && process.stdin.isTTY) {
-          const ok = await promptConfirm({
-            message: `Revoke API key for "${resolved.name}"? Apps using this key will immediately fail auth`,
-          });
-          if (!ok) return;
-        }
+        await confirmDestructive({
+          resourceType: 'API key for project',
+          resourceName: resolved.name,
+          action: 'revoke',
+          yesFlag: options.yes,
+        });
 
         await client.delete(`/admin/projects/${resolved.id}/key`);
         printSuccess(`API key revoked for project "${resolved.name}"`);
@@ -517,12 +525,7 @@ export function registerProjectCommand(program: Command): void {
         const client = await getClient(options.profile);
         const resolved = await resolveProject(client, projectIdOrName);
 
-        if (!options.yes && process.stdin.isTTY) {
-          const ok = await promptConfirm({
-            message: `Restore the API key for "${resolved.name}"?`,
-          });
-          if (!ok) return;
-        }
+        await confirmAction(`Restore API key for project "${resolved.name}"?`, options.yes);
 
         await client.post(`/admin/projects/${resolved.id}/restore-key`);
         printSuccess(`API key restored for project "${resolved.name}"`);
@@ -636,12 +639,12 @@ export function registerProjectCommand(program: Command): void {
           const resolvedProject = await resolveProject(client, projectIdOrName);
           const resolvedServer = await resolveServer(client, serverIdOrName);
 
-          if (!options.yes && process.stdin.isTTY) {
-            const ok = await promptConfirm({
-              message: `Revoke access for project "${resolvedProject.name}" on server "${resolvedServer.name}"?`,
-            });
-            if (!ok) return;
-          }
+          await confirmDestructive({
+            resourceType: 'project access grant on server',
+            resourceName: `${resolvedProject.name} / ${resolvedServer.name}`,
+            action: 'revoke',
+            yesFlag: options.yes,
+          });
 
           await client.delete(`/admin/projects/${resolvedProject.id}/servers/${resolvedServer.id}`);
           printSuccess(
