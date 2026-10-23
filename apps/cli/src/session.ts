@@ -22,9 +22,7 @@ export async function resolveSession(
   // 1. CI / non-interactive environment token override
   if (process.env.MCID_TOKEN) {
     const rawUrl =
-      process.env.MCID_API_URL ||
-      config.profiles[profileName]?.baseUrl ||
-      'http://localhost:3000';
+      process.env.MCID_API_URL || config.profiles[profileName]?.baseUrl || 'http://localhost:3000';
     return {
       profileName: profileName || 'env',
       baseUrl: normalizeBaseUrl(rawUrl),

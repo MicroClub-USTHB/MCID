@@ -8,7 +8,6 @@ import { confirmDestructive } from '../lib/confirm.js';
 import {
   formatAge,
   formatDate,
-  printError,
   printJson,
   printKeyValue,
   printQuiet,
@@ -16,7 +15,7 @@ import {
   printTable,
   toCsv,
 } from '../lib/output.js';
-import { promptConfirm, promptInput, promptSelect } from '../lib/prompts.js';
+import { promptConfirm, promptInput } from '../lib/prompts.js';
 import { resolveProject, resolveServer } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
@@ -161,101 +160,106 @@ export function registerProjectCommand(program: Command): void {
     .option('--force', 'Overwrite existing MCID_API_KEY in env file')
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as raw JSON')
-    .action(async (options: {
-      name?: string;
-      description?: string;
-      redirectUri?: string[];
-      envFile?: string;
-      force?: boolean;
-      profile?: string;
-      json?: boolean;
-    }) => {
-      try {
-        const client = await getClient(options.profile);
+    .action(
+      async (options: {
+        name?: string;
+        description?: string;
+        redirectUri?: string[];
+        envFile?: string;
+        force?: boolean;
+        profile?: string;
+        json?: boolean;
+      }) => {
+        try {
+          const client = await getClient(options.profile);
 
-        let name = options.name;
-        let redirectUris = options.redirectUri;
+          let name = options.name;
+          let redirectUris = options.redirectUri;
 
-        // Interactive wizard when flags omitted and TTY
-        if (!name && process.stdin.isTTY) {
-          name = await promptInput({
-            message: 'Project name',
-            validate: (v) => (v.length > 0 ? true : 'Name cannot be empty'),
-          });
+          // Interactive wizard when flags omitted and TTY
+          if (!name && process.stdin.isTTY) {
+            name = await promptInput({
+              message: 'Project name',
+              validate: (v) => (v.length > 0 ? true : 'Name cannot be empty'),
+            });
 
-          const defaultUri = 'http://localhost:3000/callback';
-          const enteredUri = await promptInput({
-            message: 'Primary OAuth redirect URI',
-            default: defaultUri,
-          });
-          redirectUris = [enteredUri || defaultUri];
-        }
-
-        if (!name) {
-          throw new CliError('Project name is required (--name <name>)', ExitCode.Usage);
-        }
-
-        const commaUris = redirectUris ? redirectUris.join(',') : undefined;
-        const res = await client.post<{
-          id: string;
-          name: string;
-          apiKey: string;
-          redirectUri?: string;
-        }>('/admin/projects', {
-          name,
-          description: options.description,
-          redirectUri: commaUris,
-        });
-
-        if (options.json) {
-          printJson(res, true);
-          return;
-        }
-
-        printSuccess(
-          `Project "${colors.bold(res.name)}" created (id: ${res.id})`,
-          `mcid-cli project key show ${res.id}`,
-        );
-
-        process.stdout.write('\n');
-        process.stdout.write(
-          `${colors.bold('API Key')} (save this now; it will not be shown again):\n`,
-        );
-        process.stdout.write(`  ${colors.green(res.apiKey)}\n\n`);
-
-        const primaryUri = redirectUris && redirectUris[0] ? redirectUris[0] : 'http://localhost:3000/callback';
-        const envBlock = [
-          `MCID_API_URL=${client.origin}/api`,
-          `MCID_API_KEY=${res.apiKey}`,
-          `MCID_REDIRECT_URI=${primaryUri}`,
-        ].join('\n');
-
-        if (options.envFile) {
-          let existing = '';
-          try {
-            existing = await readFile(options.envFile, 'utf8');
-          } catch {
-            // file doesn't exist
+            const defaultUri = 'http://localhost:3000/callback';
+            const enteredUri = await promptInput({
+              message: 'Primary OAuth redirect URI',
+              default: defaultUri,
+            });
+            redirectUris = [enteredUri || defaultUri];
           }
 
-          if (existing.includes('MCID_API_KEY=') && !options.force) {
-            throw new CliError(
-              `File "${options.envFile}" already contains MCID_API_KEY\n  hint: pass --force to overwrite`,
-              ExitCode.Rejected,
-            );
+          if (!name) {
+            throw new CliError('Project name is required (--name <name>)', ExitCode.Usage);
           }
 
-          const newContent = existing ? `${existing.trimEnd()}\n\n${envBlock}\n` : `${envBlock}\n`;
-          await writeFile(options.envFile, newContent, 'utf8');
-          printSuccess(`Saved environment configuration to ${options.envFile}`);
-        } else {
-          process.stdout.write(`${colors.dim('.env configuration block:')}\n`);
-          process.stdout.write(`${envBlock}\n`);
+          const commaUris = redirectUris ? redirectUris.join(',') : undefined;
+          const res = await client.post<{
+            id: string;
+            name: string;
+            apiKey: string;
+            redirectUri?: string;
+          }>('/admin/projects', {
+            name,
+            description: options.description,
+            redirectUri: commaUris,
+          });
+
+          if (options.json) {
+            printJson(res, true);
+            return;
+          }
+
+          printSuccess(
+            `Project "${colors.bold(res.name)}" created (id: ${res.id})`,
+            `mcid-cli project key show ${res.id}`,
+          );
+
+          process.stdout.write('\n');
+          process.stdout.write(
+            `${colors.bold('API Key')} (save this now; it will not be shown again):\n`,
+          );
+          process.stdout.write(`  ${colors.green(res.apiKey)}\n\n`);
+
+          const primaryUri =
+            redirectUris && redirectUris[0] ? redirectUris[0] : 'http://localhost:3000/callback';
+          const envBlock = [
+            `MCID_API_URL=${client.origin}/api`,
+            `MCID_API_KEY=${res.apiKey}`,
+            `MCID_REDIRECT_URI=${primaryUri}`,
+          ].join('\n');
+
+          if (options.envFile) {
+            let existing = '';
+            try {
+              existing = await readFile(options.envFile, 'utf8');
+            } catch {
+              // file doesn't exist
+            }
+
+            if (existing.includes('MCID_API_KEY=') && !options.force) {
+              throw new CliError(
+                `File "${options.envFile}" already contains MCID_API_KEY\n  hint: pass --force to overwrite`,
+                ExitCode.Rejected,
+              );
+            }
+
+            const newContent = existing
+              ? `${existing.trimEnd()}\n\n${envBlock}\n`
+              : `${envBlock}\n`;
+            await writeFile(options.envFile, newContent, 'utf8');
+            printSuccess(`Saved environment configuration to ${options.envFile}`);
+          } else {
+            process.stdout.write(`${colors.dim('.env configuration block:')}\n`);
+            process.stdout.write(`${envBlock}\n`);
+          }
+        } catch (err) {
+          exitWithError('project create', err);
         }
-      } catch (err) {
-        exitWithError('project create', err);
-      }
-    });
+      },
+    );
 
   // project update <project>
   projectCmd
@@ -264,23 +268,28 @@ export function registerProjectCommand(program: Command): void {
     .option('--name <name>', 'New project name')
     .option('--description <desc>', 'New description')
     .option('--profile <name>', 'Profile to use')
-    .action(async (projectIdOrName: string, options: {
-      name?: string;
-      description?: string;
-      profile?: string;
-    }) => {
-      try {
-        const client = await getClient(options.profile);
-        const resolved = await resolveProject(client, projectIdOrName);
-        await client.patch(`/admin/projects/${resolved.id}`, {
-          name: options.name,
-          description: options.description,
-        });
-        printSuccess(`Project "${resolved.name}" updated`);
-      } catch (err) {
-        exitWithError('project update', err);
-      }
-    });
+    .action(
+      async (
+        projectIdOrName: string,
+        options: {
+          name?: string;
+          description?: string;
+          profile?: string;
+        },
+      ) => {
+        try {
+          const client = await getClient(options.profile);
+          const resolved = await resolveProject(client, projectIdOrName);
+          await client.patch(`/admin/projects/${resolved.id}`, {
+            name: options.name,
+            description: options.description,
+          });
+          printSuccess(`Project "${resolved.name}" updated`);
+        } catch (err) {
+          exitWithError('project update', err);
+        }
+      },
+    );
 
   // project delete <project>
   projectCmd
@@ -306,7 +315,9 @@ export function registerProjectCommand(program: Command): void {
     });
 
   // project redirect-uri group
-  const redirectUriCmd = projectCmd.command('redirect-uri').description('Manage allowed OAuth redirect URIs');
+  const redirectUriCmd = projectCmd
+    .command('redirect-uri')
+    .description('Manage allowed OAuth redirect URIs');
 
   redirectUriCmd
     .command('list <project>')
@@ -346,7 +357,9 @@ export function registerProjectCommand(program: Command): void {
         const client = await getClient(options.profile);
         const resolved = await resolveProject(client, projectIdOrName);
         const project = await client.get<ProjectRecord>(`/admin/projects/${resolved.id}`);
-        const currentUris = project.redirectUri ? project.redirectUri.split(',').filter(Boolean) : [];
+        const currentUris = project.redirectUri
+          ? project.redirectUri.split(',').filter(Boolean)
+          : [];
 
         if (!currentUris.includes(url)) {
           currentUris.push(url);
@@ -369,7 +382,9 @@ export function registerProjectCommand(program: Command): void {
         const client = await getClient(options.profile);
         const resolved = await resolveProject(client, projectIdOrName);
         const project = await client.get<ProjectRecord>(`/admin/projects/${resolved.id}`);
-        const currentUris = project.redirectUri ? project.redirectUri.split(',').filter(Boolean) : [];
+        const currentUris = project.redirectUri
+          ? project.redirectUri.split(',').filter(Boolean)
+          : [];
         const nextUris = currentUris.filter((u) => u !== url);
 
         await client.patch(`/admin/projects/${resolved.id}/redirect-uri`, {
@@ -390,33 +405,38 @@ export function registerProjectCommand(program: Command): void {
     .option('--reveal', 'Reveal full key (if supported)')
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as JSON')
-    .action(async (projectIdOrName: string, options: { reveal?: boolean; profile?: string; json?: boolean }) => {
-      try {
-        const client = await getClient(options.profile);
-        const resolved = await resolveProject(client, projectIdOrName);
-        const keyInfo = await client.get<{
-          prefix?: string;
-          apiKeyPrefix?: string;
-          isKeyRevoked?: boolean;
-          createdAt?: string;
-        }>(`/admin/projects/${resolved.id}/api-key`);
+    .action(
+      async (
+        projectIdOrName: string,
+        options: { reveal?: boolean; profile?: string; json?: boolean },
+      ) => {
+        try {
+          const client = await getClient(options.profile);
+          const resolved = await resolveProject(client, projectIdOrName);
+          const keyInfo = await client.get<{
+            prefix?: string;
+            apiKeyPrefix?: string;
+            isKeyRevoked?: boolean;
+            createdAt?: string;
+          }>(`/admin/projects/${resolved.id}/api-key`);
 
-        if (options.json) {
-          printJson(keyInfo, options.reveal);
-          return;
+          if (options.json) {
+            printJson(keyInfo, options.reveal);
+            return;
+          }
+
+          const prefix = keyInfo.apiKeyPrefix || keyInfo.prefix || 'unknown';
+          printKeyValue({
+            Project: resolved.name,
+            Status: keyInfo.isKeyRevoked ? colors.red('revoked') : colors.green('active'),
+            Prefix: `${prefix}...`,
+            Created: formatDate(keyInfo.createdAt),
+          });
+        } catch (err) {
+          exitWithError('project key show', err);
         }
-
-        const prefix = keyInfo.apiKeyPrefix || keyInfo.prefix || 'unknown';
-        printKeyValue({
-          Project: resolved.name,
-          Status: keyInfo.isKeyRevoked ? colors.red('revoked') : colors.green('active'),
-          Prefix: `${prefix}...`,
-          Created: formatDate(keyInfo.createdAt),
-        });
-      } catch (err) {
-        exitWithError('project key show', err);
-      }
-    });
+      },
+    );
 
   keyCmd
     .command('rotate <project>')
@@ -489,7 +509,9 @@ export function registerProjectCommand(program: Command): void {
     });
 
   // project access group
-  const accessCmd = projectCmd.command('access').description('Manage project server access and permissions');
+  const accessCmd = projectCmd
+    .command('access')
+    .description('Manage project server access and permissions');
 
   accessCmd
     .command('list <project>')
@@ -512,15 +534,21 @@ export function registerProjectCommand(program: Command): void {
         printTable({
           columns: [
             { header: 'SERVER ID', key: 'serverId', format: (v) => colors.dim(String(v)) },
-            { header: 'SCOPES', key: 'scopes', format: (v) => Array.isArray(v) ? v.join(', ') : '-' },
+            {
+              header: 'SCOPES',
+              key: 'scopes',
+              format: (v) => (Array.isArray(v) ? v.join(', ') : '-'),
+            },
             {
               header: 'OPERATIONS',
               format: (_, r) => {
                 if (!r.operations) return colors.dim('defaults');
-                return Object.entries(r.operations)
-                  .filter(([, active]) => active)
-                  .map(([op]) => op)
-                  .join(', ') || colors.dim('none');
+                return (
+                  Object.entries(r.operations)
+                    .filter(([, active]) => active)
+                    .map(([op]) => op)
+                    .join(', ') || colors.dim('none')
+                );
               },
             },
           ],
@@ -537,60 +565,70 @@ export function registerProjectCommand(program: Command): void {
     .requiredOption('--scope <scopes...>', 'Scopes to grant (read_members, check_permissions)')
     .option('--operation <ops...>', 'Operations to allow (READ, SEND_MESSAGES, MANAGE_WEBHOOKS)')
     .option('--profile <name>', 'Profile to use')
-    .action(async (
-      projectIdOrName: string,
-      serverIdOrName: string,
-      options: { scope: string[]; operation?: string[]; profile?: string },
-    ) => {
-      try {
-        const client = await getClient(options.profile);
-        const resolvedProject = await resolveProject(client, projectIdOrName);
-        const resolvedServer = await resolveServer(client, serverIdOrName);
+    .action(
+      async (
+        projectIdOrName: string,
+        serverIdOrName: string,
+        options: { scope: string[]; operation?: string[]; profile?: string },
+      ) => {
+        try {
+          const client = await getClient(options.profile);
+          const resolvedProject = await resolveProject(client, projectIdOrName);
+          const resolvedServer = await resolveServer(client, serverIdOrName);
 
-        const opsObj: Record<string, boolean> = {};
-        if (options.operation) {
-          for (const op of options.operation) {
-            opsObj[op.toUpperCase()] = true;
+          const opsObj: Record<string, boolean> = {};
+          if (options.operation) {
+            for (const op of options.operation) {
+              opsObj[op.toUpperCase()] = true;
+            }
           }
+
+          await client.put(`/admin/projects/${resolvedProject.id}/servers/${resolvedServer.id}`, {
+            scopes: options.scope,
+            operations: Object.keys(opsObj).length > 0 ? opsObj : undefined,
+          });
+
+          printSuccess(
+            `Granted access for project "${resolvedProject.name}" on server "${resolvedServer.name}"`,
+          );
+        } catch (err) {
+          exitWithError('project access grant', err);
         }
-
-        await client.put(`/admin/projects/${resolvedProject.id}/servers/${resolvedServer.id}`, {
-          scopes: options.scope,
-          operations: Object.keys(opsObj).length > 0 ? opsObj : undefined,
-        });
-
-        printSuccess(
-          `Granted access for project "${resolvedProject.name}" on server "${resolvedServer.name}"`,
-        );
-      } catch (err) {
-        exitWithError('project access grant', err);
-      }
-    });
+      },
+    );
 
   accessCmd
     .command('revoke <project> <server>')
     .description('Revoke project access to a Discord server')
     .option('--yes', 'Skip confirmation')
     .option('--profile <name>', 'Profile to use')
-    .action(async (projectIdOrName: string, serverIdOrName: string, options: { yes?: boolean; profile?: string }) => {
-      try {
-        const client = await getClient(options.profile);
-        const resolvedProject = await resolveProject(client, projectIdOrName);
-        const resolvedServer = await resolveServer(client, serverIdOrName);
+    .action(
+      async (
+        projectIdOrName: string,
+        serverIdOrName: string,
+        options: { yes?: boolean; profile?: string },
+      ) => {
+        try {
+          const client = await getClient(options.profile);
+          const resolvedProject = await resolveProject(client, projectIdOrName);
+          const resolvedServer = await resolveServer(client, serverIdOrName);
 
-        if (!options.yes && process.stdin.isTTY) {
-          const ok = await promptConfirm({
-            message: `Revoke access for project "${resolvedProject.name}" on server "${resolvedServer.name}"?`,
-          });
-          if (!ok) return;
+          if (!options.yes && process.stdin.isTTY) {
+            const ok = await promptConfirm({
+              message: `Revoke access for project "${resolvedProject.name}" on server "${resolvedServer.name}"?`,
+            });
+            if (!ok) return;
+          }
+
+          await client.delete(`/admin/projects/${resolvedProject.id}/servers/${resolvedServer.id}`);
+          printSuccess(
+            `Revoked access for project "${resolvedProject.name}" on server "${resolvedServer.name}"`,
+          );
+        } catch (err) {
+          exitWithError('project access revoke', err);
         }
-
-        await client.delete(`/admin/projects/${resolvedProject.id}/servers/${resolvedServer.id}`);
-        printSuccess(`Revoked access for project "${resolvedProject.name}" on server "${resolvedServer.name}"`);
-      } catch (err) {
-        exitWithError('project access revoke', err);
-      }
-    });
+      },
+    );
 
   accessCmd
     .command('matrix')

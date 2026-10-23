@@ -5,7 +5,12 @@ export function mapApiError(
   body: unknown,
   context?: { profileName?: string; resource?: string; id?: string },
 ): CliError {
-  const b = body as { message?: unknown; errors?: unknown; retryAfter?: unknown; error?: unknown } | null;
+  const b = body as {
+    message?: unknown;
+    errors?: unknown;
+    retryAfter?: unknown;
+    error?: unknown;
+  } | null;
   const profile = context?.profileName || 'default';
   const resource = context?.resource || 'resource';
   const id = context?.id;

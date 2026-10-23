@@ -40,9 +40,7 @@ interface ChannelRecord {
 }
 
 export function registerServerCommand(program: Command): void {
-  const serverCmd = program
-    .command('server')
-    .description('Manage Discord servers and channels');
+  const serverCmd = program.command('server').description('Manage Discord servers and channels');
 
   // server list / ls
   const listAction = async (options: {
@@ -82,7 +80,8 @@ export function registerServerCommand(program: Command): void {
           },
           {
             header: 'STATUS',
-            format: (_, r) => (r.isActive !== false ? colors.green('active') : colors.red('disabled')),
+            format: (_, r) =>
+              r.isActive !== false ? colors.green('active') : colors.red('disabled'),
           },
           {
             header: 'LAST SYNC',
@@ -113,34 +112,40 @@ export function registerServerCommand(program: Command): void {
     .description('Get server details (defaults to main server if omitted)')
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as JSON')
-    .action(async (serverIdOrName: string | undefined, options: { profile?: string; json?: boolean }) => {
-      try {
-        const client = await getClient(options.profile);
-        const resolved = await resolveServer(client, serverIdOrName);
-        const server = await client.get<ServerRecord>(`/servers/${resolved.id}`, {
-          resource: 'server',
-          id: resolved.id,
-        });
+    .action(
+      async (serverIdOrName: string | undefined, options: { profile?: string; json?: boolean }) => {
+        try {
+          const client = await getClient(options.profile);
+          const resolved = await resolveServer(client, serverIdOrName);
+          const server = await client.get<ServerRecord>(`/servers/${resolved.id}`, {
+            resource: 'server',
+            id: resolved.id,
+          });
 
-        if (options.json) {
-          printJson(server);
-          return;
+          if (options.json) {
+            printJson(server);
+            return;
+          }
+
+          printKeyValue({
+            ID: server.id,
+            Name: server.name + (server.isMain ? ' [main]' : ''),
+            Status: server.isActive !== false ? colors.green('active') : colors.red('disabled'),
+            'Main Server': server.isMain ? 'yes' : 'no',
+            'Auto Sync': server.autoSyncEnabled
+              ? `enabled (every ${server.syncFrequencyHours}h)`
+              : 'disabled',
+            'Last Synced': server.lastSyncedAt
+              ? `${formatDate(server.lastSyncedAt)} (${formatAge(server.lastSyncedAt)})`
+              : 'never',
+            Created: formatDate(server.createdAt),
+            Updated: formatDate(server.updatedAt),
+          });
+        } catch (err) {
+          exitWithError('server get', err);
         }
-
-        printKeyValue({
-          ID: server.id,
-          Name: server.name + (server.isMain ? ' [main]' : ''),
-          Status: server.isActive !== false ? colors.green('active') : colors.red('disabled'),
-          'Main Server': server.isMain ? 'yes' : 'no',
-          'Auto Sync': server.autoSyncEnabled ? `enabled (every ${server.syncFrequencyHours}h)` : 'disabled',
-          'Last Synced': server.lastSyncedAt ? `${formatDate(server.lastSyncedAt)} (${formatAge(server.lastSyncedAt)})` : 'never',
-          Created: formatDate(server.createdAt),
-          Updated: formatDate(server.updatedAt),
-        });
-      } catch (err) {
-        exitWithError('server get', err);
-      }
-    });
+      },
+    );
 
   // server add <guild-id>
   serverCmd
@@ -247,32 +252,34 @@ export function registerServerCommand(program: Command): void {
     .description('List channels for a server')
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as JSON')
-    .action(async (serverIdOrName: string | undefined, options: { profile?: string; json?: boolean }) => {
-      try {
-        const client = await getClient(options.profile);
-        const resolved = await resolveServer(client, serverIdOrName);
-        const channels = await client.get<ChannelRecord[]>(
-          `/admin/servers/${resolved.id}/channels`,
-        );
+    .action(
+      async (serverIdOrName: string | undefined, options: { profile?: string; json?: boolean }) => {
+        try {
+          const client = await getClient(options.profile);
+          const resolved = await resolveServer(client, serverIdOrName);
+          const channels = await client.get<ChannelRecord[]>(
+            `/admin/servers/${resolved.id}/channels`,
+          );
 
-        if (options.json) {
-          printJson(channels);
-          return;
+          if (options.json) {
+            printJson(channels);
+            return;
+          }
+
+          printTable({
+            columns: [
+              { header: 'ID', key: 'id', format: (v) => colors.dim(String(v)) },
+              { header: 'NAME', key: 'name', format: (v) => colors.bold(String(v)) },
+              { header: 'CATEGORY', key: 'categoryName', format: (v) => String(v || '-') },
+              { header: 'TYPE', key: 'type', format: (v) => String(v ?? '-') },
+            ],
+            data: channels as unknown as Record<string, unknown>[],
+          });
+        } catch (err) {
+          exitWithError('server channels', err);
         }
-
-        printTable({
-          columns: [
-            { header: 'ID', key: 'id', format: (v) => colors.dim(String(v)) },
-            { header: 'NAME', key: 'name', format: (v) => colors.bold(String(v)) },
-            { header: 'CATEGORY', key: 'categoryName', format: (v) => String(v || '-') },
-            { header: 'TYPE', key: 'type', format: (v) => String(v ?? '-') },
-          ],
-          data: channels as unknown as Record<string, unknown>[],
-        });
-      } catch (err) {
-        exitWithError('server channels', err);
-      }
-    });
+      },
+    );
 
   // server channel <server> <channel>
   serverCmd
@@ -281,50 +288,52 @@ export function registerServerCommand(program: Command): void {
     .option('--messages <n>', 'Number of recent messages to fetch')
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as JSON')
-    .action(async (
-      serverArg: string | undefined,
-      channelId: string,
-      options: { messages?: string; profile?: string; json?: boolean },
-    ) => {
-      try {
-        const client = await getClient(options.profile);
-        const resolved = await resolveServer(client, serverArg);
-        const channel = await client.get<ChannelRecord>(
-          `/admin/servers/${resolved.id}/channels/${channelId}`,
-        );
-
-        let messages: unknown[] = [];
-        if (options.messages) {
-          messages = await client.get(
-            `/admin/servers/${resolved.id}/channels/${channelId}/messages?limit=${options.messages}`,
+    .action(
+      async (
+        serverArg: string | undefined,
+        channelId: string,
+        options: { messages?: string; profile?: string; json?: boolean },
+      ) => {
+        try {
+          const client = await getClient(options.profile);
+          const resolved = await resolveServer(client, serverArg);
+          const channel = await client.get<ChannelRecord>(
+            `/admin/servers/${resolved.id}/channels/${channelId}`,
           );
-        }
 
-        if (options.json) {
-          printJson({ channel, messages });
-          return;
-        }
-
-        printKeyValue({
-          ID: channel.id,
-          Name: channel.name,
-          Category: channel.categoryName || '-',
-          Type: channel.type ?? '-',
-        });
-
-        if (messages.length > 0) {
-          process.stdout.write(`\n${colors.bold('Recent Messages:')}\n`);
-          for (const msg of messages as Record<string, unknown>[]) {
-            const author = (msg.author as { username?: string })?.username || 'unknown';
-            process.stdout.write(
-              `  [${colors.dim(formatAge(msg.createdAt as string))}] ${colors.cyan(`@${author}`)}: ${msg.content}\n`,
+          let messages: unknown[] = [];
+          if (options.messages) {
+            messages = await client.get(
+              `/admin/servers/${resolved.id}/channels/${channelId}/messages?limit=${options.messages}`,
             );
           }
+
+          if (options.json) {
+            printJson({ channel, messages });
+            return;
+          }
+
+          printKeyValue({
+            ID: channel.id,
+            Name: channel.name,
+            Category: channel.categoryName || '-',
+            Type: channel.type ?? '-',
+          });
+
+          if (messages.length > 0) {
+            process.stdout.write(`\n${colors.bold('Recent Messages:')}\n`);
+            for (const msg of messages as Record<string, unknown>[]) {
+              const author = (msg.author as { username?: string })?.username || 'unknown';
+              process.stdout.write(
+                `  [${colors.dim(formatAge(msg.createdAt as string))}] ${colors.cyan(`@${author}`)}: ${msg.content}\n`,
+              );
+            }
+          }
+        } catch (err) {
+          exitWithError('server channel', err);
         }
-      } catch (err) {
-        exitWithError('server channel', err);
-      }
-    });
+      },
+    );
 }
 
 async function getClient(profileFlag?: string): Promise<ApiClient> {

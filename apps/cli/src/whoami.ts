@@ -53,9 +53,7 @@ export async function whoami(options: WhoamiOptions, deps: WhoamiDeps): Promise<
   }
 
   const me = parseAdminMe(body);
-  const authSource = session.isEnvToken
-    ? '(via MCID_TOKEN env var)'
-    : `on ${profileName}`;
+  const authSource = session.isEnvToken ? '(via MCID_TOKEN env var)' : `on ${profileName}`;
 
   deps.out(`Logged in as ${adminDisplayName(me)} (${me.username}) ${authSource}`);
   deps.out(`MCID: ${session.baseUrl}`);
