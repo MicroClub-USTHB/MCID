@@ -364,8 +364,9 @@ export function registerDevCommand(program: Command): void {
           const snowflake = /^\d{17,20}$/;
           let resolvedServer: { id: string; name: string };
           let resolvedMember: { discordId: string; username: string };
-          if (options.server && snowflake.test(options.server) && snowflake.test(memberArg)) {
-            resolvedServer = { id: options.server, name: options.server };
+          const explicitServer = options.server;
+          if (explicitServer && snowflake.test(explicitServer) && snowflake.test(memberArg)) {
+            resolvedServer = { id: explicitServer, name: explicitServer };
             resolvedMember = { discordId: memberArg, username: memberArg };
           } else {
             const client = await getAdminClient(options.profile);
