@@ -69,17 +69,27 @@ export function printBanner(): void {
  */
 export async function launchInteractiveLauncher(): Promise<string> {
   printBanner();
-  process.stdout.write(
-    ` ${colors.dim('Micro Club USTHB Identity & Admin Terminal')}\n\n`,
-  );
+  process.stdout.write(` ${colors.dim('Micro Club USTHB Identity & Admin Terminal')}\n\n`);
 
   const choices = [
-    { name: 'Projects       — Manage apps, API keys, redirect URIs, and access', value: 'project list' },
-    { name: 'Servers & Sync — Inspect Discord servers, channels, and run sync', value: 'server list' },
-    { name: 'Members        — Search members, inspect roles and permissions', value: 'member list' },
+    {
+      name: 'Projects       — Manage apps, API keys, redirect URIs, and access',
+      value: 'project list',
+    },
+    {
+      name: 'Servers & Sync — Inspect Discord servers, channels, and run sync',
+      value: 'server list',
+    },
+    {
+      name: 'Members        — Search members, inspect roles and permissions',
+      value: 'member list',
+    },
     { name: 'Roles          — Inspect Discord roles and role inheritance', value: 'role list' },
     { name: 'Webhooks       — Manage and test Inbound Webhook forms', value: 'webhook list' },
-    { name: 'Admin Access   — Explain permissions, role catalog and grants', value: 'access catalog' },
+    {
+      name: 'Admin Access   — Explain permissions, role catalog and grants',
+      value: 'access catalog',
+    },
     { name: 'System Status  — Service health and server sync status overview', value: 'status' },
     { name: 'Doctor         — Check local environment and connectivity', value: 'doctor' },
     { name: 'Whoami         — Current active profile and authenticated member', value: 'whoami' },

@@ -1,3 +1,4 @@
+/* eslint-disable no-control-regex */
 import { colors } from './tui.js';
 
 export type OutputFormat = 'table' | 'json' | 'csv' | 'quiet';
@@ -91,7 +92,7 @@ export function printTable<T extends Record<string, unknown>>(options: {
     const rowLine = columns
       .map((col, i) => {
         const rawVal = col.key ? row[col.key as keyof T] : undefined;
-        let formatted = col.format ? col.format(rawVal, row) : String(rawVal ?? '');
+        const formatted = col.format ? col.format(rawVal, row) : String(rawVal ?? '');
         const plain = formatted.replace(/\x1b\[[0-9;]*m/g, '');
         const width = widths[i] ?? plain.length;
         const padSize = Math.max(0, width - plain.length);
@@ -127,10 +128,7 @@ export function printKeyValue(data: Record<string, unknown>): void {
   }
 }
 
-export function toCsv(
-  rows: Record<string, unknown>[],
-  columns?: string[],
-): string {
+export function toCsv(rows: Record<string, unknown>[], columns?: string[]): string {
   if (rows.length === 0) return '';
   const firstRow = rows[0];
   const cols = columns ?? (firstRow ? Object.keys(firstRow) : []);

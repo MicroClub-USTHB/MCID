@@ -5,11 +5,68 @@ All notable changes to mcid-cli are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.0] - 2026-10-23
 
-### Changed
+MCID CLI 1.0 covers the full MCID MVP directly from the terminal.
 
-- The page the browser shows after `mcid-cli login` uses the Micro Club design system (the mcoli-ui `primary` theme) and follows the system's light or dark setting.
+### Added
+
+- **Foundation & Grammar:**
+  - Zero-dependency interactive terminal UI launcher with arrow-key navigation (inspired by GLMproxy).
+  - Consistent grammar: `mcid <noun> <verb> [args] [flags]` with singular nouns and standard verbs (`list`/`ls`, `get`, `create`, `update`, `delete`/`rm`).
+  - Output formats: formatted tables with dimmed IDs, key-value cards, JSON (`--json`), CSV (`-o csv`), and quiet ID output (`-q, --quiet`).
+  - Resource resolvers: match by ID, slug, or case-insensitive name; members match `@username` or Discord snowflake ID; `--server` defaults to main server.
+  - Interactive confirmations for destructive actions; `--yes` skips confirmation. Non-TTY environments exit with code 64 unless `--yes` is passed.
+  - CI authentication via `MCID_TOKEN` and `MCID_API_URL` environment variables.
+  - Diagnostics command `mcid doctor` testing Node version, config permissions, keychain crypto store, and API health.
+  - Autocompletion scripts for `bash`, `zsh`, and `fish` via `mcid completion <shell>`.
+  - Browser dashboard launcher `mcid open [area] [id]`.
+
+- **Project Management:**
+  - `project list`, `project get`, `project create` with interactive wizard and `.env` block generation.
+  - `project update`, `project delete`.
+  - `project redirect-uri list|add|remove`.
+  - `project key show`, `project key rotate`, `project key revoke`, `project key restore`.
+  - `project access list|grant|revoke|matrix|log`.
+
+- **Servers & Sync:**
+  - `server list`, `server get`, `server add`, `server update`, `server enable`, `server disable`, `server delete`.
+  - `server channels`, `server channel`.
+  - `sync run` with `--wait` live progress indicator and counters.
+  - `sync status`, `sync logs`, `sync changes`.
+
+- **Members, Roles & Permissions:**
+  - `member list`, `member list --cross-server`, `member get`, `member permissions`, `member export`.
+  - `role list`, `role get`, `role permissions list|add|remove` with impact previews.
+  - `role inheritance list|set`.
+
+- **Admin Access:**
+  - `access catalog`: resources and levels.
+  - `access explain <member>`: detailed access levels and sources.
+  - `access roles`: role-by-resource matrix.
+  - `access role-set`, `access member-get`, `access member-set`, `access member-unset`, `access overrides`.
+
+- **Inbound Webhooks:**
+  - `webhook send` with local schema check, HMAC-SHA256 signature, `--example`, and `--print-curl`.
+  - `webhook submissions`, `webhook submission`, `webhook submissions-export`.
+  - `webhook watch`: live submission streaming (`tail -f` and NDJSON).
+  - `webhook docs`: generate and export integration markdown docs.
+  - `webhook settings get|set`, `webhook readable`.
+  - `schema preview`: server-side validation and docs preview.
+
+- **Ops & Monitoring:**
+  - `status`: one-screen health check for API, DB, Redis, Discord, and server sync.
+  - `monitor usage`, `monitor auth-failures`.
+  - `audit list` with continuous streaming (`--follow`), `audit export`.
+  - `stats members`, `stats growth` with terminal ASCII sparkline, `stats roles`, `stats servers`, `stats overlap`, `stats export`.
+  - `settings get`, `settings set`, `settings reset`.
+  - `discord-webhook list|get|delete`.
+
+- **Dev Commands:**
+  - `dev sso`: end-to-end SSO authorization flow testing with local PKCE listener and token exchange.
+  - `dev token-validate`, `dev token-refresh`.
+  - `dev check`: check permissions for member using project API key.
+  - `dev env`: print or write project environment block.
 
 ## [0.1.0] - 2026-10-16
 

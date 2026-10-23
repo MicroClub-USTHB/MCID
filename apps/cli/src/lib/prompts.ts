@@ -149,9 +149,13 @@ export async function promptInput(options: PromptInputOptions): Promise<string> 
   let errorMsg = '';
 
   const render = () => {
-    process.stdout.write(`\r\x1b[2K${question(message)}${def ? ` ${DIM}(${def})${RESET}` : ''} ${buf}`);
+    process.stdout.write(
+      `\r\x1b[2K${question(message)}${def ? ` ${DIM}(${def})${RESET}` : ''} ${buf}`,
+    );
     if (errorMsg) {
-      process.stdout.write(`\n\x1b[2K  ${RED}✗ ${errorMsg}${RESET}\x1b[1A\r\x1b[${message.length + (def ? def.length + 3 : 0) + buf.length + 4}C`);
+      process.stdout.write(
+        `\n\x1b[2K  ${RED}✗ ${errorMsg}${RESET}\x1b[1A\r\x1b[${message.length + (def ? def.length + 3 : 0) + buf.length + 4}C`,
+      );
     }
   };
 
@@ -179,7 +183,13 @@ export async function promptInput(options: PromptInputOptions): Promise<string> 
           errorMsg = '';
           render();
         }
-      } else if (key.sequence && !key.ctrl && !key.meta && key.sequence.length === 1 && key.sequence.charCodeAt(0) >= 32) {
+      } else if (
+        key.sequence &&
+        !key.ctrl &&
+        !key.meta &&
+        key.sequence.length === 1 &&
+        key.sequence.charCodeAt(0) >= 32
+      ) {
         buf += key.sequence;
         errorMsg = '';
         render();

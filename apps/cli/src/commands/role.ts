@@ -4,9 +4,6 @@ import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
 import { ApiClient } from '../lib/client.js';
 import {
-  formatAge,
-  formatDate,
-  printError,
   printJson,
   printKeyValue,
   printQuiet,
@@ -110,34 +107,38 @@ export function registerRoleCommand(program: Command): void {
     .option('--server <server>', 'Discord server (defaults to main server)')
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as JSON')
-    .action(async (roleArg: string, options: { server?: string; profile?: string; json?: boolean }) => {
-      try {
-        const client = await getClient(options.profile);
-        const resolvedServer = await resolveServer(client, options.server);
-        const resolvedRole = await resolveRole(client, resolvedServer.id, roleArg);
+    .action(
+      async (roleArg: string, options: { server?: string; profile?: string; json?: boolean }) => {
+        try {
+          const client = await getClient(options.profile);
+          const resolvedServer = await resolveServer(client, options.server);
+          const resolvedRole = await resolveRole(client, resolvedServer.id, roleArg);
 
-        const permRes = await client.get<{ permissions: RolePermissionItem[] }>(
-          `/permissions/admin/servers/${encodeURIComponent(resolvedServer.id)}/roles/${encodeURIComponent(resolvedRole.id)}/permissions`,
-        ).catch(() => ({ permissions: [] }));
+          const permRes = await client
+            .get<{ permissions: RolePermissionItem[] }>(
+              `/permissions/admin/servers/${encodeURIComponent(resolvedServer.id)}/roles/${encodeURIComponent(resolvedRole.id)}/permissions`,
+            )
+            .catch(() => ({ permissions: [] }));
 
-        if (options.json) {
-          printJson({ role: resolvedRole, permissions: permRes.permissions });
-          return;
+          if (options.json) {
+            printJson({ role: resolvedRole, permissions: permRes.permissions });
+            return;
+          }
+
+          printKeyValue({
+            ID: resolvedRole.id,
+            Name: resolvedRole.name,
+            Server: `${resolvedServer.name} (${resolvedServer.id})`,
+            'Assigned Permissions':
+              permRes.permissions.length > 0
+                ? permRes.permissions.map((p) => p.key).join(', ')
+                : colors.dim('none'),
+          });
+        } catch (err) {
+          exitWithError('role get', err);
         }
-
-        printKeyValue({
-          ID: resolvedRole.id,
-          Name: resolvedRole.name,
-          Server: `${resolvedServer.name} (${resolvedServer.id})`,
-          'Assigned Permissions':
-            permRes.permissions.length > 0
-              ? permRes.permissions.map((p) => p.key).join(', ')
-              : colors.dim('none'),
-        });
-      } catch (err) {
-        exitWithError('role get', err);
-      }
-    });
+      },
+    );
 
   // role permissions group
   const permCmd = roleCmd.command('permissions').description('Manage role permissions');
@@ -149,39 +150,41 @@ export function registerRoleCommand(program: Command): void {
     .option('--server <server>', 'Discord server (defaults to main server)')
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as JSON')
-    .action(async (roleArg: string, options: { server?: string; profile?: string; json?: boolean }) => {
-      try {
-        const client = await getClient(options.profile);
-        const resolvedServer = await resolveServer(client, options.server);
-        const resolvedRole = await resolveRole(client, resolvedServer.id, roleArg);
+    .action(
+      async (roleArg: string, options: { server?: string; profile?: string; json?: boolean }) => {
+        try {
+          const client = await getClient(options.profile);
+          const resolvedServer = await resolveServer(client, options.server);
+          const resolvedRole = await resolveRole(client, resolvedServer.id, roleArg);
 
-        const res = await client.get<{ permissions: RolePermissionItem[] }>(
-          `/permissions/admin/servers/${encodeURIComponent(resolvedServer.id)}/roles/${encodeURIComponent(resolvedRole.id)}/permissions`,
-        );
+          const res = await client.get<{ permissions: RolePermissionItem[] }>(
+            `/permissions/admin/servers/${encodeURIComponent(resolvedServer.id)}/roles/${encodeURIComponent(resolvedRole.id)}/permissions`,
+          );
 
-        const list = res.permissions || [];
-        if (options.json) {
-          printJson(list);
-          return;
+          const list = res.permissions || [];
+          if (options.json) {
+            printJson(list);
+            return;
+          }
+
+          if (list.length === 0) {
+            process.stdout.write(colors.dim('No permissions assigned to this role.\n'));
+            return;
+          }
+
+          printTable({
+            columns: [
+              { header: 'ID', key: 'id', format: (v) => colors.dim(String(v)) },
+              { header: 'KEY', key: 'key', format: (v) => colors.bold(String(v)) },
+              { header: 'DESCRIPTION', key: 'description', format: (v) => String(v || '-') },
+            ],
+            data: list as unknown as Record<string, unknown>[],
+          });
+        } catch (err) {
+          exitWithError('role permissions list', err);
         }
-
-        if (list.length === 0) {
-          process.stdout.write(colors.dim('No permissions assigned to this role.\n'));
-          return;
-        }
-
-        printTable({
-          columns: [
-            { header: 'ID', key: 'id', format: (v) => colors.dim(String(v)) },
-            { header: 'KEY', key: 'key', format: (v) => colors.bold(String(v)) },
-            { header: 'DESCRIPTION', key: 'description', format: (v) => String(v || '-') },
-          ],
-          data: list as unknown as Record<string, unknown>[],
-        });
-      } catch (err) {
-        exitWithError('role permissions list', err);
-      }
-    });
+      },
+    );
 
   permCmd
     .command('add <role> <permissions...>')
@@ -190,67 +193,73 @@ export function registerRoleCommand(program: Command): void {
     .option('--yes', 'Skip confirmation prompt')
     .option('--server <server>', 'Discord server (defaults to main server)')
     .option('--profile <name>', 'Profile to use')
-    .action(async (
-      roleArg: string,
-      permArgs: string[],
-      options: { dryRun?: boolean; yes?: boolean; server?: string; profile?: string },
-    ) => {
-      try {
-        const client = await getClient(options.profile);
-        const resolvedServer = await resolveServer(client, options.server);
-        const resolvedRole = await resolveRole(client, resolvedServer.id, roleArg);
+    .action(
+      async (
+        roleArg: string,
+        permArgs: string[],
+        options: { dryRun?: boolean; yes?: boolean; server?: string; profile?: string },
+      ) => {
+        try {
+          const client = await getClient(options.profile);
+          const resolvedServer = await resolveServer(client, options.server);
+          const resolvedRole = await resolveRole(client, resolvedServer.id, roleArg);
 
-        // Parse permission IDs (numbers)
-        const permissionIds = permArgs.map((p) => {
-          const n = Number(p);
-          if (isNaN(n)) throw new CliError(`Permission identifier must be an integer ID, got "${p}"`, ExitCode.Usage);
-          return n;
-        });
-
-        // 1. Impact preview
-        const preview = await client.post<ImpactPreviewResponse>(
-          `/permissions/admin/servers/${encodeURIComponent(resolvedServer.id)}/roles/${encodeURIComponent(resolvedRole.id)}/impact`,
-          {
-            permissionIds,
-            action: 'add',
-          },
-        );
-
-        process.stdout.write(
-          `${colors.cyan('Impact Preview:')} this change will affect ${colors.bold(String(preview.affectedMembersCount))} member(s).\n`,
-        );
-
-        if (options.dryRun) {
-          process.stdout.write(colors.dim('Dry run complete. No modifications made.\n'));
-          return;
-        }
-
-        // 2. Confirmation
-        if (!options.yes && process.stdin.isTTY) {
-          const ok = await promptConfirm({
-            message: `Apply ${permissionIds.length} permission(s) to role "${resolvedRole.name}"?`,
+          // Parse permission IDs (numbers)
+          const permissionIds = permArgs.map((p) => {
+            const n = Number(p);
+            if (isNaN(n))
+              throw new CliError(
+                `Permission identifier must be an integer ID, got "${p}"`,
+                ExitCode.Usage,
+              );
+            return n;
           });
-          if (!ok) {
-            process.stdout.write('Cancelled.\n');
+
+          // 1. Impact preview
+          const preview = await client.post<ImpactPreviewResponse>(
+            `/permissions/admin/servers/${encodeURIComponent(resolvedServer.id)}/roles/${encodeURIComponent(resolvedRole.id)}/impact`,
+            {
+              permissionIds,
+              action: 'add',
+            },
+          );
+
+          process.stdout.write(
+            `${colors.cyan('Impact Preview:')} this change will affect ${colors.bold(String(preview.affectedMembersCount))} member(s).\n`,
+          );
+
+          if (options.dryRun) {
+            process.stdout.write(colors.dim('Dry run complete. No modifications made.\n'));
             return;
           }
+
+          // 2. Confirmation
+          if (!options.yes && process.stdin.isTTY) {
+            const ok = await promptConfirm({
+              message: `Apply ${permissionIds.length} permission(s) to role "${resolvedRole.name}"?`,
+            });
+            if (!ok) {
+              process.stdout.write('Cancelled.\n');
+              return;
+            }
+          }
+
+          // 3. Apply
+          await client.post(
+            `/permissions/admin/servers/${encodeURIComponent(resolvedServer.id)}/roles/${encodeURIComponent(resolvedRole.id)}/permissions`,
+            {
+              permissionIds,
+            },
+          );
+
+          printSuccess(
+            `Added ${permissionIds.length} permission(s) to role "${resolvedRole.name}" on ${resolvedServer.name}`,
+          );
+        } catch (err) {
+          exitWithError('role permissions add', err);
         }
-
-        // 3. Apply
-        await client.post(
-          `/permissions/admin/servers/${encodeURIComponent(resolvedServer.id)}/roles/${encodeURIComponent(resolvedRole.id)}/permissions`,
-          {
-            permissionIds,
-          },
-        );
-
-        printSuccess(
-          `Added ${permissionIds.length} permission(s) to role "${resolvedRole.name}" on ${resolvedServer.name}`,
-        );
-      } catch (err) {
-        exitWithError('role permissions add', err);
-      }
-    });
+      },
+    );
 
   permCmd
     .command('remove <role> <permissions...>')
@@ -259,65 +268,73 @@ export function registerRoleCommand(program: Command): void {
     .option('--yes', 'Skip confirmation prompt')
     .option('--server <server>', 'Discord server (defaults to main server)')
     .option('--profile <name>', 'Profile to use')
-    .action(async (
-      roleArg: string,
-      permArgs: string[],
-      options: { dryRun?: boolean; yes?: boolean; server?: string; profile?: string },
-    ) => {
-      try {
-        const client = await getClient(options.profile);
-        const resolvedServer = await resolveServer(client, options.server);
-        const resolvedRole = await resolveRole(client, resolvedServer.id, roleArg);
+    .action(
+      async (
+        roleArg: string,
+        permArgs: string[],
+        options: { dryRun?: boolean; yes?: boolean; server?: string; profile?: string },
+      ) => {
+        try {
+          const client = await getClient(options.profile);
+          const resolvedServer = await resolveServer(client, options.server);
+          const resolvedRole = await resolveRole(client, resolvedServer.id, roleArg);
 
-        const permissionIds = permArgs.map((p) => {
-          const n = Number(p);
-          if (isNaN(n)) throw new CliError(`Permission identifier must be an integer ID, got "${p}"`, ExitCode.Usage);
-          return n;
-        });
-
-        // 1. Impact preview
-        const preview = await client.post<ImpactPreviewResponse>(
-          `/permissions/admin/servers/${encodeURIComponent(resolvedServer.id)}/roles/${encodeURIComponent(resolvedRole.id)}/impact`,
-          {
-            permissionIds,
-            action: 'remove',
-          },
-        );
-
-        process.stdout.write(
-          `${colors.cyan('Impact Preview:')} this removal will affect ${colors.bold(String(preview.affectedMembersCount))} member(s).\n`,
-        );
-
-        if (options.dryRun) {
-          process.stdout.write(colors.dim('Dry run complete. No modifications made.\n'));
-          return;
-        }
-
-        // 2. Confirmation
-        if (!options.yes && process.stdin.isTTY) {
-          const ok = await promptConfirm({
-            message: `Remove ${permissionIds.length} permission(s) from role "${resolvedRole.name}"?`,
+          const permissionIds = permArgs.map((p) => {
+            const n = Number(p);
+            if (isNaN(n))
+              throw new CliError(
+                `Permission identifier must be an integer ID, got "${p}"`,
+                ExitCode.Usage,
+              );
+            return n;
           });
-          if (!ok) return;
-        }
 
-        // 3. Apply each removal
-        for (const pid of permissionIds) {
-          await client.delete(
-            `/permissions/admin/servers/${encodeURIComponent(resolvedServer.id)}/roles/${encodeURIComponent(resolvedRole.id)}/permissions/${pid}`,
+          // 1. Impact preview
+          const preview = await client.post<ImpactPreviewResponse>(
+            `/permissions/admin/servers/${encodeURIComponent(resolvedServer.id)}/roles/${encodeURIComponent(resolvedRole.id)}/impact`,
+            {
+              permissionIds,
+              action: 'remove',
+            },
           );
-        }
 
-        printSuccess(
-          `Removed ${permissionIds.length} permission(s) from role "${resolvedRole.name}" on ${resolvedServer.name}`,
-        );
-      } catch (err) {
-        exitWithError('role permissions remove', err);
-      }
-    });
+          process.stdout.write(
+            `${colors.cyan('Impact Preview:')} this removal will affect ${colors.bold(String(preview.affectedMembersCount))} member(s).\n`,
+          );
+
+          if (options.dryRun) {
+            process.stdout.write(colors.dim('Dry run complete. No modifications made.\n'));
+            return;
+          }
+
+          // 2. Confirmation
+          if (!options.yes && process.stdin.isTTY) {
+            const ok = await promptConfirm({
+              message: `Remove ${permissionIds.length} permission(s) from role "${resolvedRole.name}"?`,
+            });
+            if (!ok) return;
+          }
+
+          // 3. Apply each removal
+          for (const pid of permissionIds) {
+            await client.delete(
+              `/permissions/admin/servers/${encodeURIComponent(resolvedServer.id)}/roles/${encodeURIComponent(resolvedRole.id)}/permissions/${pid}`,
+            );
+          }
+
+          printSuccess(
+            `Removed ${permissionIds.length} permission(s) from role "${resolvedRole.name}" on ${resolvedServer.name}`,
+          );
+        } catch (err) {
+          exitWithError('role permissions remove', err);
+        }
+      },
+    );
 
   // role inheritance group
-  const inheritCmd = roleCmd.command('inheritance').description('Manage role permission inheritance rules');
+  const inheritCmd = roleCmd
+    .command('inheritance')
+    .description('Manage role permission inheritance rules');
 
   inheritCmd
     .command('list')
@@ -348,7 +365,8 @@ export function registerRoleCommand(program: Command): void {
             { header: 'TARGET SCOPE', key: 'targetScope', format: (v) => String(v) },
             {
               header: 'STATUS',
-              format: (_, r) => (r.enabled !== false ? colors.green('enabled') : colors.dim('disabled')),
+              format: (_, r) =>
+                r.enabled !== false ? colors.green('enabled') : colors.dim('disabled'),
             },
           ],
           data: rules,
@@ -365,27 +383,34 @@ export function registerRoleCommand(program: Command): void {
     .option('--target-servers <servers...>', 'Selected target server IDs')
     .option('--server <server>', 'Discord server for context')
     .option('--profile <name>', 'Profile to use')
-    .action(async (
-      sourceRoleArg: string,
-      options: { targetScope: 'all' | 'selected'; targetServers?: string[]; server?: string; profile?: string },
-    ) => {
-      try {
-        const client = await getClient(options.profile);
-        const resolvedServer = await resolveServer(client, options.server);
-        const resolvedRole = await resolveRole(client, resolvedServer.id, sourceRoleArg);
+    .action(
+      async (
+        sourceRoleArg: string,
+        options: {
+          targetScope: 'all' | 'selected';
+          targetServers?: string[];
+          server?: string;
+          profile?: string;
+        },
+      ) => {
+        try {
+          const client = await getClient(options.profile);
+          const resolvedServer = await resolveServer(client, options.server);
+          const resolvedRole = await resolveRole(client, resolvedServer.id, sourceRoleArg);
 
-        await client.post('/permissions/inheritance-rules', {
-          sourceRoleId: resolvedRole.id,
-          targetScope: options.targetScope,
-          targetServerIds: options.targetServers,
-          enabled: true,
-        });
+          await client.post('/permissions/inheritance-rules', {
+            sourceRoleId: resolvedRole.id,
+            targetScope: options.targetScope,
+            targetServerIds: options.targetServers,
+            enabled: true,
+          });
 
-        printSuccess(`Inheritance rule configured for source role "${resolvedRole.name}"`);
-      } catch (err) {
-        exitWithError('role inheritance set', err);
-      }
-    });
+          printSuccess(`Inheritance rule configured for source role "${resolvedRole.name}"`);
+        } catch (err) {
+          exitWithError('role inheritance set', err);
+        }
+      },
+    );
 }
 
 async function getClient(profileFlag?: string): Promise<ApiClient> {

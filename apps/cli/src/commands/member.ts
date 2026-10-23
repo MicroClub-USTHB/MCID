@@ -78,7 +78,8 @@ export function registerMemberCommand(program: Command): void {
             {
               header: 'MEMBERSHIPS',
               format: (_, r) => {
-                const sList = r['servers'] as { serverName?: string; serverId?: string }[] | undefined;
+                const sList = r['servers'] as
+                  { serverName?: string; serverId?: string }[] | undefined;
                 return sList ? sList.map((s) => s.serverName || s.serverId).join(', ') : '-';
               },
             },
@@ -96,13 +97,11 @@ export function registerMemberCommand(program: Command): void {
         for (const r of options.role) params.append('roleId', r);
       }
 
-      const res = await client.get<{ data?: MemberListItem[]; members?: MemberListItem[] } | MemberListItem[]>(
-        `/admin/members?${params.toString()}`,
-      );
+      const res = await client.get<
+        { data?: MemberListItem[]; members?: MemberListItem[] } | MemberListItem[]
+      >(`/admin/members?${params.toString()}`);
 
-      const members: MemberListItem[] = Array.isArray(res)
-        ? res
-        : (res.data || res.members || []);
+      const members: MemberListItem[] = Array.isArray(res) ? res : res.data || res.members || [];
 
       if (options.quiet) {
         printQuiet(members.map((m) => m.discordId || m.id));
@@ -121,9 +120,15 @@ export function registerMemberCommand(program: Command): void {
 
       printTable({
         columns: [
-          { header: 'DISCORD ID', format: (_, r) => colors.dim(String(r['discordId'] || r['id'] || '')) },
+          {
+            header: 'DISCORD ID',
+            format: (_, r) => colors.dim(String(r['discordId'] || r['id'] || '')),
+          },
           { header: 'USERNAME', key: 'username', format: (v) => colors.bold(`@${v}`) },
-          { header: 'NICKNAME', format: (_, r) => String(r['nickname'] || r['displayName'] || '-') },
+          {
+            header: 'NICKNAME',
+            format: (_, r) => String(r['nickname'] || r['displayName'] || '-'),
+          },
           {
             header: 'ROLES',
             format: (_, r) => {
@@ -133,7 +138,11 @@ export function registerMemberCommand(program: Command): void {
                 : colors.dim('none');
             },
           },
-          { header: 'JOINED', key: 'joinedAt', format: (v) => colors.dim(formatAge(typeof v === 'string' ? v : undefined)) },
+          {
+            header: 'JOINED',
+            key: 'joinedAt',
+            format: (v) => colors.dim(formatAge(typeof v === 'string' ? v : undefined)),
+          },
         ],
         data: members as unknown as Record<string, unknown>[],
       });
@@ -203,9 +212,13 @@ export function registerMemberCommand(program: Command): void {
           process.stdout.write(colors.dim('  No server memberships found.\n'));
         } else {
           for (const s of serverList) {
-            process.stdout.write(`  ${colors.cyan('●')} ${colors.bold(s.serverName || s.serverId)}\n`);
+            process.stdout.write(
+              `  ${colors.cyan('●')} ${colors.bold(s.serverName || s.serverId)}\n`,
+            );
             if (s.joinedAt) {
-              process.stdout.write(`    Joined: ${formatDate(s.joinedAt)} (${formatAge(s.joinedAt)})\n`);
+              process.stdout.write(
+                `    Joined: ${formatDate(s.joinedAt)} (${formatAge(s.joinedAt)})\n`,
+              );
             }
             const rolesStr =
               s.roles && s.roles.length > 0
@@ -227,56 +240,63 @@ export function registerMemberCommand(program: Command): void {
     .option('--server <server>', 'Server to evaluate (defaults to main server)')
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as JSON')
-    .action(async (memberArg: string, options: { server?: string; profile?: string; json?: boolean }) => {
-      try {
-        const client = await getClient(options.profile);
-        const resolvedServer = await resolveServer(client, options.server);
-        const resolvedMember = await resolveMember(client, memberArg);
+    .action(
+      async (memberArg: string, options: { server?: string; profile?: string; json?: boolean }) => {
+        try {
+          const client = await getClient(options.profile);
+          const resolvedServer = await resolveServer(client, options.server);
+          const resolvedMember = await resolveMember(client, memberArg);
 
-        const permissions = await client.get<{
-          permissions: {
-            name: string;
-            code?: string;
-            inheritedFrom?: string;
-            sourceRole?: string;
-          }[];
-        }>(`/permissions/${encodeURIComponent(resolvedServer.id)}/${encodeURIComponent(resolvedMember.discordId)}`);
+          const permissions = await client.get<{
+            permissions: {
+              name: string;
+              code?: string;
+              inheritedFrom?: string;
+              sourceRole?: string;
+            }[];
+          }>(
+            `/permissions/${encodeURIComponent(resolvedServer.id)}/${encodeURIComponent(resolvedMember.discordId)}`,
+          );
 
-        if (options.json) {
-          printJson(permissions);
-          return;
-        }
+          if (options.json) {
+            printJson(permissions);
+            return;
+          }
 
-        const list = permissions.permissions || [];
-        process.stdout.write(
-          `Resolved permissions for ${colors.bold(`@${resolvedMember.username}`)} on ${colors.bold(resolvedServer.name)}:\n\n`,
-        );
+          const list = permissions.permissions || [];
+          process.stdout.write(
+            `Resolved permissions for ${colors.bold(`@${resolvedMember.username}`)} on ${colors.bold(resolvedServer.name)}:\n\n`,
+          );
 
-        if (list.length === 0) {
-          process.stdout.write(colors.dim('No permissions assigned.\n'));
-          return;
-        }
+          if (list.length === 0) {
+            process.stdout.write(colors.dim('No permissions assigned.\n'));
+            return;
+          }
 
-        printTable({
-          columns: [
-            { header: 'PERMISSION', format: (_, r) => colors.bold(String(r['code'] || r['name'] || '-')) },
-            {
-              header: 'SOURCE',
-              format: (_, r) => {
-                const inh = r['inheritedFrom'];
-                const src = r['sourceRole'];
-                if (inh) return `inherited via ${inh}`;
-                if (src) return `role "${src}"`;
-                return 'direct grant';
+          printTable({
+            columns: [
+              {
+                header: 'PERMISSION',
+                format: (_, r) => colors.bold(String(r['code'] || r['name'] || '-')),
               },
-            },
-          ],
-          data: list as unknown as Record<string, unknown>[],
-        });
-      } catch (err) {
-        exitWithError('member permissions', err);
-      }
-    });
+              {
+                header: 'SOURCE',
+                format: (_, r) => {
+                  const inh = r['inheritedFrom'];
+                  const src = r['sourceRole'];
+                  if (inh) return `inherited via ${inh}`;
+                  if (src) return `role "${src}"`;
+                  return 'direct grant';
+                },
+              },
+            ],
+            data: list as unknown as Record<string, unknown>[],
+          });
+        } catch (err) {
+          exitWithError('member permissions', err);
+        }
+      },
+    );
 
   // member export
   memberCmd
@@ -287,37 +307,39 @@ export function registerMemberCommand(program: Command): void {
     .option('-o, --output <format>', 'Export format (csv|json)', 'csv')
     .option('--file <path>', 'Destination file path')
     .option('--profile <name>', 'Profile to use')
-    .action(async (options: {
-      server?: string;
-      role?: string[];
-      output?: 'csv' | 'json';
-      file?: string;
-      profile?: string;
-    }) => {
-      try {
-        const client = await getClient(options.profile);
-        const resolvedServer = await resolveServer(client, options.server);
+    .action(
+      async (options: {
+        server?: string;
+        role?: string[];
+        output?: 'csv' | 'json';
+        file?: string;
+        profile?: string;
+      }) => {
+        try {
+          const client = await getClient(options.profile);
+          const resolvedServer = await resolveServer(client, options.server);
 
-        const params = new URLSearchParams({ serverId: resolvedServer.id });
-        if (options.role && options.role.length > 0) {
-          for (const r of options.role) params.append('roleId', r);
+          const params = new URLSearchParams({ serverId: resolvedServer.id });
+          if (options.role && options.role.length > 0) {
+            for (const r of options.role) params.append('roleId', r);
+          }
+
+          const data = await client.get<Record<string, unknown>[]>(
+            `/admin/members/export?${params.toString()}`,
+          );
+
+          const format = options.output || 'csv';
+          const content = format === 'json' ? JSON.stringify(data, null, 2) : toCsv(data);
+          const defaultFilename = `members-${resolvedServer.id}-${new Date().toISOString().slice(0, 10)}.${format}`;
+          const targetFile = options.file || defaultFilename;
+
+          await writeFile(targetFile, content, 'utf8');
+          printSuccess(`Exported ${data.length} member(s) to ${targetFile}`);
+        } catch (err) {
+          exitWithError('member export', err);
         }
-
-        const data = await client.get<Record<string, unknown>[]>(
-          `/admin/members/export?${params.toString()}`,
-        );
-
-        const format = options.output || 'csv';
-        const content = format === 'json' ? JSON.stringify(data, null, 2) : toCsv(data);
-        const defaultFilename = `members-${resolvedServer.id}-${new Date().toISOString().slice(0, 10)}.${format}`;
-        const targetFile = options.file || defaultFilename;
-
-        await writeFile(targetFile, content, 'utf8');
-        printSuccess(`Exported ${data.length} member(s) to ${targetFile}`);
-      } catch (err) {
-        exitWithError('member export', err);
-      }
-    });
+      },
+    );
 }
 
 async function getClient(profileFlag?: string): Promise<ApiClient> {

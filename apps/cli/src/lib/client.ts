@@ -78,9 +78,7 @@ export class ApiClient {
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       if (this.debug) {
-        process.stderr.write(
-          `${colors.dim(`[debug] ${method} ${path} -> FAILED (${reason})`)}\n`,
-        );
+        process.stderr.write(`${colors.dim(`[debug] ${method} ${path} -> FAILED (${reason})`)}\n`);
       }
       throw new CliError(
         `Could not reach MCID at ${this.baseUrl} (${reason})\n  hint: check your internet connection or run \`mcid-cli doctor\``,

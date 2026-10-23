@@ -126,9 +126,12 @@ export async function resolveRole(
   idOrName: string,
 ): Promise<RoleEntity> {
   // Use stats/roles which lists all roles on the server with names and counts
-  const roles = await client.get<RoleEntity[]>(`/admin/stats/roles?serverId=${encodeURIComponent(serverId)}`, {
-    resource: 'role',
-  });
+  const roles = await client.get<RoleEntity[]>(
+    `/admin/stats/roles?serverId=${encodeURIComponent(serverId)}`,
+    {
+      resource: 'role',
+    },
+  );
 
   const exactId = roles.find((r) => r.id === idOrName);
   if (exactId) return exactId;
@@ -170,14 +173,11 @@ export async function resolveMember(
   }
 
   // Otherwise, search members via /admin/members?search=
-  const res = await client.get<{ data?: MemberEntity[]; members?: MemberEntity[] } | MemberEntity[]>(
-    `/admin/members?search=${encodeURIComponent(clean)}`,
-    { resource: 'member' },
-  );
+  const res = await client.get<
+    { data?: MemberEntity[]; members?: MemberEntity[] } | MemberEntity[]
+  >(`/admin/members?search=${encodeURIComponent(clean)}`, { resource: 'member' });
 
-  const list: MemberEntity[] = Array.isArray(res)
-    ? res
-    : (res.data || res.members || []);
+  const list: MemberEntity[] = Array.isArray(res) ? res : res.data || res.members || [];
 
   const matches = list.filter(
     (m) =>
@@ -187,7 +187,10 @@ export async function resolveMember(
 
   const firstMatch = matches[0];
   if (matches.length === 1 && firstMatch) {
-    return { discordId: firstMatch.discordId || firstMatch.id || clean, username: firstMatch.username };
+    return {
+      discordId: firstMatch.discordId || firstMatch.id || clean,
+      username: firstMatch.username,
+    };
   }
 
   if (matches.length > 1) {
