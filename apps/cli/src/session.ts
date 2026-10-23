@@ -7,18 +7,31 @@ export interface Session {
   profileName: string;
   baseUrl: string;
   token: string;
+  isEnvToken?: boolean;
 }
 
 /**
- * Looks up and decrypts the stored session for a profile. Throws a
- * CliError(Auth) with a `mcid-cli login` hint whenever there's nothing usable
- * to act on, rather than letting callers each re-derive that message.
+ * Looks up and decrypts the stored session for a profile.
+ * If MCID_TOKEN is set in the environment, it takes precedence.
  */
 export async function resolveSession(
   config: Config,
   profileName: string,
   keys: KeyProvider,
 ): Promise<Session> {
+  // 1. CI / non-interactive environment token override
+  if (process.env.MCID_TOKEN) {
+    const rawUrl =
+      process.env.MCID_API_URL || config.profiles[profileName]?.baseUrl || 'http://localhost:3000';
+    return {
+      profileName: profileName || 'env',
+      baseUrl: normalizeBaseUrl(rawUrl),
+      token: process.env.MCID_TOKEN,
+      isEnvToken: true,
+    };
+  }
+
+  // 2. Profile session lookup
   const profile = config.profiles[profileName];
   if (!profile || !profile.session) {
     throw new CliError(
@@ -26,6 +39,7 @@ export async function resolveSession(
       ExitCode.Auth,
     );
   }
+
   let token: string;
   try {
     token = await decrypt(profile.session.accessToken, keys, sessionContext(profileName));
@@ -36,6 +50,12 @@ export async function resolveSession(
       ExitCode.Auth,
     );
   }
+
   // Re-checked here because the config file can be edited by hand.
-  return { profileName, baseUrl: normalizeBaseUrl(profile.baseUrl), token };
+  return {
+    profileName,
+    baseUrl: normalizeBaseUrl(profile.baseUrl),
+    token,
+    ...(process.env.MCID_TOKEN ? { isEnvToken: true } : {}),
+  };
 }

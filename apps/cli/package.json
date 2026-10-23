@@ -1,7 +1,7 @@
 {
   "name": "mcid-cli",
-  "version": "0.1.0",
-  "description": "The MCID command-line client: log in with Discord, pre-check FormSchema files and manage MCID Inbound Webhooks from the terminal",
+  "version": "1.0.0",
+  "description": "The MCID command-line client: authenticate with Discord, manage projects, servers, members, sync, and inbound webhooks from the terminal",
   "keywords": [
     "mcid",
     "microclub",

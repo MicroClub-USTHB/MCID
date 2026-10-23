@@ -435,6 +435,12 @@ describeIf('/api/admin/projects (e2e)', () => {
         projectId,
         redirectUri: newUri,
       });
+
+      const fetched = await request(app.getHttpServer())
+        .get(`${BASE}/${projectId}`)
+        .set('Authorization', auth())
+        .expect(200);
+      expect(fetched.body.redirectUri).toBe(newUri);
     });
 
     it('returns 404 for unknown project', async () => {
