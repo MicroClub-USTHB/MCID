@@ -3783,6 +3783,7 @@
                 "webhook",
                 "member",
                 "sync",
+                "access",
                 "permission"
               ],
               "type": "string"
@@ -3928,6 +3929,7 @@
                 "webhook",
                 "member",
                 "sync",
+                "access",
                 "permission"
               ],
               "type": "string"
@@ -4501,6 +4503,16 @@
               "example": "john",
               "type": "string"
             }
+          },
+          {
+            "description": "ISO 8601 timestamp - only members who joined the selected server(s) (or any managed server, when no serverId is given) at or after it, with an active membership.",
+            "in": "query",
+            "name": "joinedAfter",
+            "required": false,
+            "schema": {
+              "example": "2026-03-01T00:00:00Z",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -4619,6 +4631,16 @@
             "required": false,
             "schema": {
               "example": "john",
+              "type": "string"
+            }
+          },
+          {
+            "description": "ISO 8601 timestamp - only members who joined the selected server(s) (or any managed server, when no serverId is given) at or after it, with an active membership.",
+            "in": "query",
+            "name": "joinedAfter",
+            "required": false,
+            "schema": {
+              "example": "2026-03-01T00:00:00Z",
               "type": "string"
             }
           }
@@ -7116,21 +7138,43 @@
             }
           },
           {
+            "description": "Max results to return (1-100)",
             "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
-              "example": 100,
+              "default": 100,
+              "maximum": 100,
+              "minimum": 1,
               "type": "number"
             }
           },
           {
+            "description": "Number of records to skip",
             "in": "query",
             "name": "offset",
             "required": false,
             "schema": {
-              "example": 0,
+              "default": 0,
+              "minimum": 0,
               "type": "number"
+            }
+          },
+          {
+            "description": "Filter changes by what happened (added, removed, updated, ...)",
+            "in": "query",
+            "name": "action",
+            "required": false,
+            "schema": {
+              "enum": [
+                "added",
+                "removed",
+                "updated",
+                "deactivated",
+                "role_assigned",
+                "role_removed"
+              ],
+              "type": "string"
             }
           }
         ],

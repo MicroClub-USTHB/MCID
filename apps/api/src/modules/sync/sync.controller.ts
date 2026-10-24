@@ -10,7 +10,6 @@ import {
   NotFoundException,
   Param,
   ParseIntPipe,
-  DefaultValuePipe,
 } from '@nestjs/common';
 import {
   ApiAcceptedResponse,
@@ -31,7 +30,8 @@ import { SyncService } from './sync.service';
 import { TriggerSyncDto } from './dto/trigger-sync.dto';
 import { SyncStatusDto } from './dto/sync-status.dto';
 import { SyncLogsQueryDto } from './dto/sync-logs-query.dto';
-import { SYNC_CHANGE_ACTIONS, type SyncChangeAction } from '@mcid/contracts';
+import { SyncChangesQueryDto } from './dto/sync-changes-query.dto';
+import { SYNC_CHANGE_ACTIONS } from '@mcid/contracts';
 import { SyncLogsResponseDto } from './dto/sync-log.dto';
 import { SyncChangeDetailsResponseDto } from './dto/sync-change-detail.dto';
 import { AdminAccessGuard } from '../../common/guards/admin-access.guard';
@@ -148,12 +148,6 @@ export class SyncController {
   })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 20 })
   @ApiQuery({ name: 'offset', required: false, type: Number, example: 0 })
-  @ApiQuery({
-    name: 'action',
-    required: false,
-    enum: SYNC_CHANGE_ACTIONS,
-    description: 'Filter changes by what happened (added, removed, updated, ...)',
-  })
   @ApiOkResponse({
     description: 'Sync logs retrieved successfully.',
     type: SyncLogsResponseDto,
@@ -182,14 +176,6 @@ export class SyncController {
       '(member added/removed, role updated, etc.) recorded during a sync operation.',
   })
   @ApiParam({ name: 'syncLogId', type: Number, example: 42 })
-  @ApiQuery({ name: 'limit', required: false, type: Number, example: 100 })
-  @ApiQuery({ name: 'offset', required: false, type: Number, example: 0 })
-  @ApiQuery({
-    name: 'action',
-    required: false,
-    enum: SYNC_CHANGE_ACTIONS,
-    description: 'Filter changes by what happened (added, removed, updated, ...)',
-  })
   @ApiOkResponse({
     description: 'Sync change details retrieved successfully.',
     type: SyncChangeDetailsResponseDto,
@@ -202,10 +188,13 @@ export class SyncController {
   })
   async getSyncChangeDetails(
     @Param('syncLogId', ParseIntPipe) syncLogId: number,
-    @Query('limit', new DefaultValuePipe(100), ParseIntPipe) limit: number,
-    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
-    @Query('action') action?: SyncChangeAction,
+    @Query() query: SyncChangesQueryDto,
   ): Promise<SyncChangeDetailsResponseDto> {
-    return this.syncService.getSyncChangeDetails(syncLogId, limit, offset, action);
+    return this.syncService.getSyncChangeDetails(
+      syncLogId,
+      query.limit ?? 100,
+      query.offset ?? 0,
+      query.action,
+    );
   }
 }

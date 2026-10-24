@@ -118,7 +118,7 @@ export class CrossServerQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'ISO 8601 timestamp — only members who joined a managed server at or after it.',
+      'ISO 8601 timestamp - only members who joined the selected server(s) (or any managed server, when no serverId is given) at or after it, with an active membership.',
     example: '2026-03-01T00:00:00Z',
   })
   @IsOptional()

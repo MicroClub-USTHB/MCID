@@ -270,10 +270,24 @@ export class AdminMembersRepository {
     }
 
     if (joinedAfter) {
+      // The join must be on one of the servers this query is scoped to, and
+      // the membership must still be active: otherwise `--server A
+      // --joined-after X` matches A's members who joined some other server
+      // after X, or who left A before X.
+      const joinedConditions: SQL[] = [
+        gte(schema.serverMembers.joinedAt, new Date(joinedAfter)),
+        eq(schema.serverMembers.isActive, true),
+      ];
+      if (serverId && serverId.length > 0) {
+        joinedConditions.push(
+          inArray(schema.serverMembers.serverId, serverId),
+        );
+      }
+
       const joinedAfterSubquery = this.db
         .selectDistinct({ memberId: schema.serverMembers.memberId })
         .from(schema.serverMembers)
-        .where(gte(schema.serverMembers.joinedAt, new Date(joinedAfter)));
+        .where(and(...joinedConditions));
       conditions.push(inArray(schema.members.id, joinedAfterSubquery));
     }
 

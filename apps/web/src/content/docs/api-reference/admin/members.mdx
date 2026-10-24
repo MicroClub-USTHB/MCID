@@ -25,6 +25,7 @@ Paginated list of members across managed servers. Supports filtering by serverId
 | `page` | query | `number` | no | Page number (1-based) Default: `1`. |
 | `limit` | query | `number` | no | Number of items per page Default: `20`. |
 | `search` | query | `string` | no | Search string to filter by username or global name |
+| `joinedAfter` | query | `string` | no | ISO 8601 timestamp - only members who joined the selected server(s) (or any managed server, when no serverId is given) at or after it, with an active membership. |
 
 **Responses**
 
@@ -55,6 +56,7 @@ Paginated list of members across all managed servers. Use filter=club for member
 | `page` | query | `number` | no | Page number (1-based) Default: `1`. |
 | `limit` | query | `number` | no | Number of items per page Default: `20`. |
 | `search` | query | `string` | no | Search string to filter by username or global name |
+| `joinedAfter` | query | `string` | no | ISO 8601 timestamp - only members who joined the selected server(s) (or any managed server, when no serverId is given) at or after it, with an active membership. |
 
 **Responses**
 
