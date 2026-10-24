@@ -1476,6 +1476,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/inbound-webhooks/{id}/drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open a draft
+         * @description Starts a multi-step submission. Send each step with PATCH, then submit the draft. The draft expires after INBOUND_WEBHOOK_DRAFT_TTL_H hours (24 by default). Only for webhooks whose schema has steps. The request has no body, so the signature covers an empty string.
+         */
+        post: operations["InboundWebhookIngestController_createDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inbound-webhooks/{id}/drafts/{draftId}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit a draft
+         * @description Checks everything saved so far as one payload, with conditions resolved across steps, and turns the draft into a submission. A step never sent fails its required fields. A draft can be submitted once. The request has no body, so the signature covers an empty string.
+         */
+        post: operations["InboundWebhookIngestController_submitDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inbound-webhooks/{id}/drafts/{draftId}/{stepKey}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Save one step of a draft
+         * @description Checks only this step, with its conditions read against the steps already saved, and stores it. Sending a step again replaces it. Every error in the step is returned at once.
+         */
+        patch: operations["InboundWebhookIngestController_patchDraftStep"];
+        trace?: never;
+    };
+    "/api/inbound-webhooks/{id}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload a file
+         * @description Phase one of a file submission. Send one file as multipart/form-data; the response carries a fileId to reference from a file field in /submit or in a draft step. The type is read from the content, not from the Content-Type the sender gives, and must be accepted by one of the webhook's file fields. The upload expires after INBOUND_WEBHOOK_FILE_TTL_H hours (1 by default) unless a submission uses it. The multipart body is not signed, so the signature covers an empty string.
+         */
+        post: operations["InboundWebhookIngestController_uploadFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/inbound-webhooks/{id}/submissions": {
         parameters: {
             query?: never;
@@ -7366,6 +7446,262 @@ export interface operations {
         responses: {
             /** @description Readable webhooks. */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    InboundWebhookIngestController_createDraft: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description t=<unix seconds>,v1=<hex hmac-sha256 of "t.<raw body>"> */
+                "X-MCID-Signature"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The draft id and when it expires. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The webhook has no steps (400), or the signature is bad (401). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Origin not in the allowlist. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such webhook for this project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Signature replayed. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Webhook is inactive. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    InboundWebhookIngestController_submitDraft: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description t=<unix seconds>,v1=<hex hmac-sha256 of "t.<raw body>"> */
+                "X-MCID-Signature"?: string;
+            };
+            path: {
+                id: string;
+                draftId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Origin not in the allowlist. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such webhook or draft. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The draft was already submitted, or the signature replayed. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Webhook inactive, or the draft expired. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The accumulated payload failed schema validation. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    InboundWebhookIngestController_patchDraftStep: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description t=<unix seconds>,v1=<hex hmac-sha256 of "t.<raw body>"> */
+                "X-MCID-Signature"?: string;
+            };
+            path: {
+                id: string;
+                draftId: string;
+                stepKey: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The steps saved so far. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Origin not in the allowlist. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such webhook or draft. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The draft was already submitted, or the signature replayed. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Webhook inactive, or the draft expired. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The step failed schema validation, or the step is unknown. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    InboundWebhookIngestController_uploadFile: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description t=<unix seconds>,v1=<hex hmac-sha256 of "t."> */
+                "X-MCID-Signature"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The fileId, sha256, size, detected mime and expiry. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not multipart, no file, several files, an empty file, or the webhook has no file fields (400); bad signature (401). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Origin not in the allowlist. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such webhook for this project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Signature replayed. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Webhook is inactive. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Larger than the biggest maxSizeBytes of the webhook. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The content is not a type the webhook accepts. */
+            415: {
                 headers: {
                     [name: string]: unknown;
                 };

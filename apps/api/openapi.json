@@ -2400,6 +2400,14 @@
             "description": "Whether PATCH /api/admin/settings accepts it",
             "type": "boolean"
           },
+          "source": {
+            "description": "Where an editable value came from: the environment default, or a stored override",
+            "enum": [
+              "env",
+              "override"
+            ],
+            "type": "string"
+          },
           "value": {
             "description": "Current effective value",
             "type": "object"

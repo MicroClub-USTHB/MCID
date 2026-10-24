@@ -178,6 +178,7 @@ Clears every stored override; read-only config is untouched.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `editable` | `boolean` | yes | Whether PATCH /api/admin/settings accepts it |
+| `source` | `"env" or "override"` | no | Where an editable value came from: the environment default, or a stored override |
 | `value` | `object` | yes | Current effective value |
 
 ### SettingsMetaDto schema
