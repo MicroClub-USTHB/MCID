@@ -13,6 +13,7 @@ import { registerOpsCommand } from '../commands/ops.js';
 import { registerOpenCommand } from '../commands/open.js';
 import { registerProfileCommand } from '../commands/profile.js';
 import { registerProjectCommand } from '../commands/project.js';
+import { registerRoleCommand } from '../commands/role.js';
 import { registerSchemaCommand } from '../commands/schema.js';
 import { registerServerCommand } from '../commands/server.js';
 import { registerSyncCommand } from '../commands/sync.js';
@@ -83,6 +84,7 @@ export function buildProgram(): Command {
   registerServerCommand(program);
   registerSyncCommand(program);
   registerMemberCommand(program);
+  registerRoleCommand(program);
   registerAccessCommand(program);
   registerOpsCommand(program);
   registerDevCommand(program);

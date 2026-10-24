@@ -1,3 +1,6 @@
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanupCliTest, json, runCli } from '../test-support/cli-harness.js';
 import { baseRoutes, MAIN_SERVER_ID, MEMBER_ID } from '../test-support/fixtures.js';
@@ -85,5 +88,32 @@ describe('member list --joined-after', () => {
     const get = result.requests.find((r) => r.path === '/admin/members');
     expect(get?.query['joinedAfter']).toBe('2026-01-01T00:00:00Z');
     expect(result.stdout).toContain('member_1');
+  });
+});
+
+describe('member export', () => {
+  it('writes the exported rows to a CSV file', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mcid-export-'));
+    const target = join(dir, 'members.csv');
+
+    try {
+      const result = await runCli(['member', 'export', '--file', target], {
+        routes: baseRoutes({
+          'GET /admin/members/export': () =>
+            json([
+              { memberId: '1', username: 'alice' },
+              { memberId: '2', username: 'bob' },
+            ]),
+        }),
+      });
+
+      expect(result.exitCode).toBe(0);
+      const csv = await readFile(target, 'utf8');
+      expect(csv.split('\n')[0]).toBe('memberId,username');
+      expect(csv).toContain('1,alice');
+      expect(csv).toContain('2,bob');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
