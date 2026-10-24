@@ -590,6 +590,46 @@ export class InboundWebhooksRepository {
       .where(inArray(inboundWebhookFiles.id, ids));
   }
 
+  async insertFile(data: {
+    webhookId: string;
+    storageKey: string;
+    sha256: string;
+    sizeBytes: number;
+    mime: string;
+    originalName: string | null;
+    expiresAt: Date;
+  }) {
+    const [row] = await this.db
+      .insert(inboundWebhookFiles)
+      .values(data)
+      .returning();
+    return row;
+  }
+
+  /** Deletes uploads never attached before they expired; returns their storage keys. */
+  async deleteExpiredPendingFiles(now: Date): Promise<string[]> {
+    const rows = await this.db
+      .delete(inboundWebhookFiles)
+      .where(
+        and(
+          eq(inboundWebhookFiles.status, 'pending'),
+          lte(inboundWebhookFiles.expiresAt, now),
+        ),
+      )
+      .returning({ storageKey: inboundWebhookFiles.storageKey });
+    return rows.map((r) => r.storageKey);
+  }
+
+  /** Which of these storage keys some file row still points at. */
+  async findReferencedStorageKeys(keys: string[]): Promise<Set<string>> {
+    if (keys.length === 0) return new Set();
+    const rows = await this.db
+      .selectDistinct({ storageKey: inboundWebhookFiles.storageKey })
+      .from(inboundWebhookFiles)
+      .where(inArray(inboundWebhookFiles.storageKey, keys));
+    return new Set(rows.map((r) => r.storageKey));
+  }
+
   // ─── Drafts ─────────────────────────────────────────────────────────────
 
   async insertDraft(data: {

@@ -1,4 +1,4 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test, TestingModule, TestingModuleBuilder } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
@@ -13,7 +13,9 @@ import { PostgresExceptionFilter } from '../../src/common/filters/drizzle.filter
  * Bootstrap a full NestJS application instance suitable for E2E tests.
  * Mirrors the setup in `src/main.ts` (global prefix, validation pipe, views).
  */
-export async function createTestApp(): Promise<INestApplication> {
+export async function createTestApp(
+  configure: (builder: TestingModuleBuilder) => TestingModuleBuilder = (b) => b,
+): Promise<INestApplication> {
   process.env.NODE_ENV = 'test';
   process.env.MC_EXECUTIVE_ROLE_ID = '700000000000000001';
   process.env.INBOUND_WEBHOOK_ENCRYPTION_KEY =
@@ -23,9 +25,9 @@ export async function createTestApp(): Promise<INestApplication> {
     process.env.WEBHOOK_ENCRYPTION_KEY ||
     '2222222222222222222222222222222222222222222222222222222222222222';
 
-  const moduleFixture: TestingModule = await Test.createTestingModule({
-    imports: [AppModule],
-  })
+  const moduleFixture: TestingModule = await configure(
+    Test.createTestingModule({ imports: [AppModule] }),
+  )
     // Disable rate limiting in E2E tests so tests don't trip over each other
     .overrideGuard(AppThrottlerGuard)
     .useValue({ canActivate: () => true })

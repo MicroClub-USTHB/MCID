@@ -89,6 +89,7 @@ describe('InboundWebhooksService drafts', () => {
             ? ttlHours
             : fallback,
       } as never,
+      {} as never,
     );
   };
 

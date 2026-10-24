@@ -8305,6 +8305,85 @@
         ]
       }
     },
+    "/api/inbound-webhooks/{id}/files": {
+      "post": {
+        "description": "Phase one of a file submission. Send one file as multipart/form-data; the response carries a fileId to reference from a file field in /submit or in a draft step. The type is read from the content, not from the Content-Type the sender gives, and must be accepted by one of the webhook's file fields. The upload expires after INBOUND_WEBHOOK_FILE_TTL_H hours (1 by default) unless a submission uses it. The multipart body is not signed, so the signature covers an empty string.",
+        "operationId": "InboundWebhookIngestController_uploadFile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "t=<unix seconds>,v1=<hex hmac-sha256 of \"t.\">",
+            "in": "header",
+            "name": "X-MCID-Signature",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "The fileId, sha256, size, detected mime and expiry."
+          },
+          "400": {
+            "description": "Not multipart, no file, several files, an empty file, or the webhook has no file fields (400); bad signature (401)."
+          },
+          "403": {
+            "description": "Origin not in the allowlist."
+          },
+          "404": {
+            "description": "No such webhook for this project."
+          },
+          "409": {
+            "description": "Signature replayed."
+          },
+          "410": {
+            "description": "Webhook is inactive."
+          },
+          "413": {
+            "description": "Larger than the biggest maxSizeBytes of the webhook."
+          },
+          "415": {
+            "description": "The content is not a type the webhook accepts."
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ],
+        "summary": "Upload a file",
+        "tags": [
+          "Inbound Webhooks (Ingest)"
+        ]
+      }
+    },
     "/api/inbound-webhooks/{id}/submissions": {
       "get": {
         "operationId": "InboundWebhookReadController_listSubmissions",

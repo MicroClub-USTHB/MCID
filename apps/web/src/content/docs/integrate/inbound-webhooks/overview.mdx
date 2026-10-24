@@ -67,7 +67,7 @@ Most webhooks require a signature. [Signing and sending](/docs/integrate/inbound
 
 - A webhook that belongs to another project answers 404, the same as one that does not exist, so a key cannot be used to find out which webhooks exist.
 - Your project can send, but cannot read back what it sent. Reading needs a member session with a reader role.
-- Files are not usable yet. The schema accepts `file` and `files` fields, but there is no upload endpoint yet, so a webhook that needs a file cannot receive it. Work on uploads is tracked in issue #136.
+- Files travel in two steps. You upload each file to `POST /api/inbound-webhooks/{id}/files`, then reference it by `fileId` from the JSON you submit. [Signing and sending](/docs/integrate/inbound-webhooks/signing-and-sending) describes the upload.
 
 For the endpoint's exact fields, see [Inbound webhooks (Ingest)](/docs/api-reference/project/inbound-webhooks-ingest) in the reference.
 

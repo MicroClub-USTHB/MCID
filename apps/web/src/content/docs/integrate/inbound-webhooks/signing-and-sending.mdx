@@ -230,6 +230,39 @@ POST  /api/inbound-webhooks/{id}/drafts/{draftId}/submit
 
 Each of these calls counts toward the rate limit below, like a `/submit`.
 
+## Sending files
+
+A file never travels inside the JSON of a submission. A webhook with `file` or `files` fields takes them in two steps, so the signed body stays small and a wizard can upload on one page and submit on another:
+
+```text
+POST /api/inbound-webhooks/{id}/files      multipart/form-data, one part named "file"
+POST /api/inbound-webhooks/{id}/submit     JSON, with { "fileId": "..." } where the file belongs
+```
+
+The upload answers `201` with `{ "fileId", "sha256", "size", "mime", "expiresAt" }`. Put the `fileId` in the field, as `"cv": { "fileId": "..." }`, in `/submit` or in a draft step.
+
+```bash
+curl -X POST https://mcid.example/api/inbound-webhooks/$WEBHOOK_ID/files \
+  -H "X-API-Key: $MCID_API_KEY" \
+  -F "file=@cv.pdf"
+```
+
+- **The signature covers `""`.** The multipart body is not signed, because checking a signature means buffering the whole body before the caller is authenticated. The signature still proves the caller holds the secret, and it is still single-use.
+- **The type comes from the content.** MCID reads the file's first bytes and ignores the `Content-Type` the sender gives, so an executable renamed to `cv.pdf` is refused. A type with no recognizable signature, such as plain text or CSV, is refused too. The type must be in the `accept` list of at least one file field of the webhook, and `/submit` then checks it against the field that uses the file.
+- **The size is capped while it streams.** The cap is the largest `maxSizeBytes` of the webhook's file fields. A bigger file answers 413 and nothing is stored.
+- **Identical content is stored once.** Two uploads of the same bytes get two `fileId`s and share one stored object.
+- **An upload expires.** It lasts one hour, and an operator can change that with `INBOUND_WEBHOOK_FILE_TTL_H`. A file that no submission has used by then is deleted, and `/submit` answers `FILE_EXPIRED` for it.
+- **A file belongs to one webhook and one submission.** Another webhook's `fileId` is answered as `FILE_NOT_FOUND`, and a second submission using it gets `FILE_ALREADY_USED`.
+
+| Status | When |
+| --- | --- |
+| `400` | The body is not multipart, has no file, has more than one, or the file is empty. Also for a webhook with no file fields. |
+| `413` | The file is over the largest `maxSizeBytes`. |
+| `415` | The content is not a type the webhook accepts. |
+| `503` | File storage is not configured on the server. |
+
+The upload also answers with the errors every write call shares: 401, 403, 404, 409, 410 and 429. Each upload counts toward the rate limit below.
+
 ## Origin allowlist
 
 An admin can restrict a webhook to specific origins, for example `https://forms.example.com`. MCID then compares the request's `Origin` header with the list, exactly. A request with another origin, or none, gets a 403:
@@ -260,4 +293,4 @@ An operator can change the number with `INBOUND_WEBHOOK_RATE_LIMIT`. Retry later
 
 For every error code, see [Errors and limits](/docs/integrate/inbound-webhooks/errors-and-limits).
 
-Source: `apps/api/src/common/utils/inbound-webhook-signature.util.ts`, `apps/api/src/modules/inbound-webhooks/inbound-webhooks.service.ts`, `apps/api/src/modules/inbound-webhooks/inbound-webhook-ingest.controller.ts`, `apps/api/src/common/guards/api-key.guard.ts`.
+Source: `apps/api/src/common/utils/inbound-webhook-signature.util.ts`, `apps/api/src/modules/inbound-webhooks/inbound-webhooks.service.ts`, `apps/api/src/modules/inbound-webhooks/inbound-webhook-ingest.controller.ts`, `apps/api/src/modules/inbound-webhooks/files/inbound-webhook-files.service.ts`, `apps/api/src/common/guards/api-key.guard.ts`.

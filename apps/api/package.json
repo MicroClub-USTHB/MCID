@@ -42,6 +42,7 @@
     "docker:db:studio:stop": "docker exec mcid-api-1 sh -lc \"pkill -f 'drizzle-kit studio --host 0.0.0.0 --port 4983' 2>/dev/null || true\""
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1156.0",
     "@mcid/contracts": "workspace:*",
     "@mcid/form-schema": "workspace:*",
     "@nestjs/common": "^11.0.1",
@@ -51,6 +52,7 @@
     "@nestjs/swagger": "^11.2.6",
     "@nestjs/throttler": "^6.5.0",
     "@types/cookie-parser": "^1.4.10",
+    "busboy": "^1.6.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.3",
     "cookie-parser": "^1.4.7",
@@ -58,6 +60,7 @@
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.1",
     "ejs": "^4.0.1",
+    "file-type": "^21.3.2",
     "joi": "^18.3.0",
     "pg": "^8.18.0",
     "redis": "^4.7.1",
@@ -73,6 +76,7 @@
     "@nestjs/testing": "^11.1.14",
     "@swc/cli": "^0.7.10",
     "@swc/core": "^1.15.11",
+    "@types/busboy": "^1.5.5",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
     "@types/nock": "^10.0.3",

@@ -41,6 +41,7 @@ import {
   renderOpenApi,
   WebhookDocsInput,
 } from './docs/webhook-docs.generator';
+import { InboundWebhookFilesService } from './files/inbound-webhook-files.service';
 import { PreviewInboundWebhookSchemaDto } from './dto/preview-inbound-webhook-schema.dto';
 import { UpdateInboundWebhookDto } from './dto/update-inbound-webhook.dto';
 
@@ -116,6 +117,7 @@ export class InboundWebhooksService {
     private readonly auditRepository: AuditRepository,
     private readonly redisService: RedisService,
     private readonly configService: ConfigService,
+    private readonly files: InboundWebhookFilesService,
   ) {}
 
   // ─── Management ─────────────────────────────────────────────────────────
@@ -544,6 +546,22 @@ export class InboundWebhooksService {
     return this.withChecks(webhookId, ctx, (webhook) =>
       this.store(webhook, body, ctx),
     );
+  }
+
+  /**
+   * Phase one of a file submission. The same checks as a submission, with the
+   * body left unread until they pass; the signature covers the empty string,
+   * as it does for a draft, because a multipart body is not signed.
+   */
+  async uploadFile(
+    webhookId: string,
+    req: Parameters<InboundWebhookFilesService['receive']>[1],
+    ctx: IngestContext,
+  ) {
+    return this.withChecks(webhookId, ctx, async (webhook) => {
+      await this.assertWithinRateLimit(webhook.id, ctx.projectId);
+      return this.files.receive(webhook, req);
+    });
   }
 
   /**
