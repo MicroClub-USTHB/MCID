@@ -68,6 +68,18 @@ jobs:
             exit 1
           fi
 
+      - name: Check the generated CLI API types are up to date
+        # The types are generated from the same openapi.json the step above
+        # just refreshed, so a stale schema or a stale type file fails here.
+        run: |
+          pnpm --filter mcid-cli generate:api-types
+          changes=$(git status --porcelain -- apps/cli/src/generated)
+          if [ -n "$changes" ]; then
+            echo "$changes"
+            echo "::error::apps/cli/src/generated/api.d.ts is out of date, run pnpm --filter mcid-cli generate:api-types and commit the result"
+            exit 1
+          fi
+
       - name: Upload coverage reports
         if: always()
         uses: actions/upload-artifact@v4

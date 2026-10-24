@@ -44,6 +44,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:ci": "vitest run --coverage",
+    "generate:api-types": "openapi-typescript ../api/openapi.json -o src/generated/api.d.ts",
     "clean": "rm -rf dist coverage",
     "prepublishOnly": "pnpm --dir ../.. exec turbo run lint typecheck test build --filter=mcid-cli"
   },
@@ -59,6 +60,7 @@
     "@types/node": "^22.19.15",
     "@vitest/coverage-v8": "^4.1.4",
     "eslint": "9.39.4",
+    "openapi-typescript": "^7.13.0",
     "prettier": "^3.8.2",
     "tsup": "^8.3.5",
     "tsx": "^4.23.15",

@@ -21,6 +21,7 @@ import { registerRoleCommand } from './commands/role.js';
 import { registerAccessCommand } from './commands/access.js';
 import { registerOpsCommand } from './commands/ops.js';
 import { registerDevCommand } from './commands/dev.js';
+import { addExamples } from './lib/help.js';
 
 // When stdout is closed early (e.g. `mcid-cli webhook list | head`), stop quietly
 // instead of crashing with an unhandled EPIPE stack trace.
@@ -50,7 +51,14 @@ program
   .name('mcid-cli')
   .description('MCID command-line client: manage projects, servers, members, sync, and webhooks')
   .version(version)
-  .option('--no-color', 'Disable colored terminal output');
+  .option('--no-color', 'Disable colored terminal output')
+  .option('--debug', 'Print request timings, error stacks and retry hints to stderr');
+
+// --debug is global and inherited by every subcommand; the API client already
+// reads MCID_DEBUG, so the flag only has to set it once.
+program.hook('preAction', (thisCommand) => {
+  if (thisCommand.optsWithGlobals().debug) process.env.MCID_DEBUG = '1';
+});
 
 registerLoginCommand(program);
 registerLogoutCommand(program);
@@ -70,6 +78,51 @@ registerRoleCommand(program);
 registerAccessCommand(program);
 registerOpsCommand(program);
 registerDevCommand(program);
+
+// Short, copyable examples on each group's --help (#228).
+const GROUP_EXAMPLES: Record<string, string[]> = {
+  project: [
+    'mcid-cli project list --json',
+    'mcid-cli project create --name "Portal" --server "Micro Club"',
+    'mcid-cli project key rotate portal',
+  ],
+  server: [
+    'mcid-cli server list',
+    'mcid-cli server channels "Micro Club"',
+    'mcid-cli server channel "Micro Club" general',
+  ],
+  sync: [
+    'mcid-cli sync run --server "Micro Club" --wait',
+    'mcid-cli sync logs --server "Micro Club" --limit 10',
+  ],
+  member: [
+    'mcid-cli member list --server "Micro Club" --limit 50',
+    'mcid-cli member permissions @alice',
+  ],
+  role: ['mcid-cli role list --server "Micro Club"', 'mcid-cli role permissions lead'],
+  access: [
+    'mcid-cli access explain @alice',
+    'mcid-cli access role set lead project=write',
+  ],
+  webhook: [
+    'mcid-cli webhook list',
+    'mcid-cli webhook send contact-form --example --print-curl',
+  ],
+  ops: ['mcid-cli status', 'mcid-cli audit list --since 24h --action-type access'],
+  dev: [
+    'mcid-cli dev sso --project portal',
+    'mcid-cli dev check @alice project:read',
+  ],
+  schema: [
+    'mcid-cli schema validate form.json',
+    'mcid-cli schema preview form.json --step contact',
+  ],
+};
+
+for (const command of program.commands) {
+  const examples = GROUP_EXAMPLES[command.name()];
+  if (examples) addExamples(command, examples);
+}
 
 async function main() {
   if (process.argv.length <= 2) {

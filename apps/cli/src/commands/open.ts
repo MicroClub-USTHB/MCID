@@ -43,9 +43,9 @@ export function registerOpenCommand(program: Command): void {
         } else if (area === 'webhook' || area === 'webhooks') {
           if (id) {
             const w = await resolveWebhook(client, id);
-            targetPath = `/dashboard/inbound-webhooks/${encodeURIComponent(w.id)}`;
+            targetPath = `/dashboard/webhooks/${encodeURIComponent(w.id)}`;
           } else {
-            targetPath = '/dashboard/inbound-webhooks';
+            targetPath = '/dashboard/webhooks';
           }
         } else {
           targetPath = `/${area}`;

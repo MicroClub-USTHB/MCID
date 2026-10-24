@@ -1,4 +1,3 @@
-import { createServer } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { Command } from 'commander';
@@ -9,6 +8,7 @@ import { CliError, ExitCode, exitWithError } from '../errors.js';
 import { ApiClient } from '../lib/client.js';
 import { formatDate, printJson, printKeyValue, printSuccess } from '../lib/output.js';
 import { resolveMember, resolveProject, resolveServer } from '../lib/resolver.js';
+import { startCallbackListener } from '../login-flow.js';
 import { colors } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
 
@@ -18,16 +18,6 @@ export interface ProjectKeyLookup {
   projectId?: string;
   serverId?: string;
   baseUrl?: string;
-}
-
-/** Minimal HTML escaping for the one string the callback page reflects. */
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
 
 export function registerDevCommand(program: Command): void {
@@ -41,7 +31,7 @@ export function registerDevCommand(program: Command): void {
     .description('Test SSO authorization flow end to end with a local callback listener')
     .requiredOption('--project <project>', 'Target project name or ID')
     .option('--server <server>', 'Discord server to authenticate against')
-    .option('--port <port>', 'Local callback listener port (default 3000)', '3000')
+    .option('--port <port>', 'Local callback listener port (default 3100)', '3100')
     .option(
       '--timeout <seconds>',
       'How long to wait for the SSO callback before giving up (default 300)',
@@ -112,57 +102,16 @@ export function registerDevCommand(program: Command): void {
 
           const state = randomBytes(24).toString('base64url');
 
-          // 3. Start local callback listener
-          let resolveCallback: (code: string) => void;
-          let rejectCallback: (err: Error) => void;
-          const callbackPromise = new Promise<string>((res, rej) => {
-            resolveCallback = res;
-            rejectCallback = rej;
-          });
-
-          const server = createServer((req, res) => {
-            try {
-              const reqUrl = new URL(req.url || '/', `http://localhost:${port}`);
-              if (reqUrl.pathname === '/callback') {
-                const code = reqUrl.searchParams.get('code');
-                const returnedState = reqUrl.searchParams.get('state');
-                const error = reqUrl.searchParams.get('error');
-
-                if (error) {
-                  res.writeHead(400, { 'Content-Type': 'text/html' });
-                  res.end(`<h3>MCID SSO Error: ${escapeHtml(error)}</h3>`);
-                  rejectCallback(new CliError(`SSO returned error: ${error}`, ExitCode.Rejected));
-                  return;
-                }
-
-                if (!code || returnedState !== state) {
-                  res.writeHead(400, { 'Content-Type': 'text/html' });
-                  res.end('<h3>Invalid callback parameters</h3>');
-                  rejectCallback(
-                    new CliError('Callback missing code or state mismatch', ExitCode.Rejected),
-                  );
-                  return;
-                }
-
-                res.writeHead(200, { 'Content-Type': 'text/html' });
-                res.end(
-                  '<h3>SSO successful! You can close this tab and return to your terminal.</h3>',
-                );
-                resolveCallback(code);
-              } else {
-                res.writeHead(404);
-                res.end();
-              }
-            } catch (err) {
-              rejectCallback(err as Error);
-            }
-          });
-
-          // Loopback only: the callback carries a one-time auth code, it must
-          // not be reachable from the network like login-flow's listener.
-          await new Promise<void>((res, rej) => {
-            server.listen(port, '127.0.0.1', () => res());
-            server.once('error', rej);
+          // 3. Start the same loopback listener `mcid-cli login` uses: it binds
+          // 127.0.0.1, validates state, escapes errors and can time out.
+          const listener = await startCallbackListener({
+            port,
+            redirectHost: 'localhost',
+            timeoutMessage: (seconds) =>
+              options.silent
+                ? `silent SSO timed out after ${seconds}s: the authorize request used prompt=none and the browser had no MCID session (login_required). Run without --silent to sign in.`
+                : `SSO callback timed out after ${seconds}s -- no authorization code arrived`,
+            timeoutExitCode: ExitCode.Rejected,
           });
 
           const authParams = new URLSearchParams({
@@ -174,44 +123,46 @@ export function registerDevCommand(program: Command): void {
           });
 
           const authorizeUrl = `${baseUrl}/api/auth/sso/authorize?${authParams.toString()}`;
+          const startedAt = Date.now();
+          const elapsed = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
 
-          process.stdout.write(`  ${colors.cyan('1. Authorize')} -> Listening on ${redirectUri}\n`);
-
+          process.stdout.write(
+            `  ${colors.cyan('1. Authorize')} (${elapsed()}) -> Listening on ${redirectUri}\n`,
+          );
+          process.stdout.write(`     ${colors.dim(authorizeUrl)}\n`);
           if (options.silent) {
-            process.stdout.write(`  Testing silent authorization (prompt=none)...\n`);
-          } else {
-            process.stdout.write(`  Opening browser to sign in: ${colors.dim(authorizeUrl)}\n`);
-            await openBrowser(authorizeUrl);
+            process.stdout.write(
+              '     prompt=none: succeeds only when this browser already has an MCID session\n',
+            );
           }
+          // Silent mode still opens the browser: only a browser holding the
+          // MCID session cookie can answer a prompt=none request.
+          await openBrowser(authorizeUrl);
 
           let code: string;
-          const timeoutMs = Math.max(1, Number(options.timeout) || 300) * 1000;
           try {
-            code = await Promise.race([
-              callbackPromise,
-              new Promise<never>((_, reject) =>
-                setTimeout(
-                  () =>
-                    reject(
-                      new CliError(
-                        `SSO callback timed out after ${options.timeout}s -- no authorization code arrived`,
-                        ExitCode.Rejected,
-                      ),
-                    ),
-                  timeoutMs,
-                ).unref?.(),
-              ),
-            ]);
+            code = await listener.waitForCode(
+              state,
+              Math.max(1, Number(options.timeout) || 300) * 1000,
+            );
+          } catch (err) {
+            if (options.silent && err instanceof CliError && /login_required/.test(err.message)) {
+              throw new CliError(
+                `${err.message}\n  hint: run the same command without --silent to sign in, then retry silent login.`,
+                err.exitCode,
+              );
+            }
+            throw err;
           } finally {
-            server.close();
+            await listener.close();
           }
 
           process.stdout.write(
-            `  ${colors.green('2. Callback received')} with authorization code\n`,
+            `  ${colors.green('2. Callback received')} (${elapsed()}) with authorization code\n`,
           );
 
           // 4. Exchange code for session token
-          process.stdout.write(`  ${colors.cyan('3. Exchanging code for token')}...\n`);
+          process.stdout.write(`  ${colors.cyan('3. Exchanging code for token')} (${elapsed()})...\n`);
           const tokenRes = await fetch(`${baseUrl}/api/auth/token`, {
             method: 'POST',
             headers: {
@@ -239,10 +190,10 @@ export function registerDevCommand(program: Command): void {
             expiresAt?: string;
           };
           const token = sessionData.token || sessionData.accessToken || '';
-          process.stdout.write(`  ${colors.green('4. Token exchange successful')}\n`);
+          process.stdout.write(`  ${colors.green('4. Token exchange successful')} (${elapsed()})\n`);
 
           // 5. Validate session token to fetch member & roles
-          process.stdout.write(`  ${colors.cyan('5. Validating token')}...\n`);
+          process.stdout.write(`  ${colors.cyan('5. Validating token')} (${elapsed()})...\n`);
           const validateRes = await fetch(`${baseUrl}/api/auth/validate`, {
             method: 'POST',
             headers: {
@@ -261,7 +212,7 @@ export function registerDevCommand(program: Command): void {
           }
 
           const validateData = await validateRes.json();
-          process.stdout.write(`  ${colors.green('6. Validation successful!')}\n\n`);
+          process.stdout.write(`  ${colors.green('6. Validation successful!')} (${elapsed()})\n\n`);
 
           if (options.json) {
             printJson({ session: sessionData, member: validateData }, options.reveal);

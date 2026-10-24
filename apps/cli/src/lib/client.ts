@@ -104,6 +104,15 @@ export class ApiClient {
       return (await res.text()) as unknown as T;
     }
 
+    if (res.status === 429) {
+      const header = res.headers.get('retry-after');
+      const seconds = header && /^\d+$/.test(header) ? Number(header) : undefined;
+      throw new CliError(
+        `MCID is rate-limiting this client${seconds !== undefined ? `; retry after ${seconds}s` : ''}\n  hint: wait for the window to pass, or reduce how often the command runs`,
+        ExitCode.Rejected,
+      );
+    }
+
     let parsedBody: unknown;
     try {
       parsedBody = await res.json();
