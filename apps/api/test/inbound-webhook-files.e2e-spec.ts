@@ -11,6 +11,7 @@ import {
 import { InboundWebhookFilesService } from '../src/modules/inbound-webhooks/files/inbound-webhook-files.service';
 import { STORAGE_ADAPTER } from '../src/modules/inbound-webhooks/files/storage.adapter';
 import { createTestApp } from './helpers/create-app';
+import { MemoryStorage } from './helpers/memory-storage';
 import {
   clearAllTables,
   closeTestDb,
@@ -58,32 +59,6 @@ const CV_SCHEMA = {
 
 const PDF = Buffer.from('%PDF-1.7\nhello\n');
 const ELF = Buffer.from([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0, 0, 0, 0, 0]);
-
-/** Objects by key: stands in for S3, so the suite needs no object store. */
-class MemoryStorage {
-  objects = new Map<string, Buffer>();
-  puts = 0;
-
-  assertReady() {}
-
-  exists(key: string) {
-    return Promise.resolve(this.objects.has(key));
-  }
-
-  async put(key: string, body: AsyncIterable<Buffer>, size: number) {
-    const chunks: Buffer[] = [];
-    for await (const chunk of body) chunks.push(chunk);
-    const data = Buffer.concat(chunks);
-    expect(data.length).toBe(size);
-    this.objects.set(key, data);
-    this.puts += 1;
-  }
-
-  delete(key: string) {
-    this.objects.delete(key);
-    return Promise.resolve();
-  }
-}
 
 describeIf('inbound webhook file uploads (e2e)', () => {
   let app: INestApplication;

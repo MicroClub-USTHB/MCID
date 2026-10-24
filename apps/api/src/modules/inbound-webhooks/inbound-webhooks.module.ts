@@ -11,6 +11,7 @@ import { InboundWebhooksRepository } from './inbound-webhooks.repository';
 import { InboundWebhookReadGuard } from './guards/inbound-webhook-read.guard';
 import { InboundWebhookFilesService } from './files/inbound-webhook-files.service';
 import { S3StorageAdapter } from './files/s3.storage';
+import { InboundWebhookRetentionService } from './retention/inbound-webhook-retention.service';
 import { STORAGE_ADAPTER } from './files/storage.adapter';
 
 @Module({
@@ -25,20 +26,26 @@ import { STORAGE_ADAPTER } from './files/storage.adapter';
     InboundWebhooksRepository,
     InboundWebhookReadGuard,
     InboundWebhookFilesService,
+    InboundWebhookRetentionService,
     { provide: STORAGE_ADAPTER, useClass: S3StorageAdapter },
   ],
   exports: [InboundWebhooksService, InboundWebhooksRepository],
 })
 export class InboundWebhooksModule implements OnModuleInit, OnModuleDestroy {
-  constructor(private readonly files: InboundWebhookFilesService) {}
+  constructor(
+    private readonly files: InboundWebhookFilesService,
+    private readonly retention: InboundWebhookRetentionService,
+  ) {}
 
   onModuleInit() {
     if (process.env.NODE_ENV !== 'test') {
       this.files.startSweepSchedule();
+      this.retention.startCleanupSchedule();
     }
   }
 
   onModuleDestroy() {
     this.files.stopSweepSchedule();
+    this.retention.stopCleanupSchedule();
   }
 }

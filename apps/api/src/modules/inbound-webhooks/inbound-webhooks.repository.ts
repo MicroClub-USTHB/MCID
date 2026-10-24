@@ -690,6 +690,71 @@ export class InboundWebhooksRepository {
       );
   }
 
+  // ─── Retention ──────────────────────────────────────────────────────────
+
+  /**
+   * Drafts nobody can use any more. A submitted draft is kept: it is removed
+   * with its submission, not on its own clock.
+   */
+  async deleteExpiredDrafts(now: Date): Promise<number> {
+    const rows = await this.db
+      .delete(inboundWebhookDrafts)
+      .where(
+        and(
+          ne(inboundWebhookDrafts.status, 'submitted'),
+          lte(inboundWebhookDrafts.expiresAt, now),
+        ),
+      )
+      .returning({ id: inboundWebhookDrafts.id });
+    return rows.length;
+  }
+
+  /** The oldest submissions received before `cutoff`, at most `limit`. */
+  async findSubmissionsReceivedBefore(cutoff: Date, limit: number) {
+    return this.db
+      .select({
+        id: inboundWebhookSubmissions.id,
+        draftId: inboundWebhookSubmissions.draftId,
+      })
+      .from(inboundWebhookSubmissions)
+      .where(lte(inboundWebhookSubmissions.receivedAt, cutoff))
+      .orderBy(inboundWebhookSubmissions.receivedAt)
+      .limit(limit);
+  }
+
+  async findFilesOfSubmissions(submissionIds: string[]) {
+    if (submissionIds.length === 0) return [];
+    return this.db
+      .select({
+        id: inboundWebhookFiles.id,
+        submissionId: inboundWebhookFiles.submissionId,
+        storageKey: inboundWebhookFiles.storageKey,
+      })
+      .from(inboundWebhookFiles)
+      .where(inArray(inboundWebhookFiles.submissionId, submissionIds));
+  }
+
+  /**
+   * Deletes submissions with the data they hold: their file rows go by
+   * cascade, and so do the drafts they came from, which carry the same
+   * answers.
+   */
+  async deleteSubmissions(ids: string[], draftIds: string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    return this.db.transaction(async (tx) => {
+      const rows = await tx
+        .delete(inboundWebhookSubmissions)
+        .where(inArray(inboundWebhookSubmissions.id, ids))
+        .returning({ id: inboundWebhookSubmissions.id });
+      if (draftIds.length > 0) {
+        await tx
+          .delete(inboundWebhookDrafts)
+          .where(inArray(inboundWebhookDrafts.id, draftIds));
+      }
+      return rows.length;
+    });
+  }
+
   // ─── Drafts ─────────────────────────────────────────────────────────────
 
   async insertDraft(data: {
