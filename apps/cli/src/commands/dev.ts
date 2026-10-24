@@ -25,7 +25,7 @@ export function registerDevCommand(program: Command): void {
     .command('dev')
     .description('Developer commands to test project SSO, tokens, and permissions end to end');
 
-  // dev sso [--project <p>] [--port 3000] [--silent] [--reveal]
+  // dev sso [--project <p>] [--port 3100] [--silent] [--reveal]
   devCmd
     .command('sso')
     .description('Test SSO authorization flow end to end with a local callback listener')

@@ -152,6 +152,21 @@ describe('webhook send --print-curl', () => {
     expect(revealed.exitCode).toBe(0);
     expect(revealed.stdout).toContain('mcid_live_supersecretkey123');
   });
+
+  it('prints a real HMAC signature instead of a placeholder', async () => {
+    const tmp = await mkdtemp(join(tmpdir(), 'mcid-send-'));
+    await configWithStoredSecret(tmp);
+
+    const result = await runCli(['webhook', 'send', 'contact-form', '--example', '--print-curl'], {
+      routes: sendRoutes(),
+    });
+
+    expect(result.exitCode).toBe(0);
+    // t=<unix seconds>,v1=<sha256 hex> over "<timestamp>.<body>"
+    expect(result.stdout).toMatch(/X-MCID-Signature: t=\d+,v1=[0-9a-f]{64}/);
+    expect(result.stdout).not.toContain('<HMAC_SHA256>');
+    expect(result.stdout).not.toContain('<UNIX_TIMESTAMP>');
+  });
 });
 
 describe('webhook send --example', () => {

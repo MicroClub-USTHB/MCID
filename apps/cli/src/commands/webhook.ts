@@ -271,11 +271,11 @@ export function registerWebhookCommand(program: Command): void {
                 `  -H "Content-Type: application/json" \\\n` +
                 `  -H "Authorization: Bearer ${printedKey}" \\\n` +
                 (origin ? `  -H "Origin: ${origin}" \\\n` : '') +
-                '  -H "X-MCID-Signature: t=<UNIX_TIMESTAMP>,v1=<HMAC_SHA256>" \\\n' +
+                `  -H "X-MCID-Signature: ${signatureHeader}" \\\n` +
                 `  -d '${rawPayload.replace(/'/g, "'\\''")}'\n`,
             );
             process.stdout.write(
-              `${colors.dim('# Generate a fresh HMAC over <timestamp>.<exact raw body> with the locally stored secret; signatures expire after five minutes and can only be used once.')}\n`,
+              `${colors.dim('# The signature is a real HMAC over the printed body; it expires five minutes from now and can only be used once.')}\n`,
             );
             return;
           }
