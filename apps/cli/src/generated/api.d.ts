@@ -3415,6 +3415,11 @@ export interface components {
         SettingValueDto: {
             /** @description Whether PATCH /api/admin/settings accepts it */
             editable: boolean;
+            /**
+             * @description Where an editable value came from: the environment default, or a stored override
+             * @enum {string}
+             */
+            source?: "env" | "override";
             /** @description Current effective value */
             value: Record<string, never>;
         };
