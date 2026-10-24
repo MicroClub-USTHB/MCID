@@ -145,3 +145,66 @@ describe('access nested grammar', () => {
     expect(MAIN_SERVER_ID).toBeDefined();
   });
 });
+
+describe('access set preview and validation', () => {
+  it('shows the before → after diff the PUT will apply', async () => {
+    const result = await runCli(['access', 'role', 'set', 'Admin', 'webhooks=write', '--yes'], {
+      routes: baseRoutes({
+        'GET /admin/access/roles': () => json([adminRole]),
+        'PUT /admin/access/roles/:roleId': () => json(adminRole),
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('webhooks: none → write');
+    // unchanged grants are not part of the diff
+    expect(result.stdout).not.toContain('members: read → read');
+  });
+
+  it('shows the same diff for member overrides', async () => {
+    const result = await runCli(
+      ['access', 'member', 'set', '@john_doe', 'servers=write', '--yes'],
+      {
+        routes: baseRoutes({
+          'GET /admin/members': () =>
+            json({
+              data: [{ memberId: MEMBER_ID, username: 'john_doe' }],
+              total: 1,
+              page: 1,
+              limit: 20,
+              totalPages: 1,
+            }),
+          [`GET /admin/access/members/${MEMBER_ID}/effective`]: () =>
+            json({ memberId: MEMBER_ID, username: 'john_doe', root: false, access: {} }),
+          [`GET /admin/access/members/${MEMBER_ID}`]: () =>
+            json({ memberId: MEMBER_ID, overrides: { members: 'read' } }),
+          [`PUT /admin/access/members/${MEMBER_ID}`]: () => json({ ok: true }),
+        }),
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('servers: none → write');
+    expect(result.stdout).not.toContain('members:');
+  });
+
+  it('suggests the catalog name when a resource is misspelled', async () => {
+    const result = await runCli(['access', 'role', 'set', 'Admin', 'projets=write', '--yes'], {
+      routes: baseRoutes({ 'GET /admin/access/roles': () => json([adminRole]) }),
+    });
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain('did you mean "projects"');
+    expect(result.requests.some((r) => r.method === 'PUT')).toBe(false);
+  });
+
+  it('sends nothing when confirmation is refused on a non-interactive terminal', async () => {
+    const result = await runCli(['access', 'role', 'set', 'Admin', 'webhooks=write'], {
+      routes: baseRoutes({ 'GET /admin/access/roles': () => json([adminRole]) }),
+    });
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout).toContain('webhooks: none → write');
+    expect(result.requests.some((r) => r.method === 'PUT')).toBe(false);
+  });
+});

@@ -15,6 +15,9 @@ export interface AdminMe {
   displayName: string | null;
   preferredName: string | null;
   sessionExpiresAt: string;
+  /** Root flag and the caller's effective levels, returned by /auth/admin/me. */
+  root?: boolean;
+  permissions?: Record<string, string>;
 }
 
 async function request(baseUrl: string, path: string, init: RequestInit = {}): Promise<Response> {

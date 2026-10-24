@@ -53,7 +53,7 @@ function editDistance(a: string, b: string): number {
 }
 
 /** Names a close match for a typo, or nothing when no name is close enough. */
-export function didYouMean(input: string, candidates: string[]): string {
+export function didYouMean(input: string, candidates: readonly string[]): string {
   const needle = input.toLowerCase();
   let best: { name: string; distance: number } | undefined;
   for (const name of candidates) {

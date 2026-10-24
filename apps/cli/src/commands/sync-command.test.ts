@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanupCliTest, json, runCli } from '../test-support/cli-harness.js';
-import { baseRoutes } from '../test-support/fixtures.js';
+import { baseRoutes, MAIN_SERVER_ID } from '../test-support/fixtures.js';
 
 afterEach(cleanupCliTest);
 
@@ -61,5 +61,61 @@ describe('sync changes', () => {
     expect(result.exitCode).toBe(0);
     const get = result.requests.find((r) => r.path === '/admin/sync/logs/42/changes');
     expect(get?.query['action']).toBe('added');
+  });
+});
+
+describe('sync run', () => {
+  it('prints the sync log id and the command that follows it', async () => {
+    const result = await runCli(['sync', 'run'], {
+      routes: baseRoutes({ 'POST /admin/sync/full': () => json({ syncLogId: '4242' }) }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('sync log 4242');
+    expect(result.stdout).toContain('mcid-cli sync changes 4242');
+  });
+
+  it('summarises a sync that finishes under --wait', async () => {
+    const result = await runCli(['sync', 'run', '--wait'], {
+      routes: baseRoutes({
+        'POST /admin/sync/full': () => json({ syncLogId: '4242' }),
+        'GET /admin/sync/status': () =>
+          json({
+            serverId: MAIN_SERVER_ID,
+            status: 'success',
+            membersSynced: 1204,
+            rolesSynced: 58,
+          }),
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toMatch(/Synced .* 1204 members, 58 roles/);
+  });
+
+  it('exits non-zero when the sync itself fails under --wait', async () => {
+    const result = await runCli(['sync', 'run', '--wait'], {
+      routes: baseRoutes({
+        'POST /admin/sync/full': () => json({ syncLogId: '4242' }),
+        'GET /admin/sync/status': () =>
+          json({ serverId: MAIN_SERVER_ID, status: 'failed', membersSynced: 0, rolesSynced: 0 }),
+      }),
+    });
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain('Sync failed');
+  });
+
+  it('exits non-zero when --wait runs out of time', async () => {
+    const result = await runCli(['sync', 'run', '--wait', '--timeout', '0'], {
+      routes: baseRoutes({
+        'POST /admin/sync/full': () => json({ syncLogId: '4242' }),
+        'GET /admin/sync/status': () =>
+          json({ serverId: MAIN_SERVER_ID, status: 'running', membersSynced: 1, rolesSynced: 0 }),
+      }),
+    });
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain('Sync timed out');
   });
 });

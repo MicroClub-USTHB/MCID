@@ -58,4 +58,16 @@ export async function whoami(options: WhoamiOptions, deps: WhoamiDeps): Promise<
   deps.out(`Logged in as ${adminDisplayName(me)} (${me.username}) ${authSource}`);
   deps.out(`MCID: ${session.baseUrl}`);
   deps.out(`Session expires: ${me.sessionExpiresAt}`);
+
+  // The caller's own effective levels — the same data `access explain`
+  // prints for somebody else. Missing on older APIs, so it is optional.
+  const levels = Object.entries(me.permissions ?? {});
+  if (levels.length > 0) {
+    const width = Math.max(...levels.map(([resource]) => resource.length));
+    deps.out('');
+    deps.out(me.root ? 'Effective access (root: manage on every resource):' : 'Effective access:');
+    for (const [resource, level] of levels) {
+      deps.out(`  ${resource.padEnd(width)}  ${level}`);
+    }
+  }
 }

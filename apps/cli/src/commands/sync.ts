@@ -62,10 +62,10 @@ export function registerSyncCommand(program: Command): void {
               return;
             }
             printSuccess(
-              `Sync queued for "${resolved.name}"`,
+              `Sync queued for "${resolved.name}"${syncLogId ? ` (sync log ${syncLogId})` : ''}`,
               syncLogId
-                ? `follow logs with: mcid-cli sync logs --server ${resolved.id}`
-                : undefined,
+                ? `follow it with: mcid-cli sync changes ${syncLogId}`
+                : `follow logs with: mcid-cli sync logs --server ${resolved.id}`,
             );
             return;
           }

@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { ACCESS_LEVELS, isAccessLevel, isAccessResource } from '@mcid/contracts';
+import { ACCESS_LEVELS, ACCESS_RESOURCES, isAccessLevel, isAccessResource } from '@mcid/contracts';
 import { configPath, loadConfig, resolveProfileName } from '../config.js';
 import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
@@ -11,9 +11,27 @@ import {
 } from '../lib/api-normalize.js';
 import { ApiClient } from '../lib/client.js';
 import { printJson, printKeyValue, printSuccess, printTable } from '../lib/output.js';
-import { resolveMember } from '../lib/resolver.js';
+import { didYouMean, resolveMember } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
+
+/**
+ * The change a grant PUT will apply, as `resource: before → after` — the
+ * preview `access role set` / `access member set` confirm against (#232).
+ * Unchanged resources are left out; `none` means the resource is added or
+ * dropped rather than re-levelled.
+ */
+function printGrantDiff(before: Record<string, string>, after: Record<string, string>): void {
+  const resources = [...new Set([...Object.keys(before), ...Object.keys(after)])].sort();
+  for (const resource of resources) {
+    const from = before[resource];
+    const to = after[resource];
+    if (from === to) continue;
+    process.stdout.write(
+      `  ${colors.cyan('●')} ${resource}: ${from ?? 'none'} → ${to ?? 'none'}\n`,
+    );
+  }
+}
 
 /**
  * Root admins already hold every permission, so a member override can never
@@ -260,13 +278,13 @@ export function registerAccessCommand(program: Command): void {
         }
         if (!isAccessResource(res)) {
           throw new CliError(
-            `Unknown resource "${res}". Run \`mcid-cli access catalog\` to view valid resources.`,
+            `Unknown resource "${res}".${didYouMean(res, ACCESS_RESOURCES)}\n  hint: run \`mcid-cli access catalog\` to view valid resources.`,
             ExitCode.Usage,
           );
         }
         if (!isAccessLevel(lvl)) {
           throw new CliError(
-            `Unknown access level "${lvl}". Expected one of: ${ACCESS_LEVELS.join(', ')}`,
+            `Unknown access level "${lvl}".${didYouMean(lvl, ACCESS_LEVELS)}\n  hint: expected one of: ${ACCESS_LEVELS.join(', ')}`,
             ExitCode.Usage,
           );
         }
@@ -280,11 +298,9 @@ export function registerAccessCommand(program: Command): void {
       }
       Object.assign(targetGrants, newGrants);
 
-      // Show diff
+      // Show the diff before asking, e.g. `projects: read → write`.
       process.stdout.write(`${colors.bold(`Updating grants for role "${resolvedRole.name}":`)}\n`);
-      for (const [r, l] of Object.entries(newGrants)) {
-        process.stdout.write(`  ${colors.cyan('●')} ${r}: ${l}\n`);
-      }
+      printGrantDiff(resolvedRole.grants, targetGrants);
 
       if (
         !(await confirmAction(`Apply grant changes to role "${resolvedRole.name}"?`, options.yes))
@@ -378,34 +394,34 @@ export function registerAccessCommand(program: Command): void {
         }
         if (!isAccessResource(res)) {
           throw new CliError(
-            `Unknown resource "${res}". Run \`mcid-cli access catalog\``,
+            `Unknown resource "${res}".${didYouMean(res, ACCESS_RESOURCES)}\n  hint: run \`mcid-cli access catalog\` to view valid resources.`,
             ExitCode.Usage,
           );
         }
         if (!isAccessLevel(lvl)) {
           throw new CliError(
-            `Unknown access level "${lvl}". Expected one of: ${ACCESS_LEVELS.join(', ')}`,
+            `Unknown access level "${lvl}".${didYouMean(lvl, ACCESS_LEVELS)}\n  hint: expected one of: ${ACCESS_LEVELS.join(', ')}`,
             ExitCode.Usage,
           );
         }
         newOverrides[res] = lvl;
       }
 
-      let targetOverrides: Record<string, string> = {};
-      if (!options.replace) {
-        const current = await client.get<{ overrides: Record<string, string> }>(
-          `/admin/access/members/${encodeURIComponent(resolved.discordId)}`,
-        );
-        targetOverrides = { ...(current.overrides || {}) };
-      }
+      // The current overrides are read either way: they are what the diff is
+      // measured against, and --replace only decides what gets sent.
+      const current = await client.get<{ overrides: Record<string, string> }>(
+        `/admin/access/members/${encodeURIComponent(resolved.discordId)}`,
+      );
+      const currentOverrides = current.overrides || {};
+      const targetOverrides: Record<string, string> = options.replace
+        ? {}
+        : { ...currentOverrides };
       Object.assign(targetOverrides, newOverrides);
 
       process.stdout.write(
         `${colors.bold(`Setting overrides for member @${resolved.username}:`)}\n`,
       );
-      for (const [r, l] of Object.entries(newOverrides)) {
-        process.stdout.write(`  ${colors.cyan('●')} ${r}: ${l}\n`);
-      }
+      printGrantDiff(currentOverrides, targetOverrides);
 
       if (!(await confirmAction(`Apply overrides to member @${resolved.username}?`, options.yes))) {
         return;
