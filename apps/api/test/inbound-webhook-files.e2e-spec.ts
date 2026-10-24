@@ -25,7 +25,8 @@ import {
 // reads the same magic bytes; the real library is checked against compiled
 // output, not here.
 jest.mock('../src/modules/inbound-webhooks/files/mime-sniffer', () => ({
-  sniffMime: (head: Buffer) => {
+  sniffMime: (path: string) => {
+    const head = jest.requireActual('fs').readFileSync(path);
     if (head.subarray(0, 4).toString('latin1') === '%PDF') {
       return Promise.resolve('application/pdf');
     }
@@ -62,6 +63,8 @@ const ELF = Buffer.from([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0, 0, 0, 0, 0]);
 class MemoryStorage {
   objects = new Map<string, Buffer>();
   puts = 0;
+
+  assertReady() {}
 
   exists(key: string) {
     return Promise.resolve(this.objects.has(key));
@@ -348,6 +351,79 @@ describeIf('inbound webhook file uploads (e2e)', () => {
     expect(storage.objects.has(`files/${b.body.sha256}`)).toBe(true);
     const rows = await db.select().from(inboundWebhookFiles);
     expect(rows.map((r) => r.id)).toEqual([b.body.fileId]);
+  });
+
+  it('keeps a file saved in a draft step until the draft is submitted', async () => {
+    const stepped = await addWebhook({
+      version: 1,
+      steps: [
+        {
+          key: 'identity',
+          fields: [{ key: 'name', type: 'string', required: true }],
+        },
+        {
+          key: 'docs',
+          fields: [
+            {
+              key: 'cv',
+              type: 'file',
+              required: true,
+              accept: ['application/pdf'],
+              maxSizeBytes: MAX_BYTES,
+            },
+          ],
+        },
+      ],
+    });
+    const key = { 'X-API-Key': project.apiKey };
+    const draft = await request(app.getHttpServer())
+      .post(`${base(stepped)}/drafts`)
+      .set(key)
+      .expect(201);
+    const { body: file } = await upload(PDF, 'cv.pdf', stepped).expect(201);
+
+    await request(app.getHttpServer())
+      .patch(`${base(stepped)}/drafts/${draft.body.draftId}/identity`)
+      .set(key)
+      .send({ name: 'Ada' })
+      .expect(200);
+    await request(app.getHttpServer())
+      .patch(`${base(stepped)}/drafts/${draft.body.draftId}/docs`)
+      .set(key)
+      .send({ cv: { fileId: file.fileId } })
+      .expect(200);
+
+    // The upload window was one hour; the draft's is a day
+    const [attached] = await db.select().from(inboundWebhookFiles);
+    expect(attached.draftId).toBe(draft.body.draftId);
+    expect(attached.expiresAt?.toISOString()).toBe(draft.body.expiresAt);
+
+    expect(await app.get(InboundWebhookFilesService).sweepExpired()).toBe(0);
+
+    await request(app.getHttpServer())
+      .post(`${base(stepped)}/drafts/${draft.body.draftId}/submit`)
+      .set(key)
+      .expect(201);
+    const [committed] = await db.select().from(inboundWebhookFiles);
+    expect(committed.status).toBe('committed');
+  });
+
+  it('lets only one of two simultaneous submissions take a file', async () => {
+    const { body } = await upload(PDF).expect(201);
+    const results = await Promise.all(
+      ['Ada', 'Bob'].map((name) =>
+        submit({ name, cv: { fileId: body.fileId } }),
+      ),
+    );
+
+    expect(results.map((r) => r.status).sort()).toEqual([201, 422]);
+    const loser = results.find((r) => r.status === 422)!;
+    expect(loser.body.errors[0].code).toBe('FILE_ALREADY_USED');
+
+    const winner = results.find((r) => r.status === 201)!;
+    const [file] = await db.select().from(inboundWebhookFiles);
+    expect(file.submissionId).toBe(winner.body.id);
+    expect(await db.select().from(inboundWebhookSubmissions)).toHaveLength(1);
   });
 
   describe('signature', () => {

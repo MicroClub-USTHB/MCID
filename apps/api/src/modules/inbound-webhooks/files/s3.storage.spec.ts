@@ -34,6 +34,14 @@ describe('S3StorageAdapter', () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  it('checks readiness without calling the store', () => {
+    expect(() => adapter(configured).assertReady()).not.toThrow();
+    expect(() => adapter({}).assertReady()).toThrow(
+      ServiceUnavailableException,
+    );
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it('reports an object that exists, and one that does not', async () => {
     const s3 = adapter(configured);
     await expect(s3.exists('k')).resolves.toBe(true);

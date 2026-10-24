@@ -27,8 +27,6 @@ import { STORAGE_ADAPTER } from './storage.adapter';
 import type { StorageAdapter } from './storage.adapter';
 
 const SWEEP_INTERVAL_MS = 10 * 60 * 1000;
-/** Enough for every signature file-type reads. */
-const SNIFF_BYTES = 4100;
 /** Multipart framing around the file: boundaries and part headers. */
 const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
 
@@ -47,7 +45,6 @@ interface Spooled {
   path: string;
   sha256: string;
   size: number;
-  head: Buffer;
   filename: string | undefined;
 }
 
@@ -76,6 +73,8 @@ export class InboundWebhookFilesService {
     if (!limits) {
       throw new BadRequestException('This webhook has no file fields');
     }
+    // Before a byte is read: an unconfigured server must not spool uploads
+    this.storage.assertReady();
 
     const declared = Number(req.headers['content-length']);
     if (declared > limits.maxSizeBytes + MULTIPART_OVERHEAD_BYTES) {
@@ -89,7 +88,7 @@ export class InboundWebhookFilesService {
       const file = await this.spool(req, path, limits.maxSizeBytes);
       if (file.size === 0) throw new BadRequestException('The file is empty');
 
-      const mime = await sniffMime(file.head);
+      const mime = await sniffMime(path);
       if (!mime || !limits.accept.has(mime)) {
         throw new UnsupportedMediaTypeException(
           `${mime ? `"${mime}"` : 'This file type'} is not accepted by this webhook`,
@@ -98,14 +97,7 @@ export class InboundWebhookFilesService {
 
       // Keyed by content: the same bytes uploaded twice are stored once.
       const storageKey = `files/${file.sha256}`;
-      if (!(await this.storage.exists(storageKey))) {
-        await this.storage.put(storageKey, createReadStream(path), file.size);
-      }
-
-      const ttlHours = this.configService.get<number>(
-        'INBOUND_WEBHOOK_FILE_TTL_H',
-        1,
-      );
+      await this.ensureStored(storageKey, path, file.size);
       const row = await this.repository.insertFile({
         webhookId: webhook.id,
         storageKey,
@@ -113,8 +105,11 @@ export class InboundWebhookFilesService {
         sizeBytes: file.size,
         mime,
         originalName: file.filename?.slice(0, 512) ?? null,
-        expiresAt: new Date(Date.now() + ttlHours * 3_600_000),
+        expiresAt: new Date(Date.now() + this.fileTtlHours() * 3_600_000),
       });
+      // A sweep of an older upload of the same bytes may have removed the
+      // object between the check above and the row: put it back.
+      await this.ensureStored(storageKey, path, file.size);
       return {
         fileId: row.id,
         sha256: row.sha256,
@@ -125,6 +120,24 @@ export class InboundWebhookFilesService {
     } finally {
       await rm(path, { force: true });
     }
+  }
+
+  private async ensureStored(
+    key: string,
+    path: string,
+    size: number,
+  ): Promise<void> {
+    if (await this.storage.exists(key)) return;
+    await this.storage.put(key, createReadStream(path), size);
+  }
+
+  private fileTtlHours(): number {
+    const hours = Number(
+      this.configService.get('INBOUND_WEBHOOK_FILE_TTL_H', 1),
+    );
+    if (Number.isFinite(hours) && hours > 0) return hours;
+    this.logger.warn('INBOUND_WEBHOOK_FILE_TTL_H is not a positive number');
+    return 1;
   }
 
   /**
@@ -155,15 +168,8 @@ export class InboundWebhookFilesService {
       parser.on('file', (_field, stream, info) => {
         const hash = createHash('sha256');
         let size = 0;
-        let head = Buffer.alloc(0);
         const tap = new Transform({
           transform(chunk: Buffer, _encoding, done) {
-            if (head.length < SNIFF_BYTES) {
-              head = Buffer.concat([
-                head,
-                chunk.subarray(0, SNIFF_BYTES - head.length),
-              ]);
-            }
             hash.update(chunk);
             size += chunk.length;
             done(null, chunk);
@@ -179,19 +185,30 @@ export class InboundWebhookFilesService {
             path,
             sha256: hash.digest('hex'),
             size,
-            head,
             filename: info.filename,
           };
         });
-        spooled.catch(() => undefined); // reported once, on 'close'
+        // Reject as soon as the spool fails (a full disk, say), rather than
+        // waiting on a 'close' the parser may never emit.
+        spooled.then(undefined, reject);
       });
+      // Fail only once the spool has settled, so its file is closed before
+      // the caller removes it.
+      let failed = false;
+      const fail = (error: Error) => {
+        failed = true;
+        void (spooled ?? Promise.resolve())
+          .catch(() => undefined)
+          .then(() => reject(error));
+      };
       parser.on('filesLimit', () =>
-        reject(new BadRequestException('Send one file per request')),
+        fail(new BadRequestException('Send one file per request')),
       );
       parser.on('error', (error: Error) =>
-        reject(new BadRequestException(`Malformed upload: ${error.message}`)),
+        fail(new BadRequestException(`Malformed upload: ${error.message}`)),
       );
       parser.on('close', () => {
+        if (failed) return;
         if (spooled) spooled.then(resolve, reject);
         else reject(new BadRequestException('No file in the request'));
       });
@@ -204,24 +221,38 @@ export class InboundWebhookFilesService {
   /**
    * Removes uploads that were never attached to a submission within their
    * TTL. The stored object goes too, unless another row still points at it:
-   * identical content shares one object.
-   * ponytail: a re-upload of the same bytes landing between the reference
-   * check and the delete would lose its object; lock per key if that bites.
+   * identical content shares one object. Objects go before their rows, so a
+   * failed delete leaves the row and the next sweep tries again.
+   * ponytail: a delete that lands between an upload's two storage checks
+   * still loses that object; lock per key if it ever shows up.
    */
   async sweepExpired(): Promise<number> {
-    const keys = await this.repository.deleteExpiredPendingFiles(new Date());
-    if (keys.length === 0) return 0;
+    const expired = await this.repository.findExpiredPendingFiles(new Date());
+    if (expired.length === 0) return 0;
 
-    const unique = [...new Set(keys)];
-    const stillUsed = await this.repository.findReferencedStorageKeys(unique);
-    for (const key of unique) {
+    const keys = [...new Set(expired.map((f) => f.storageKey))];
+    const stillUsed = await this.repository.findReferencedStorageKeys(
+      keys,
+      expired.map((f) => f.id),
+    );
+    const failed = new Set<string>();
+    for (const key of keys) {
       if (stillUsed.has(key)) continue;
-      await this.storage.delete(key).catch((error: Error) => {
-        this.logger.warn(`Could not delete ${key}: ${error.message}`);
-      });
+      try {
+        await this.storage.delete(key);
+      } catch (error) {
+        failed.add(key);
+        this.logger.warn(
+          `Could not delete ${key}: ${(error as Error).message}`,
+        );
+      }
     }
-    this.logger.log(`Orphan sweep: removed ${keys.length} expired uploads`);
-    return keys.length;
+
+    const removed = await this.repository.deletePendingFiles(
+      expired.filter((f) => !failed.has(f.storageKey)).map((f) => f.id),
+    );
+    this.logger.log(`Orphan sweep: removed ${removed} expired uploads`);
+    return removed;
   }
 
   startSweepSchedule(): void {

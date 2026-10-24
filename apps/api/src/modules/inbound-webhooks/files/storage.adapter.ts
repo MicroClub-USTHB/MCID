@@ -7,6 +7,8 @@ export const STORAGE_ADAPTER = Symbol('STORAGE_ADAPTER');
  * backend (S3 or MinIO today) can change without touching the upload flow.
  */
 export interface StorageAdapter {
+  /** Throws a 503 when the backend is not configured, before any work is done. */
+  assertReady(): void;
   exists(key: string): Promise<boolean>;
   /** `size` is the exact byte length of `body`. */
   put(key: string, body: Readable, size: number): Promise<void>;

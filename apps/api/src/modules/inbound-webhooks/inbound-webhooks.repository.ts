@@ -9,6 +9,7 @@ import {
   isNotNull,
   lte,
   ne,
+  notInArray,
   or,
   sql,
   SQL,
@@ -40,6 +41,9 @@ import type { FormSchema } from '@mcid/form-schema';
 
 /** The draft is not open any more: submitted, expired, or past its expiry. */
 export class DraftNotOpenError extends Error {}
+
+/** A file a submission references was attached elsewhere, or swept, meanwhile. */
+export class FileNotPendingError extends Error {}
 
 export interface InboundWebhookRow {
   id: string;
@@ -515,10 +519,21 @@ export class InboundWebhooksRepository {
         .returning();
 
       if (data.fileIds.length > 0) {
-        await tx
+        // Only a still-pending file can be claimed: the status check inside
+        // the transaction is what stops two submissions sharing one file.
+        const claimed = await tx
           .update(inboundWebhookFiles)
           .set({ status: 'committed', submissionId: row.id })
-          .where(inArray(inboundWebhookFiles.id, data.fileIds));
+          .where(
+            and(
+              inArray(inboundWebhookFiles.id, data.fileIds),
+              eq(inboundWebhookFiles.status, 'pending'),
+            ),
+          )
+          .returning({ id: inboundWebhookFiles.id });
+        if (claimed.length !== new Set(data.fileIds).size) {
+          throw new FileNotPendingError();
+        }
       }
 
       await tx
@@ -606,28 +621,73 @@ export class InboundWebhooksRepository {
     return row;
   }
 
-  /** Deletes uploads never attached before they expired; returns their storage keys. */
-  async deleteExpiredPendingFiles(now: Date): Promise<string[]> {
-    const rows = await this.db
-      .delete(inboundWebhookFiles)
+  /** Uploads never attached to a submission before they expired. */
+  async findExpiredPendingFiles(now: Date) {
+    return this.db
+      .select({
+        id: inboundWebhookFiles.id,
+        storageKey: inboundWebhookFiles.storageKey,
+      })
+      .from(inboundWebhookFiles)
       .where(
         and(
           eq(inboundWebhookFiles.status, 'pending'),
           lte(inboundWebhookFiles.expiresAt, now),
         ),
-      )
-      .returning({ storageKey: inboundWebhookFiles.storageKey });
-    return rows.map((r) => r.storageKey);
+      );
   }
 
-  /** Which of these storage keys some file row still points at. */
-  async findReferencedStorageKeys(keys: string[]): Promise<Set<string>> {
+  /** Which of these storage keys a row outside `exceptIds` still points at. */
+  async findReferencedStorageKeys(
+    keys: string[],
+    exceptIds: string[],
+  ): Promise<Set<string>> {
     if (keys.length === 0) return new Set();
     const rows = await this.db
       .selectDistinct({ storageKey: inboundWebhookFiles.storageKey })
       .from(inboundWebhookFiles)
-      .where(inArray(inboundWebhookFiles.storageKey, keys));
+      .where(
+        and(
+          inArray(inboundWebhookFiles.storageKey, keys),
+          notInArray(inboundWebhookFiles.id, exceptIds),
+        ),
+      );
     return new Set(rows.map((r) => r.storageKey));
+  }
+
+  /** Deletes pending files by id; a file committed meanwhile is left alone. */
+  async deletePendingFiles(ids: string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    const rows = await this.db
+      .delete(inboundWebhookFiles)
+      .where(
+        and(
+          inArray(inboundWebhookFiles.id, ids),
+          eq(inboundWebhookFiles.status, 'pending'),
+        ),
+      )
+      .returning({ id: inboundWebhookFiles.id });
+    return rows.length;
+  }
+
+  /**
+   * A file saved in a draft step must outlive the draft, not just its own
+   * upload window: a wizard uploads early and submits late.
+   */
+  async attachFilesToDraft(ids: string[], draftId: string, until: Date) {
+    if (ids.length === 0) return;
+    await this.db
+      .update(inboundWebhookFiles)
+      .set({
+        draftId,
+        expiresAt: sql`GREATEST(${inboundWebhookFiles.expiresAt}, ${until.toISOString()}::timestamptz)`,
+      })
+      .where(
+        and(
+          inArray(inboundWebhookFiles.id, ids),
+          eq(inboundWebhookFiles.status, 'pending'),
+        ),
+      );
   }
 
   // ─── Drafts ─────────────────────────────────────────────────────────────

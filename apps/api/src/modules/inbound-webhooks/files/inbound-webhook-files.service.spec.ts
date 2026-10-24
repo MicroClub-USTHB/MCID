@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   PayloadTooLargeException,
+  ServiceUnavailableException,
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
 import { Readable } from 'stream';
@@ -56,10 +57,14 @@ describe('InboundWebhookFilesService', () => {
     sniff.mockReset().mockResolvedValue('application/pdf');
     repository = {
       insertFile: jest.fn((data) => Promise.resolve({ id: 'file-1', ...data })),
-      deleteExpiredPendingFiles: jest.fn(),
+      findExpiredPendingFiles: jest.fn(),
       findReferencedStorageKeys: jest.fn(),
+      deletePendingFiles: jest.fn((ids: string[]) =>
+        Promise.resolve(ids.length),
+      ),
     };
     storage = {
+      assertReady: jest.fn(),
       exists: jest.fn().mockResolvedValue(false),
       put: jest.fn().mockResolvedValue(undefined),
       delete: jest.fn().mockResolvedValue(undefined),
@@ -159,6 +164,54 @@ describe('InboundWebhookFilesService', () => {
       expect(req.readableDidRead).toBe(false);
     });
 
+    it('reads the type from the stored file, not from a prefix of it', async () => {
+      await service.receive(
+        webhook(),
+        multipart([{ name: 'file', filename: 'cv.pdf', body: pdf }]),
+      );
+      expect(sniff).toHaveBeenCalledWith(expect.stringContaining('iwf-'));
+    });
+
+    it('answers before reading the body when storage is not configured', async () => {
+      storage.assertReady.mockImplementation(() => {
+        throw new ServiceUnavailableException('File storage is not configured');
+      });
+      const req = multipart([{ name: 'file', filename: 'a.pdf', body: pdf }]);
+      await expect(service.receive(webhook(), req)).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      expect(req.readableDidRead).toBe(false);
+    });
+
+    it('puts the object back when a sweep removed it before the row existed', async () => {
+      storage.exists.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+      await service.receive(
+        webhook(),
+        multipart([{ name: 'file', filename: 'cv.pdf', body: pdf }]),
+      );
+      expect(storage.put).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['', 'soon', '0', '-3'])(
+      'falls back to one hour for a TTL of %p',
+      async (ttl) => {
+        service = new InboundWebhookFilesService(
+          repository as never,
+          storage as never,
+          { get: () => ttl } as never,
+        );
+        await service.receive(
+          webhook(),
+          multipart([{ name: 'file', filename: 'cv.pdf', body: pdf }]),
+        );
+        const { expiresAt } = repository.insertFile.mock.calls[0][0] as {
+          expiresAt: Date;
+        };
+        expect(expiresAt.getTime() - Date.now()).toBeGreaterThan(3_500_000);
+        expect(expiresAt.getTime() - Date.now()).toBeLessThanOrEqual(3_600_000);
+      },
+    );
+
     it('rejects a second file', async () => {
       await expect(
         service.receive(
@@ -207,37 +260,51 @@ describe('InboundWebhookFilesService', () => {
   });
 
   describe('sweepExpired', () => {
+    const row = (id: string, storageKey: string) => ({ id, storageKey });
+
     it('does nothing when nothing expired', async () => {
-      repository.deleteExpiredPendingFiles.mockResolvedValue([]);
+      repository.findExpiredPendingFiles.mockResolvedValue([]);
       expect(await service.sweepExpired()).toBe(0);
       expect(storage.delete).not.toHaveBeenCalled();
+      expect(repository.deletePendingFiles).not.toHaveBeenCalled();
     });
 
     it('deletes the object of an orphan, but keeps one other rows still use', async () => {
-      repository.deleteExpiredPendingFiles.mockResolvedValue([
-        'files/a',
-        'files/a',
-        'files/b',
+      repository.findExpiredPendingFiles.mockResolvedValue([
+        row('1', 'files/a'),
+        row('2', 'files/a'),
+        row('3', 'files/b'),
       ]);
       repository.findReferencedStorageKeys.mockResolvedValue(
         new Set(['files/b']),
       );
 
       expect(await service.sweepExpired()).toBe(3);
+      // The reference check ignores the rows being swept
+      expect(repository.findReferencedStorageKeys).toHaveBeenCalledWith(
+        ['files/a', 'files/b'],
+        ['1', '2', '3'],
+      );
       expect(storage.delete).toHaveBeenCalledTimes(1);
       expect(storage.delete).toHaveBeenCalledWith('files/a');
+      expect(repository.deletePendingFiles).toHaveBeenCalledWith([
+        '1',
+        '2',
+        '3',
+      ]);
     });
 
-    it('survives a storage failure on one object', async () => {
-      repository.deleteExpiredPendingFiles.mockResolvedValue([
-        'files/a',
-        'files/b',
+    it('keeps the rows of an object it could not delete, to retry next sweep', async () => {
+      repository.findExpiredPendingFiles.mockResolvedValue([
+        row('1', 'files/a'),
+        row('2', 'files/b'),
       ]);
       repository.findReferencedStorageKeys.mockResolvedValue(new Set());
       storage.delete.mockRejectedValueOnce(new Error('s3 down'));
 
-      await expect(service.sweepExpired()).resolves.toBe(2);
+      await expect(service.sweepExpired()).resolves.toBe(1);
       expect(storage.delete).toHaveBeenCalledTimes(2);
+      expect(repository.deletePendingFiles).toHaveBeenCalledWith(['2']);
     });
   });
 
@@ -249,16 +316,16 @@ describe('InboundWebhookFilesService', () => {
 
     it('runs the sweep on an interval, once however often it is started', async () => {
       jest.useFakeTimers();
-      repository.deleteExpiredPendingFiles.mockResolvedValue([]);
+      repository.findExpiredPendingFiles.mockResolvedValue([]);
 
       service.startSweepSchedule();
       service.startSweepSchedule();
       await jest.advanceTimersByTimeAsync(10 * 60 * 1000);
-      expect(repository.deleteExpiredPendingFiles).toHaveBeenCalledTimes(1);
+      expect(repository.findExpiredPendingFiles).toHaveBeenCalledTimes(1);
 
       service.stopSweepSchedule();
       await jest.advanceTimersByTimeAsync(10 * 60 * 1000);
-      expect(repository.deleteExpiredPendingFiles).toHaveBeenCalledTimes(1);
+      expect(repository.findExpiredPendingFiles).toHaveBeenCalledTimes(1);
     });
   });
 });

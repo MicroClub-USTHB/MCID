@@ -251,7 +251,7 @@ curl -X POST https://mcid.example/api/inbound-webhooks/$WEBHOOK_ID/files \
 - **The type comes from the content.** MCID reads the file's first bytes and ignores the `Content-Type` the sender gives, so an executable renamed to `cv.pdf` is refused. A type with no recognizable signature, such as plain text or CSV, is refused too. The type must be in the `accept` list of at least one file field of the webhook, and `/submit` then checks it against the field that uses the file.
 - **The size is capped while it streams.** The cap is the largest `maxSizeBytes` of the webhook's file fields. A bigger file answers 413 and nothing is stored.
 - **Identical content is stored once.** Two uploads of the same bytes get two `fileId`s and share one stored object.
-- **An upload expires.** It lasts one hour, and an operator can change that with `INBOUND_WEBHOOK_FILE_TTL_H`. A file that no submission has used by then is deleted, and `/submit` answers `FILE_EXPIRED` for it.
+- **An upload expires.** It lasts one hour, and an operator can change that with `INBOUND_WEBHOOK_FILE_TTL_H`. A file that no submission has used by then is deleted, and `/submit` answers `FILE_EXPIRED` for it. A file saved in a draft step lives as long as the draft instead, so a wizard can upload on one page and submit a day later.
 - **A file belongs to one webhook and one submission.** Another webhook's `fileId` is answered as `FILE_NOT_FOUND`, and a second submission using it gets `FILE_ALREADY_USED`.
 
 | Status | When |

@@ -16,6 +16,10 @@ export class S3StorageAdapter implements StorageAdapter {
 
   constructor(private readonly configService: ConfigService) {}
 
+  assertReady(): void {
+    this.s3();
+  }
+
   async exists(key: string): Promise<boolean> {
     try {
       await this.s3().send(
