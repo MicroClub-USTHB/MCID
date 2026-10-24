@@ -9,7 +9,10 @@ const session = {
 };
 
 function stubFetch(response: Response) {
-  vi.stubGlobal('fetch', vi.fn(async () => response));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => response),
+  );
 }
 
 afterEach(() => {

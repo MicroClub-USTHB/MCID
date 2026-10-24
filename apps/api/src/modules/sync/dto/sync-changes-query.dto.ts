@@ -30,7 +30,8 @@ export class SyncChangesQueryDto {
 
   @ApiPropertyOptional({
     enum: SYNC_CHANGE_ACTIONS,
-    description: 'Filter changes by what happened (added, removed, updated, ...)',
+    description:
+      'Filter changes by what happened (added, removed, updated, ...)',
   })
   @IsOptional()
   @IsIn(SYNC_CHANGE_ACTIONS)

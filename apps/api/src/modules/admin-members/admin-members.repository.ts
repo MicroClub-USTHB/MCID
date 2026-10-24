@@ -279,9 +279,7 @@ export class AdminMembersRepository {
         eq(schema.serverMembers.isActive, true),
       ];
       if (serverId && serverId.length > 0) {
-        joinedConditions.push(
-          inArray(schema.serverMembers.serverId, serverId),
-        );
+        joinedConditions.push(inArray(schema.serverMembers.serverId, serverId));
       }
 
       const joinedAfterSubquery = this.db

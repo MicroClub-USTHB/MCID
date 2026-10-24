@@ -37,7 +37,7 @@ describe('SyncChangesQueryDto', () => {
     const dto = plainToInstance(SyncChangesQueryDto, { action: 'addded' });
     const errors = validateSync(dto);
     expect(errors).toHaveLength(1);
-    expect(errors[0]!.property).toBe('action');
+    expect(errors[0].property).toBe('action');
   });
 
   it('rejects a limit outside the endpoint bounds', () => {
@@ -47,7 +47,7 @@ describe('SyncChangesQueryDto', () => {
     const tooBig = validateSync(
       plainToInstance(SyncChangesQueryDto, { limit: '101' }),
     );
-    expect(zero[0]!.property).toBe('limit');
-    expect(tooBig[0]!.property).toBe('limit');
+    expect(zero[0].property).toBe('limit');
+    expect(tooBig[0].property).toBe('limit');
   });
 });

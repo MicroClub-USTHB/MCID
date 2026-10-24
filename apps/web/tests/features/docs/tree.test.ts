@@ -102,9 +102,7 @@ describe('docs navigation (meta.json)', () => {
   });
 
   it('keeps the mcid-cli group together, in reading order', () => {
-    const cli = treeSections(testSource.pageTree).find(
-      (section) => section.name === 'mcid-cli',
-    )!;
+    const cli = treeSections(testSource.pageTree).find((section) => section.name === 'mcid-cli')!;
 
     expect(cli.pages.map((page) => page.url)).toEqual([
       '/docs/cli',

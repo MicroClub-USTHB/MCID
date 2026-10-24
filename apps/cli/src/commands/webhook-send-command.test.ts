@@ -202,11 +202,7 @@ describe('webhook send --data schema validation', () => {
     const tmp = await mkdtemp(join(tmpdir(), 'mcid-send-'));
     await configWithStoredSecret(tmp);
     const dataFile = join(tmp, 'payload.json');
-    await writeFile(
-      dataFile,
-      JSON.stringify({ contact: { message: 'hi' } }),
-      'utf8',
-    );
+    await writeFile(dataFile, JSON.stringify({ contact: { message: 'hi' } }), 'utf8');
 
     const result = await runCli(
       ['webhook', 'send', 'contact-form', '--data', dataFile, '--api-key', 'mcid_live_key'],

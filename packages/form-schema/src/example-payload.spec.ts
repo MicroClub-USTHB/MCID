@@ -13,13 +13,21 @@ describe('buildExamplePayload', () => {
           key: 'contact',
           fields: [
             { key: 'message', type: 'string', required: true },
-            { key: 'topic', type: 'enum', required: true, options: [{ value: 'support' }] },
+            {
+              key: 'topic',
+              type: 'enum',
+              required: true,
+              options: [{ value: 'support' }],
+            },
           ],
         },
       ],
     };
 
-    const example = buildExamplePayload(schema) as Record<string, Record<string, unknown>>;
+    const example = buildExamplePayload(schema) as Record<
+      string,
+      Record<string, unknown>
+    >;
 
     expect(Object.keys(example)).toEqual(['contact']);
     expect(example['contact']).toMatchObject({ topic: 'support' });
@@ -56,7 +64,10 @@ describe('buildExamplePayload', () => {
       ],
     };
 
-    const example = buildExamplePayload(schema) as Record<string, Record<string, unknown>>;
+    const example = buildExamplePayload(schema) as Record<
+      string,
+      Record<string, unknown>
+    >;
 
     expect(example['apply']).toMatchObject({ status: 'student' });
     expect(example['apply']!['studentId']).toBeTypeOf('string');
@@ -83,16 +94,21 @@ describe('buildExamplePayload', () => {
               required: true,
               minItems: 2,
               maxItems: 3,
-              item: { key: 'link', type: 'url' },
+              item: { key: 'link', type: 'url', required: true },
             },
           ],
         },
       ],
     };
 
-    const example = buildExamplePayload(schema) as Record<string, Record<string, unknown>>;
+    const example = buildExamplePayload(schema) as Record<
+      string,
+      Record<string, unknown>
+    >;
 
-    expect(example['profile']!['person']).toMatchObject({ name: expect.any(String) });
+    expect(example['profile']!['person']).toMatchObject({
+      name: expect.any(String),
+    });
     expect(example['profile']!['links']).toHaveLength(2);
     expect(validatePayload(schema, example, opts).ok).toBe(true);
   });
@@ -103,6 +119,8 @@ describe('buildExamplePayload', () => {
       fields: [{ key: 'name', type: 'string', required: true }],
     };
 
-    expect(buildExamplePayload(schema)).toMatchObject({ name: expect.any(String) });
+    expect(buildExamplePayload(schema)).toMatchObject({
+      name: expect.any(String),
+    });
   });
 });

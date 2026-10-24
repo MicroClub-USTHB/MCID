@@ -162,7 +162,9 @@ export function registerDevCommand(program: Command): void {
           );
 
           // 4. Exchange code for session token
-          process.stdout.write(`  ${colors.cyan('3. Exchanging code for token')} (${elapsed()})...\n`);
+          process.stdout.write(
+            `  ${colors.cyan('3. Exchanging code for token')} (${elapsed()})...\n`,
+          );
           const tokenRes = await fetch(`${baseUrl}/api/auth/token`, {
             method: 'POST',
             headers: {
@@ -190,7 +192,9 @@ export function registerDevCommand(program: Command): void {
             expiresAt?: string;
           };
           const token = sessionData.token || sessionData.accessToken || '';
-          process.stdout.write(`  ${colors.green('4. Token exchange successful')} (${elapsed()})\n`);
+          process.stdout.write(
+            `  ${colors.green('4. Token exchange successful')} (${elapsed()})\n`,
+          );
 
           // 5. Validate session token to fetch member & roles
           process.stdout.write(`  ${colors.cyan('5. Validating token')} (${elapsed()})...\n`);

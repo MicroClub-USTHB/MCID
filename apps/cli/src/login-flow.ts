@@ -242,9 +242,7 @@ export async function startCallbackListener(
   optionsOrWarn?: ((line: string) => void) | CallbackListenerOptions,
 ): Promise<CallbackListener> {
   const options: CallbackListenerOptions =
-    typeof optionsOrWarn === 'function'
-      ? { warn: optionsOrWarn }
-      : (optionsOrWarn ?? {});
+    typeof optionsOrWarn === 'function' ? { warn: optionsOrWarn } : (optionsOrWarn ?? {});
   const warn = options.warn ?? (() => {});
   let onRequest: (params: URLSearchParams) => CallbackResult = () => ({
     kind: 'ignore',

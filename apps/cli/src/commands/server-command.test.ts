@@ -47,8 +47,7 @@ describe('server channel --messages', () => {
     const result = await runCli(['server', 'channel', CHANNEL_ID, '--messages', '10'], {
       routes: baseRoutes({
         'GET /admin/servers/:serverId/channels': () => json(channelList),
-        [`GET /admin/servers/:serverId/channels/${CHANNEL_ID}/messages`]: () =>
-          json(messagePage),
+        [`GET /admin/servers/:serverId/channels/${CHANNEL_ID}/messages`]: () => json(messagePage),
       }),
     });
 

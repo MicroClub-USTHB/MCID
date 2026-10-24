@@ -100,19 +100,10 @@ const GROUP_EXAMPLES: Record<string, string[]> = {
     'mcid-cli member permissions @alice',
   ],
   role: ['mcid-cli role list --server "Micro Club"', 'mcid-cli role permissions lead'],
-  access: [
-    'mcid-cli access explain @alice',
-    'mcid-cli access role set lead project=write',
-  ],
-  webhook: [
-    'mcid-cli webhook list',
-    'mcid-cli webhook send contact-form --example --print-curl',
-  ],
+  access: ['mcid-cli access explain @alice', 'mcid-cli access role set lead project=write'],
+  webhook: ['mcid-cli webhook list', 'mcid-cli webhook send contact-form --example --print-curl'],
   ops: ['mcid-cli status', 'mcid-cli audit list --since 24h --action-type access'],
-  dev: [
-    'mcid-cli dev sso --project portal',
-    'mcid-cli dev check @alice project:read',
-  ],
+  dev: ['mcid-cli dev sso --project portal', 'mcid-cli dev check @alice project:read'],
   schema: [
     'mcid-cli schema validate form.json',
     'mcid-cli schema preview form.json --step contact',

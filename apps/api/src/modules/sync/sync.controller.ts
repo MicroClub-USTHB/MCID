@@ -31,7 +31,6 @@ import { TriggerSyncDto } from './dto/trigger-sync.dto';
 import { SyncStatusDto } from './dto/sync-status.dto';
 import { SyncLogsQueryDto } from './dto/sync-logs-query.dto';
 import { SyncChangesQueryDto } from './dto/sync-changes-query.dto';
-import { SYNC_CHANGE_ACTIONS } from '@mcid/contracts';
 import { SyncLogsResponseDto } from './dto/sync-log.dto';
 import { SyncChangeDetailsResponseDto } from './dto/sync-change-detail.dto';
 import { AdminAccessGuard } from '../../common/guards/admin-access.guard';

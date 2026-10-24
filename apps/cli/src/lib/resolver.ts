@@ -98,7 +98,10 @@ export async function resolveProject(
   }
 
   throw new CliError(
-    `Project "${idOrNameOrSlug}" not found${didYouMean(idOrNameOrSlug, projects.map((p) => p.name))}\n  hint: list available projects with \`mcid-cli project list\``,
+    `Project "${idOrNameOrSlug}" not found${didYouMean(
+      idOrNameOrSlug,
+      projects.map((p) => p.name),
+    )}\n  hint: list available projects with \`mcid-cli project list\``,
     ExitCode.NotFound,
   );
 }
@@ -147,7 +150,10 @@ export async function resolveServer(
   }
 
   throw new CliError(
-    `Server "${idOrName}" not found${didYouMean(idOrName, servers.map((s) => s.name))}\n  hint: list available servers with \`mcid-cli server list\``,
+    `Server "${idOrName}" not found${didYouMean(
+      idOrName,
+      servers.map((s) => s.name),
+    )}\n  hint: list available servers with \`mcid-cli server list\``,
     ExitCode.NotFound,
   );
 }
@@ -198,7 +204,10 @@ export async function resolveRole(
   }
 
   throw new CliError(
-    `Role "${idOrName}" not found on server ${serverId}${didYouMean(idOrName, roles.map((r) => r.name))}\n  hint: list roles with \`mcid-cli role list --server ${serverId}\``,
+    `Role "${idOrName}" not found on server ${serverId}${didYouMean(
+      idOrName,
+      roles.map((r) => r.name),
+    )}\n  hint: list roles with \`mcid-cli role list --server ${serverId}\``,
     ExitCode.NotFound,
   );
 }
@@ -253,7 +262,10 @@ export async function resolveMember(
   }
 
   throw new CliError(
-    `Member "${idOrUsername}" not found${didYouMean(clean, list.map((m) => m.username))}\n  hint: check the username, or specify the Discord ID directly`,
+    `Member "${idOrUsername}" not found${didYouMean(
+      clean,
+      list.map((m) => m.username),
+    )}\n  hint: check the username, or specify the Discord ID directly`,
     ExitCode.NotFound,
   );
 }
@@ -290,7 +302,10 @@ export async function resolveWebhook(
   }
 
   throw new CliError(
-    `Webhook "${idOrNameOrSlug}" not found${didYouMean(idOrNameOrSlug, webhooks.map((w) => w.name))}\n  hint: list webhooks with \`mcid-cli webhook list\``,
+    `Webhook "${idOrNameOrSlug}" not found${didYouMean(
+      idOrNameOrSlug,
+      webhooks.map((w) => w.name),
+    )}\n  hint: list webhooks with \`mcid-cli webhook list\``,
     ExitCode.NotFound,
   );
 }

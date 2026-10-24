@@ -354,10 +354,7 @@ export function registerServerCommand(program: Command): void {
             }
           }
           const client = await getClient(options.profile);
-          const resolved = await resolveServer(
-            client,
-            channelArg ? serverArg : undefined,
-          );
+          const resolved = await resolveServer(client, channelArg ? serverArg : undefined);
           const list = await client.get<ChannelListResponse>(
             `/admin/servers/${resolved.id}/channels`,
           );

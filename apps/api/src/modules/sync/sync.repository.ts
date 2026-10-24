@@ -6,7 +6,11 @@ import { serverSyncLogs } from '../../database/entities/server-sync-log.entity';
 import { syncChangeDetails } from '../../database/entities/sync-change-detail.entity';
 import { eq, and, desc, sql, asc, isNull, lt, or } from 'drizzle-orm';
 import { SyncTarget } from './dto/trigger-sync.dto';
-import type { SyncChangeAction, SyncLogStatus, SyncType } from '@mcid/contracts';
+import type {
+  SyncChangeAction,
+  SyncLogStatus,
+  SyncType,
+} from '@mcid/contracts';
 
 export type { SyncLogStatus };
 

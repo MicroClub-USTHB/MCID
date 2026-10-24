@@ -85,9 +85,7 @@ describe('dev sso callback listener', () => {
 
     expect(result.stdout).toContain('/api/auth/sso/authorize');
     expect(result.stdout).toContain('prompt=none');
-    expect(openBrowser).toHaveBeenCalledWith(
-      expect.stringContaining('/api/auth/sso/authorize'),
-    );
+    expect(openBrowser).toHaveBeenCalledWith(expect.stringContaining('/api/auth/sso/authorize'));
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toMatch(/timed out|timeout/i);
   });

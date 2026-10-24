@@ -17,11 +17,7 @@ import {
 } from '../lib/output.js';
 import { resolveWebhook } from '../lib/resolver.js';
 import { parseSince } from '../lib/time.js';
-import {
-  buildExamplePayload,
-  validatePayload,
-  type FormSchema,
-} from '@mcid/form-schema';
+import { buildExamplePayload, validatePayload, type FormSchema } from '@mcid/form-schema';
 import { colors } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
 import {
@@ -250,9 +246,7 @@ export function registerWebhookCommand(program: Command): void {
             rejectUnknownFields: webhookDetail.rejectUnknownFields ?? true,
           });
           if (!validation.ok) {
-            const problems = validation.errors.map(
-              (error) => `${error.path}: ${error.message}`,
-            );
+            const problems = validation.errors.map((error) => `${error.path}: ${error.message}`);
             throw new CliError(
               `Payload does not match the webhook schema:\n  ${problems.join('\n  ')}`,
               ExitCode.PrecheckFailed,
