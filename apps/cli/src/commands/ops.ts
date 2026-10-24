@@ -1,4 +1,3 @@
-import { writeFile } from 'node:fs/promises';
 import { Command } from 'commander';
 import { configPath, loadConfig, resolveProfileName } from '../config.js';
 import { defaultKeyProvider } from '../crypto-store.js';
@@ -21,6 +20,7 @@ import {
   printSuccess,
   printTable,
   toCsv,
+  writeExportFile,
 } from '../lib/output.js';
 import { resolveMember, resolveProject, resolveServer } from '../lib/resolver.js';
 import { parseSince } from '../lib/time.js';
@@ -387,8 +387,9 @@ export function registerOpsCommand(program: Command): void {
     .command('export')
     .description('Export audit logs to CSV')
     .option('--file <path>', 'Destination CSV file path')
+    .option('--force', 'Overwrite the destination file if it exists')
     .option('--profile <name>', 'Profile to use')
-    .action(async (options: { file?: string; profile?: string }) => {
+    .action(async (options: { file?: string; force?: boolean; profile?: string }) => {
       try {
         const client = await getClient(options.profile);
         const data = await client.get<Record<string, unknown>[] | string>(
@@ -397,7 +398,7 @@ export function registerOpsCommand(program: Command): void {
         const csvContent = typeof data === 'string' ? data : toCsv(data);
         const defaultFilename = `audit-${new Date().toISOString().slice(0, 10)}.csv`;
         const path = options.file || defaultFilename;
-        await writeFile(path, csvContent, { encoding: 'utf8', mode: 0o600 });
+        await writeExportFile(path, csvContent, options.force);
         printSuccess(`Exported audit logs to ${path}`);
       } catch (err) {
         exitWithError('audit export', err);
@@ -591,6 +592,7 @@ export function registerOpsCommand(program: Command): void {
     .option('--server <server>', 'Server scope (required for type=roles)')
     .option('-o, --output <format>', 'Format (csv|json)', 'csv')
     .option('--file <path>', 'Destination file path')
+    .option('--force', 'Overwrite the destination file if it exists')
     .option('--profile <name>', 'Profile to use')
     .action(
       async (options: {
@@ -598,6 +600,7 @@ export function registerOpsCommand(program: Command): void {
         server?: string;
         output?: 'csv' | 'json';
         file?: string;
+        force?: boolean;
         profile?: string;
       }) => {
         try {
@@ -625,7 +628,7 @@ export function registerOpsCommand(program: Command): void {
             options.file ||
             `stats-${options.type || 'members'}-${new Date().toISOString().slice(0, 10)}.${format}`;
 
-          await writeFile(target, content, { encoding: 'utf8', mode: 0o600 });
+          await writeExportFile(target, content, options.force);
           printSuccess(`Exported ${options.type || 'members'} stats to ${target}`);
         } catch (err) {
           exitWithError('stats export', err);

@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -11,6 +11,7 @@ import {
   encrypt,
   type KeyStore,
 } from './crypto-store.js';
+import { expectOwnerOnlyMode } from './test-support/fs.js';
 import { fixedKeys } from './test-support/keys.js';
 
 const CONTEXT = 'prod/session';
@@ -83,7 +84,7 @@ describe('FileKeyStore', () => {
 
     expect(first).toHaveLength(32);
     expect(second.equals(first)).toBe(true);
-    expect((await stat(path)).mode & 0o777).toBe(0o600);
+    await expectOwnerOnlyMode(path);
     expect(Buffer.from(await readFile(path, 'utf8'), 'base64').equals(first)).toBe(true);
   });
 

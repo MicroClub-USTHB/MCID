@@ -1,5 +1,8 @@
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { formatAge, formatDate, toCsv } from './output.js';
+import { formatAge, formatDate, toCsv, writeExportFile } from './output.js';
 
 describe('output formatters', () => {
   it('formats relative ages cleanly', () => {
@@ -27,5 +30,35 @@ describe('output formatters', () => {
     expect(csv).toContain('id,name,note');
     expect(csv).toContain('1,Alpha,simple');
     expect(csv).toContain('2,"Beta, with comma","quoted ""quote"""');
+  });
+});
+
+describe('writeExportFile', () => {
+  it('refuses to overwrite an existing report without --force', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mcid-export-'));
+    try {
+      const target = join(dir, 'report.csv');
+      await writeFile(target, 'old', 'utf8');
+
+      await expect(writeExportFile(target, 'new')).rejects.toMatchObject({
+        message: expect.stringContaining('--force'),
+      });
+      expect(await readFile(target, 'utf8')).toBe('old');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('overwrites an existing report when --force is passed', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mcid-export-'));
+    try {
+      const target = join(dir, 'report.csv');
+      await writeFile(target, 'old', 'utf8');
+
+      await writeExportFile(target, 'new', true);
+      expect(await readFile(target, 'utf8')).toBe('new');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -1,5 +1,27 @@
 /* eslint-disable no-control-regex */
+import { access, writeFile } from 'node:fs/promises';
+import { CliError, ExitCode } from '../errors.js';
 import { colors } from './tui.js';
+
+/**
+ * Writes an exported report owner-only (0600) and refuses to clobber an
+ * existing file unless --force was passed.
+ */
+export async function writeExportFile(path: string, content: string, force = false): Promise<void> {
+  if (!force) {
+    try {
+      await access(path);
+      throw new CliError(
+        `"${path}" already exists; pass --force to overwrite it`,
+        ExitCode.Rejected,
+      );
+    } catch (error) {
+      if (error instanceof CliError) throw error;
+      // ENOENT: the file does not exist yet, so writing is safe.
+    }
+  }
+  await writeFile(path, content, { encoding: 'utf8', mode: 0o600 });
+}
 
 export type OutputFormat = 'table' | 'json' | 'csv' | 'quiet';
 

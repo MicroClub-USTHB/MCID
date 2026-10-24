@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -23,6 +23,7 @@ import {
   type Config,
 } from './config.js';
 import { CliError } from './errors.js';
+import { expectOwnerOnlyMode } from './test-support/fs.js';
 
 const tempPath = async () =>
   join(await mkdtemp(join(tmpdir(), 'mcid-cli-config-')), 'sub', 'config.json');
@@ -69,7 +70,7 @@ describe('loadConfig/saveConfig', () => {
     await saveConfig(config, path);
 
     expect(await loadConfig(path)).toEqual(config);
-    expect((await stat(path)).mode & 0o777).toBe(0o600);
+    await expectOwnerOnlyMode(path);
     expect(JSON.parse(await readFile(path, 'utf8'))).toEqual(config);
   });
 

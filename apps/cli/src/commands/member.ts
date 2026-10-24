@@ -1,4 +1,3 @@
-import { writeFile } from 'node:fs/promises';
 import { Command } from 'commander';
 import { configPath, loadConfig, normalizeBaseUrl, resolveProfileName } from '../config.js';
 import { defaultKeyProvider } from '../crypto-store.js';
@@ -12,6 +11,7 @@ import {
   printSuccess,
   printTable,
   toCsv,
+  writeExportFile,
 } from '../lib/output.js';
 import { normalizeMemberDetail, normalizeMemberList, unwrapArray } from '../lib/api-normalize.js';
 import { resolveMember, resolveServer } from '../lib/resolver.js';
@@ -375,6 +375,7 @@ export function registerMemberCommand(program: Command): void {
     .option('--role <role...>', 'Filter by role ID')
     .option('-o, --output <format>', 'Export format (csv|json)', 'csv')
     .option('--file <path>', 'Destination file path')
+    .option('--force', 'Overwrite the destination file if it exists')
     .option('--profile <name>', 'Profile to use')
     .action(
       async (options: {
@@ -382,6 +383,7 @@ export function registerMemberCommand(program: Command): void {
         role?: string[];
         output?: 'csv' | 'json';
         file?: string;
+        force?: boolean;
         profile?: string;
       }) => {
         try {
@@ -410,7 +412,7 @@ export function registerMemberCommand(program: Command): void {
           const defaultFilename = `members-${resolvedServer.id}-${new Date().toISOString().slice(0, 10)}.${format}`;
           const targetFile = options.file || defaultFilename;
 
-          await writeFile(targetFile, content, { encoding: 'utf8', mode: 0o600 });
+          await writeExportFile(targetFile, content, options.force);
           const count = typeof data === 'string' ? undefined : data.length;
           printSuccess(
             `Exported ${count !== undefined ? `${count} member row(s)` : 'members'} to ${targetFile}`,

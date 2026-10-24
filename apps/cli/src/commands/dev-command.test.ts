@@ -1,10 +1,10 @@
-import { stat } from 'node:fs/promises';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanupCliTest, json, runCli } from '../test-support/cli-harness.js';
 import { baseRoutes } from '../test-support/fixtures.js';
+import { expectOwnerOnlyMode } from '../test-support/fs.js';
 
 afterEach(cleanupCliTest);
 
@@ -71,8 +71,7 @@ describe('dev env --file', () => {
     );
 
     expect(result.exitCode).toBe(0);
-    const mode = (await stat(target)).mode & 0o777;
-    expect(mode).toBe(0o600);
+    await expectOwnerOnlyMode(target);
     expect(result.requests).toHaveLength(0);
   });
 });
