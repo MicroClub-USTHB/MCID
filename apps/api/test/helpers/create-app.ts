@@ -34,7 +34,10 @@ export async function createTestApp(): Promise<INestApplication> {
     .useValue({ onModuleInit: () => Promise.resolve() })
     .compile();
 
-  const app = moduleFixture.createNestApplication<NestExpressApplication>();
+  const app = moduleFixture.createNestApplication<NestExpressApplication>({
+    // Inbound-webhook HMAC verification signs the unparsed body, as in main.ts
+    rawBody: true,
+  });
 
   // Base64 webhook avatars overflow Express's default 100kb JSON body limit
   app.useBodyParser('json', { limit: '512kb' });
