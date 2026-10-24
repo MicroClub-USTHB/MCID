@@ -198,6 +198,16 @@ describe('access set preview and validation', () => {
     expect(result.requests.some((r) => r.method === 'PUT')).toBe(false);
   });
 
+  it('rejects a pair without a level before any write', async () => {
+    const result = await runCli(['access', 'role', 'set', 'Admin', 'webhooks', '--yes'], {
+      routes: baseRoutes({ 'GET /admin/access/roles': () => json([adminRole]) }),
+    });
+
+    expect(result.exitCode).toBe(64);
+    expect(result.stderr).toContain('Invalid grant "webhooks"');
+    expect(result.requests.some((r) => r.method === 'PUT')).toBe(false);
+  });
+
   it('sends nothing when confirmation is refused on a non-interactive terminal', async () => {
     const result = await runCli(['access', 'role', 'set', 'Admin', 'webhooks=write'], {
       routes: baseRoutes({ 'GET /admin/access/roles': () => json([adminRole]) }),

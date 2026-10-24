@@ -34,6 +34,37 @@ function printGrantDiff(before: Record<string, string>, after: Record<string, st
 }
 
 /**
+ * Parse `resource=level` pairs into a grant map, rejecting what the API would
+ * reject so a typo never reaches a PUT (#232).
+ */
+function parseGrantPairs(pairs: readonly string[]): Record<string, string> {
+  const grants: Record<string, string> = {};
+  for (const pair of pairs) {
+    const [resource, level] = pair.split('=');
+    if (!resource || !level) {
+      throw new CliError(
+        `Invalid grant "${pair}". Expected format: <resource>=<level>`,
+        ExitCode.Usage,
+      );
+    }
+    if (!isAccessResource(resource)) {
+      throw new CliError(
+        `Unknown resource "${resource}".${didYouMean(resource, ACCESS_RESOURCES)}\n  hint: run \`mcid-cli access catalog\` to view valid resources.`,
+        ExitCode.Usage,
+      );
+    }
+    if (!isAccessLevel(level)) {
+      throw new CliError(
+        `Unknown access level "${level}".${didYouMean(level, ACCESS_LEVELS)}\n  hint: expected one of: ${ACCESS_LEVELS.join(', ')}`,
+        ExitCode.Usage,
+      );
+    }
+    grants[resource] = level;
+  }
+  return grants;
+}
+
+/**
  * Root admins already hold every permission, so a member override can never
  * change their access. Refuse before writing instead of reporting a change
  * that the API would ignore.
@@ -267,29 +298,7 @@ export function registerAccessCommand(program: Command): void {
         );
       }
 
-      const newGrants: Record<string, string> = {};
-      for (const pair of grantPairs) {
-        const [res, lvl] = pair.split('=');
-        if (!res || !lvl) {
-          throw new CliError(
-            `Invalid grant format "${pair}". Expected format: <resource>=<level>`,
-            ExitCode.Usage,
-          );
-        }
-        if (!isAccessResource(res)) {
-          throw new CliError(
-            `Unknown resource "${res}".${didYouMean(res, ACCESS_RESOURCES)}\n  hint: run \`mcid-cli access catalog\` to view valid resources.`,
-            ExitCode.Usage,
-          );
-        }
-        if (!isAccessLevel(lvl)) {
-          throw new CliError(
-            `Unknown access level "${lvl}".${didYouMean(lvl, ACCESS_LEVELS)}\n  hint: expected one of: ${ACCESS_LEVELS.join(', ')}`,
-            ExitCode.Usage,
-          );
-        }
-        newGrants[res] = lvl;
-      }
+      const newGrants = parseGrantPairs(grantPairs);
 
       // Merge with current grants unless --replace is passed
       let targetGrants: Record<string, string> = {};
@@ -383,29 +392,7 @@ export function registerAccessCommand(program: Command): void {
       const resolved = await resolveMember(client, memberArg);
       await assertNotRootAdmin(client, resolved.discordId, resolved.username);
 
-      const newOverrides: Record<string, string> = {};
-      for (const pair of grantPairs) {
-        const [res, lvl] = pair.split('=');
-        if (!res || !lvl) {
-          throw new CliError(
-            `Invalid format "${pair}". Expected format: <resource>=<level>`,
-            ExitCode.Usage,
-          );
-        }
-        if (!isAccessResource(res)) {
-          throw new CliError(
-            `Unknown resource "${res}".${didYouMean(res, ACCESS_RESOURCES)}\n  hint: run \`mcid-cli access catalog\` to view valid resources.`,
-            ExitCode.Usage,
-          );
-        }
-        if (!isAccessLevel(lvl)) {
-          throw new CliError(
-            `Unknown access level "${lvl}".${didYouMean(lvl, ACCESS_LEVELS)}\n  hint: expected one of: ${ACCESS_LEVELS.join(', ')}`,
-            ExitCode.Usage,
-          );
-        }
-        newOverrides[res] = lvl;
-      }
+      const newOverrides = parseGrantPairs(grantPairs);
 
       // The current overrides are read either way: they are what the diff is
       // measured against, and --replace only decides what gets sent.
