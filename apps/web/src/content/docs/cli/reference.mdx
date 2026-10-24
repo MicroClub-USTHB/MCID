@@ -69,7 +69,12 @@ mcid-cli access overrides
 ```
 
 `access role set` merges with the role's current grants unless `--replace` is passed.
-Grant arguments use `<resource>=<level>`.
+Grant arguments use `<resource>=<level>`; an unknown resource or level fails before any
+request and names the closest valid option. Both `access role set` and `access member set`
+print the change they will apply (`projects: read → write`, `none` for a grant being
+added or removed) before asking, so `--yes` never hides what changes. `whoami` prints
+the signed-in admin's own level per resource, and `access explain` prints one for any
+member.
 
 ## Sync
 
@@ -81,8 +86,9 @@ mcid-cli sync changes 42 --type added
 ```
 
 `sync changes` pages through the run's changes until it has read all of them, and
-`--type` maps to the API's `action` filter. `--wait` exits non-zero when the run fails
-or does not finish inside its timeout.
+`--type` maps to the API's `action` filter. `sync run` prints the sync log id it queued;
+pass that id to `sync changes <id>`. `--wait` exits non-zero when the run fails or does
+not finish inside its timeout.
 
 ## Ops: status, monitoring, audits, settings
 
