@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { DatabaseModule } from '../../database/database.module';
 import { RedisModule } from '../../common/redis/redis.module';
 import { AuditModule } from '../audit/audit.module';
@@ -9,6 +9,9 @@ import { InboundWebhookReadController } from './inbound-webhook-read.controller'
 import { InboundWebhooksService } from './inbound-webhooks.service';
 import { InboundWebhooksRepository } from './inbound-webhooks.repository';
 import { InboundWebhookReadGuard } from './guards/inbound-webhook-read.guard';
+import { InboundWebhookFilesService } from './files/inbound-webhook-files.service';
+import { S3StorageAdapter } from './files/s3.storage';
+import { STORAGE_ADAPTER } from './files/storage.adapter';
 
 @Module({
   imports: [DatabaseModule, RedisModule, AuditModule],
@@ -21,7 +24,21 @@ import { InboundWebhookReadGuard } from './guards/inbound-webhook-read.guard';
     InboundWebhooksService,
     InboundWebhooksRepository,
     InboundWebhookReadGuard,
+    InboundWebhookFilesService,
+    { provide: STORAGE_ADAPTER, useClass: S3StorageAdapter },
   ],
   exports: [InboundWebhooksService, InboundWebhooksRepository],
 })
-export class InboundWebhooksModule {}
+export class InboundWebhooksModule implements OnModuleInit, OnModuleDestroy {
+  constructor(private readonly files: InboundWebhookFilesService) {}
+
+  onModuleInit() {
+    if (process.env.NODE_ENV !== 'test') {
+      this.files.startSweepSchedule();
+    }
+  }
+
+  onModuleDestroy() {
+    this.files.stopSweepSchedule();
+  }
+}

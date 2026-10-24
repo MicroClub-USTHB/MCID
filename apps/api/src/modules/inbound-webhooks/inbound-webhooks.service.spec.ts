@@ -61,6 +61,7 @@ describe('InboundWebhooksService.ingest', () => {
         get: (name: string, fallback: unknown) =>
           name === 'app.inboundWebhookEncryptionKey' ? key : fallback,
       } as never,
+      {} as never,
     );
   };
 

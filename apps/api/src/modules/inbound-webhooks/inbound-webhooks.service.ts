@@ -27,6 +27,7 @@ import {
 } from '../../common/utils/inbound-webhook-signature.util';
 import {
   DraftNotOpenError,
+  FileNotPendingError,
   InboundWebhookRow,
   InboundWebhooksRepository,
   ListSubmissionsFilters,
@@ -41,6 +42,7 @@ import {
   renderOpenApi,
   WebhookDocsInput,
 } from './docs/webhook-docs.generator';
+import { InboundWebhookFilesService } from './files/inbound-webhook-files.service';
 import { PreviewInboundWebhookSchemaDto } from './dto/preview-inbound-webhook-schema.dto';
 import { UpdateInboundWebhookDto } from './dto/update-inbound-webhook.dto';
 
@@ -116,6 +118,7 @@ export class InboundWebhooksService {
     private readonly auditRepository: AuditRepository,
     private readonly redisService: RedisService,
     private readonly configService: ConfigService,
+    private readonly files: InboundWebhookFilesService,
   ) {}
 
   // ─── Management ─────────────────────────────────────────────────────────
@@ -547,6 +550,22 @@ export class InboundWebhooksService {
   }
 
   /**
+   * Phase one of a file submission. The same checks as a submission, with the
+   * body left unread until they pass; the signature covers the empty string,
+   * as it does for a draft, because a multipart body is not signed.
+   */
+  async uploadFile(
+    webhookId: string,
+    req: Parameters<InboundWebhookFilesService['receive']>[1],
+    ctx: IngestContext,
+  ) {
+    return this.withChecks(webhookId, ctx, async (webhook) => {
+      await this.assertWithinRateLimit(webhook.id, ctx.projectId);
+      return this.files.receive(webhook, req);
+    });
+  }
+
+  /**
    * The check chain every write route shares: webhook exists for this project,
    * is active, origin, signature. `run` does the work after that. If it
    * throws, nothing was stored, so the signed request may be sent again.
@@ -625,15 +644,17 @@ export class InboundWebhooksService {
     await this.assertWithinRateLimit(webhook.id, ctx.projectId);
     const result = await this.checkPayload(webhook, body);
 
-    const submission = await this.repository.insertSubmission({
-      webhookId: webhook.id,
-      projectId: webhook.projectId,
-      payload: result.value,
-      ipAddress: ctx.ipAddress,
-      origin: ctx.origin,
-      userAgent: ctx.userAgent,
-      fileIds: result.fileIds,
-    });
+    const submission = await this.repository
+      .insertSubmission({
+        webhookId: webhook.id,
+        projectId: webhook.projectId,
+        payload: result.value,
+        ipAddress: ctx.ipAddress,
+        origin: ctx.origin,
+        userAgent: ctx.userAgent,
+        fileIds: result.fileIds,
+      })
+      .catch(rethrowFileLost);
 
     return this.received(webhook, submission, result.fileIds.length);
   }
@@ -722,6 +743,11 @@ export class InboundWebhooksService {
       );
       // Submitted or expired between the read and the write
       if (!saved) throw await this.draftClosedError(draft.id);
+      await this.repository.attachFilesToDraft(
+        result.fileIds,
+        saved.id,
+        saved.expiresAt,
+      );
 
       return {
         draftId: saved.id,
@@ -763,7 +789,7 @@ export class InboundWebhooksService {
         if (error instanceof DraftNotOpenError) {
           throw await this.draftClosedError(draft.id);
         }
-        throw error;
+        return rethrowFileLost(error);
       }
     });
   }
@@ -1141,6 +1167,29 @@ export class InboundWebhooksService {
       );
     }
   }
+}
+
+/**
+ * A file passed validation but was taken by another submission, or swept,
+ * before this one committed. The transaction rolled back, so nothing was
+ * stored and the draft, if any, is still open.
+ */
+function rethrowFileLost(error: unknown): never {
+  if (error instanceof FileNotPendingError) {
+    throw new UnprocessableEntityException({
+      statusCode: 422,
+      error: 'ValidationFailed',
+      errors: [
+        {
+          path: '',
+          code: 'FILE_ALREADY_USED',
+          message:
+            'A file was attached to another submission or has expired; upload it again',
+        },
+      ],
+    });
+  }
+  throw error;
 }
 
 /** Walks a payload collecting every `{ fileId }` reference, at any depth. */

@@ -65,6 +65,7 @@ describe('InboundWebhooksService drafts', () => {
         .fn()
         .mockImplementation((d) => Promise.resolve({ id: DRAFT, ...d })),
       findDraft: jest.fn().mockResolvedValue(draftRow()),
+      attachFilesToDraft: jest.fn().mockResolvedValue(undefined),
       saveDraftStep: jest
         .fn()
         .mockImplementation((id) =>
@@ -89,6 +90,7 @@ describe('InboundWebhooksService drafts', () => {
             ? ttlHours
             : fallback,
       } as never,
+      {} as never,
     );
   };
 
@@ -136,6 +138,52 @@ describe('InboundWebhooksService drafts', () => {
         name: 'Ada',
         wantsMentor: true,
       });
+    });
+
+    it('ties a file saved in a step to the draft, so it outlives its own upload window', async () => {
+      const FILE = '33333333-3333-4333-8333-333333333333';
+      build({
+        version: 1,
+        steps: [
+          {
+            key: 'docs',
+            fields: [
+              {
+                key: 'cv',
+                type: 'file',
+                accept: ['application/pdf'],
+                maxSizeBytes: 100,
+              },
+            ],
+          },
+        ],
+      });
+      repository.findFilesByIds.mockResolvedValue([
+        {
+          id: FILE,
+          webhookId: WEBHOOK,
+          mime: 'application/pdf',
+          sizeBytes: 10,
+          status: 'pending',
+          expiresAt: new Date(NOW + 60_000),
+        },
+      ]);
+      repository.saveDraftStep.mockResolvedValue(
+        draftRow({ completedSteps: ['docs'] }),
+      );
+
+      await service.patchDraftStep(
+        WEBHOOK,
+        DRAFT,
+        'docs',
+        { cv: { fileId: FILE } },
+        ctx,
+      );
+      expect(repository.attachFilesToDraft).toHaveBeenCalledWith(
+        [FILE],
+        DRAFT,
+        new Date(NOW + HOUR),
+      );
     });
 
     it('reads a step condition against the steps already saved', async () => {
