@@ -42,15 +42,18 @@ async function configWithStoredSecret(tmp: string): Promise<string> {
   return path;
 }
 
+// Real schemas use step.key and field.key; the payload nests each step under
+// its key, exactly as payload.validator.ts reads it.
 const steppedSchema = {
+  version: 1,
   steps: [
     {
-      id: 'contact',
+      key: 'contact',
       title: 'Contact',
       fields: [
-        { name: 'message', type: 'string', required: true },
+        { key: 'message', type: 'string', required: true, minLength: 3 },
         {
-          name: 'topic',
+          key: 'topic',
           type: 'enum',
           required: true,
           options: [
@@ -58,17 +61,54 @@ const steppedSchema = {
             { value: 'sales', label: 'Sales' },
           ],
         },
+        {
+          key: 'profile',
+          type: 'object',
+          required: true,
+          fields: [{ key: 'bio', type: 'text', required: true }],
+        },
+        {
+          key: 'tags',
+          type: 'array',
+          required: true,
+          minItems: 1,
+          maxItems: 3,
+          item: { key: 'tag', type: 'string' },
+        },
       ],
     },
   ],
 };
 
-function sendRoutes() {
+const conditionalSchema = {
+  version: 1,
+  steps: [
+    {
+      key: 'apply',
+      fields: [
+        {
+          key: 'status',
+          type: 'enum',
+          required: true,
+          options: [{ value: 'student' }, { value: 'worker' }],
+        },
+        {
+          key: 'studentId',
+          type: 'string',
+          required: true,
+          condition: { op: 'eq', field: 'apply.status', value: 'student' },
+        },
+      ],
+    },
+  ],
+};
+
+function sendRoutes(schema: unknown = steppedSchema) {
   return baseRoutes({
     [`GET /admin/inbound-webhooks/${WEBHOOK_ID}`]: () =>
       json({
         ...inboundWebhook,
-        schema: steppedSchema,
+        schema,
         requireSignature: true,
         acceptedOrigins: ['https://portal.example.com'],
       }),
@@ -124,14 +164,36 @@ describe('webhook send --example', () => {
     });
 
     expect(result.exitCode).toBe(0);
-    // -d '<json>' body: fields from the step, enum emitted as its value string
+    // -d '<json>' body: each step nests under its key, enum emits its value
     const payloadMatch = result.stdout.match(/-d '([\s\S]*)'/);
     expect(payloadMatch).not.toBeNull();
     const payload = JSON.parse(payloadMatch![1] as string) as Record<string, unknown>;
-    expect(payload['message']).toBeTypeOf('string');
-    expect(payload['topic']).toBe('support');
+    const step = payload['contact'] as Record<string, unknown>;
+    expect(step).toBeTypeOf('object');
+    expect(step['message']).toBeTypeOf('string');
+    expect(step['topic']).toBe('support');
     // never the {value,label} object the API rejects
-    expect(payload['topic']).not.toMatch(/value/);
+    expect(step['topic']).not.toMatch(/value/);
+    // object and array fields are built in their real shapes
+    expect(step['profile']).toMatchObject({ bio: expect.any(String) });
+    expect(step['tags']).toEqual([expect.any(String)]);
+  });
+
+  it('follows conditions, so the branch field it selects is included', async () => {
+    const tmp = await mkdtemp(join(tmpdir(), 'mcid-send-'));
+    await configWithStoredSecret(tmp);
+
+    const result = await runCli(['webhook', 'send', 'contact-form', '--example', '--print-curl'], {
+      routes: sendRoutes(conditionalSchema),
+    });
+
+    expect(result.exitCode).toBe(0);
+    const payloadMatch = result.stdout.match(/-d '([\s\S]*)'/);
+    const payload = JSON.parse(payloadMatch![1] as string) as Record<string, unknown>;
+    expect(payload['apply']).toMatchObject({
+      status: 'student',
+      studentId: expect.any(String),
+    });
   });
 });
 
@@ -140,7 +202,11 @@ describe('webhook send --data schema validation', () => {
     const tmp = await mkdtemp(join(tmpdir(), 'mcid-send-'));
     await configWithStoredSecret(tmp);
     const dataFile = join(tmp, 'payload.json');
-    await writeFile(dataFile, JSON.stringify({ message: 'hi' }), 'utf8');
+    await writeFile(
+      dataFile,
+      JSON.stringify({ contact: { message: 'hi' } }),
+      'utf8',
+    );
 
     const result = await runCli(
       ['webhook', 'send', 'contact-form', '--data', dataFile, '--api-key', 'mcid_live_key'],
@@ -148,9 +214,36 @@ describe('webhook send --data schema validation', () => {
     );
 
     expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain('contact.topic');
     // no request to the ingest endpoint was made
     expect(result.requests.some((r) => r.path === `/inbound-webhooks/${WEBHOOK_ID}/submit`)).toBe(
       false,
     );
+  });
+
+  it('accepts a correct nested payload instead of rejecting it locally', async () => {
+    const tmp = await mkdtemp(join(tmpdir(), 'mcid-send-'));
+    await configWithStoredSecret(tmp);
+    const dataFile = join(tmp, 'payload.json');
+    await writeFile(
+      dataFile,
+      JSON.stringify({
+        contact: {
+          message: 'hello',
+          topic: 'support',
+          profile: { bio: 'A short bio.' },
+          tags: ['one'],
+        },
+      }),
+      'utf8',
+    );
+
+    const result = await runCli(
+      ['webhook', 'send', 'contact-form', '--data', dataFile, '--print-curl'],
+      { routes: sendRoutes() },
+    );
+
+    expect(result.stderr).toBe('');
+    expect(result.exitCode).toBe(0);
   });
 });

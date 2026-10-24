@@ -17,7 +17,11 @@ import {
 } from '../lib/output.js';
 import { resolveWebhook } from '../lib/resolver.js';
 import { parseSince } from '../lib/time.js';
-import { buildExamplePayload, validatePayloadAgainstSchema } from '../lib/example-payload.js';
+import {
+  buildExamplePayload,
+  validatePayload,
+  type FormSchema,
+} from '@mcid/form-schema';
 import { colors } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
 import {
@@ -203,8 +207,9 @@ export function registerWebhookCommand(program: Command): void {
           const resolved = await resolveWebhook(client, webhookArg);
           const webhookDetail = await client.get<{
             id: string;
-            schema: Record<string, unknown>;
+            schema: FormSchema;
             requireSignature?: boolean;
+            rejectUnknownFields?: boolean;
             acceptedOrigins?: string[];
           }>(`/admin/inbound-webhooks/${resolved.id}`);
 
@@ -233,12 +238,23 @@ export function registerWebhookCommand(program: Command): void {
           } catch {
             throw new CliError('Payload is not valid JSON', ExitCode.PrecheckFailed);
           }
+          if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+            throw new CliError('Payload must be a JSON object', ExitCode.PrecheckFailed);
+          }
+          const payloadObject = payload as Record<string, unknown>;
           // Fail before signing and sending when the payload cannot satisfy
-          // the schema; the server stays authoritative, this is early feedback.
-          const schemaProblems = validatePayloadAgainstSchema(payload, webhookDetail.schema);
-          if (schemaProblems.length > 0) {
+          // the schema; the server stays authoritative, this is early feedback
+          // from the exact validator the API runs, including step nesting and
+          // conditions.
+          const validation = validatePayload(webhookDetail.schema, payloadObject, {
+            rejectUnknownFields: webhookDetail.rejectUnknownFields ?? true,
+          });
+          if (!validation.ok) {
+            const problems = validation.errors.map(
+              (error) => `${error.path}: ${error.message}`,
+            );
             throw new CliError(
-              `Payload does not match the webhook schema:\n  ${schemaProblems.join('\n  ')}`,
+              `Payload does not match the webhook schema:\n  ${problems.join('\n  ')}`,
               ExitCode.PrecheckFailed,
             );
           }
