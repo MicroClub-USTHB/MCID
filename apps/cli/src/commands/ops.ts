@@ -15,6 +15,7 @@ import { ApiClient } from '../lib/client.js';
 import { confirmAction, confirmDestructive } from '../lib/confirm.js';
 import {
   formatAge,
+  formatDate,
   printJson,
   printKeyValue,
   printSuccess,
@@ -645,12 +646,36 @@ export function registerOpsCommand(program: Command): void {
     .action(async (options: { profile?: string; json?: boolean }) => {
       try {
         const client = await getClient(options.profile);
-        const settings = await client.get<Record<string, unknown>>('/admin/settings');
+        const settings = await client.get<{
+          cache?: {
+            permissionTtlMs?: { value: number; source?: 'env' | 'override' };
+            statsTtlMs?: { value: number; source?: 'env' | 'override' };
+          };
+          rateLimit?: {
+            maxWebhooksPerProject?: { value: number; source?: 'env' | 'override' };
+          };
+          preferences?: {
+            memberActivityThresholdDays?: { value: number; source?: 'env' | 'override' };
+          };
+          meta?: { updatedAt?: string | null; updatedBy?: string | null };
+        }>('/admin/settings');
         if (options.json) {
           printJson(settings);
           return;
         }
-        printJson(settings);
+        const show = (entry?: { value: number; source?: 'env' | 'override' }) =>
+          entry ? `${entry.value} (${entry.source === 'override' ? 'override' : 'env'})` : 'n/a';
+        printKeyValue({
+          'cache.permissionTtlMs': show(settings.cache?.permissionTtlMs),
+          'cache.statsTtlMs': show(settings.cache?.statsTtlMs),
+          'rateLimit.maxWebhooksPerProject': show(settings.rateLimit?.maxWebhooksPerProject),
+          'preferences.memberActivityThresholdDays': show(
+            settings.preferences?.memberActivityThresholdDays,
+          ),
+          'Last updated': settings.meta?.updatedAt
+            ? `${formatDate(settings.meta.updatedAt)} by ${settings.meta.updatedBy ?? 'unknown'}`
+            : 'never (all values come from the environment)',
+        });
       } catch (err) {
         exitWithError('settings get', err);
       }

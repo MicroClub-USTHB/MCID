@@ -318,20 +318,31 @@ export function registerServerCommand(program: Command): void {
       },
     );
 
-  // server channel <server> <channel>
+  // server channel <channel> (on the main server) or <server> <channel>
   serverCmd
-    .command('channel [server] <channel>')
-    .description('Inspect a channel and optionally view recent messages')
+    .command('channel [server] [channel]')
+    .description(
+      'Inspect a channel and optionally view recent messages; the server defaults to the main server',
+    )
     .option('--messages <n>', 'Number of recent messages to fetch')
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as JSON')
     .action(
       async (
         serverArg: string | undefined,
-        channelId: string,
+        channelArg: string | undefined,
         options: { messages?: string; profile?: string; json?: boolean },
       ) => {
         try {
+          // One positional is a channel on the main server; two are server +
+          // channel. Commander cannot express "optional then required".
+          const channelId = channelArg ?? serverArg;
+          if (!channelId) {
+            throw new CliError(
+              'A channel is required: `mcid-cli server channel <channel>` or `mcid-cli server channel <server> <channel>`',
+              ExitCode.Usage,
+            );
+          }
           // Reject an out-of-range count before any request: the API 400s above 100.
           if (options.messages) {
             const count = Number(options.messages);
@@ -343,7 +354,10 @@ export function registerServerCommand(program: Command): void {
             }
           }
           const client = await getClient(options.profile);
-          const resolved = await resolveServer(client, serverArg);
+          const resolved = await resolveServer(
+            client,
+            channelArg ? serverArg : undefined,
+          );
           const list = await client.get<ChannelListResponse>(
             `/admin/servers/${resolved.id}/channels`,
           );

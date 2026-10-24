@@ -15,6 +15,27 @@ import { resolveMember } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
 
+/**
+ * Root admins already hold every permission, so a member override can never
+ * change their access. Refuse before writing instead of reporting a change
+ * that the API would ignore.
+ */
+async function assertNotRootAdmin(
+  client: ApiClient,
+  discordId: string,
+  username: string,
+): Promise<void> {
+  const effective = await client.get<{ root?: boolean }>(
+    `/admin/access/members/${encodeURIComponent(discordId)}/effective`,
+  );
+  if (effective.root) {
+    throw new CliError(
+      `@${username} is a root admin: the root role already grants every permission, so member overrides do not apply.\n  hint: change the root role itself (MC_EXECUTIVE_ROLE_ID) instead of adding overrides.`,
+      ExitCode.Rejected,
+    );
+  }
+}
+
 interface EffectiveAccessResponse {
   memberId: string;
   username: string;
@@ -344,6 +365,7 @@ export function registerAccessCommand(program: Command): void {
     try {
       const client = await getClient(options.profile);
       const resolved = await resolveMember(client, memberArg);
+      await assertNotRootAdmin(client, resolved.discordId, resolved.username);
 
       const newOverrides: Record<string, string> = {};
       for (const pair of grantPairs) {
@@ -417,6 +439,7 @@ export function registerAccessCommand(program: Command): void {
     try {
       const client = await getClient(options.profile);
       const resolved = await resolveMember(client, memberArg);
+      await assertNotRootAdmin(client, resolved.discordId, resolved.username);
 
       if (
         !(await confirmAction(

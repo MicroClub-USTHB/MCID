@@ -68,6 +68,8 @@ describe('access nested grammar', () => {
             }),
           [`GET /admin/access/members/${MEMBER_ID}`]: () =>
             json({ memberId: MEMBER_ID, overrides: { members: 'read' } }),
+          [`GET /admin/access/members/${MEMBER_ID}/effective`]: () =>
+            json({ memberId: MEMBER_ID, username: 'john_doe', root: false, access: {} }),
           [`PUT /admin/access/members/${MEMBER_ID}`]: () => json({ ok: true }),
         }),
       },
@@ -92,6 +94,8 @@ describe('access nested grammar', () => {
             limit: 20,
             totalPages: 1,
           }),
+        [`GET /admin/access/members/${MEMBER_ID}/effective`]: () =>
+          json({ memberId: MEMBER_ID, username: 'john_doe', root: false, access: {} }),
         [`DELETE /admin/access/members/${MEMBER_ID}/members`]: () =>
           new Response(null, { status: 204 }),
       }),
@@ -103,6 +107,30 @@ describe('access nested grammar', () => {
         (r) => r.method === 'DELETE' && r.path === `/admin/access/members/${MEMBER_ID}/members`,
       ),
     ).toBe(true);
+  });
+
+  it('refuses to write overrides for a root admin, whose role already grants everything', async () => {
+    const result = await runCli(
+      ['access', 'member', 'set', '@john_doe', 'servers=write', '--yes'],
+      {
+        routes: baseRoutes({
+          'GET /admin/members': () =>
+            json({
+              data: [{ memberId: MEMBER_ID, username: 'john_doe' }],
+              total: 1,
+              page: 1,
+              limit: 20,
+              totalPages: 1,
+            }),
+          [`GET /admin/access/members/${MEMBER_ID}/effective`]: () =>
+            json({ memberId: MEMBER_ID, username: 'john_doe', root: true, access: {} }),
+        }),
+      },
+    );
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain('root admin');
+    expect(result.requests.some((r) => r.method === 'PUT')).toBe(false);
   });
 
   it('keeps the server id resolution path working for main-server defaults', async () => {

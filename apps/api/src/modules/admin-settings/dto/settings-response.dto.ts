@@ -7,6 +7,14 @@ class SettingValueDto {
 
   @ApiProperty({ description: 'Whether PATCH /api/admin/settings accepts it' })
   editable!: boolean;
+
+  @ApiProperty({
+    enum: ['env', 'override'],
+    required: false,
+    description:
+      'Where an editable value came from: the environment default, or a stored override',
+  })
+  source?: 'env' | 'override';
 }
 
 /** A secret: only whether it is configured is ever exposed. */

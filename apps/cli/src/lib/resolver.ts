@@ -33,6 +33,39 @@ export interface WebhookEntity {
   slug: string;
 }
 
+/** Levenshtein distance, for a small typo hint. */
+function editDistance(a: string, b: string): number {
+  const rows = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let previous = rows[0]!;
+    rows[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const current = rows[j]!;
+      rows[j] = Math.min(
+        rows[j]! + 1,
+        rows[j - 1]! + 1,
+        previous + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+      previous = current;
+    }
+  }
+  return rows[b.length]!;
+}
+
+/** Names a close match for a typo, or nothing when no name is close enough. */
+export function didYouMean(input: string, candidates: string[]): string {
+  const needle = input.toLowerCase();
+  let best: { name: string; distance: number } | undefined;
+  for (const name of candidates) {
+    const distance = editDistance(needle, name.toLowerCase());
+    if (!best || distance < best.distance) best = { name, distance };
+  }
+  if (!best) return '';
+  return best.distance <= Math.max(2, Math.floor(needle.length / 3))
+    ? `\n  did you mean "${best.name}"?`
+    : '';
+}
+
 /**
  * Resolves a project identifier (ID, slug, or case-insensitive name) to a project.
  */
@@ -65,7 +98,7 @@ export async function resolveProject(
   }
 
   throw new CliError(
-    `Project "${idOrNameOrSlug}" not found\n  hint: list available projects with \`mcid-cli project list\``,
+    `Project "${idOrNameOrSlug}" not found${didYouMean(idOrNameOrSlug, projects.map((p) => p.name))}\n  hint: list available projects with \`mcid-cli project list\``,
     ExitCode.NotFound,
   );
 }
@@ -114,7 +147,7 @@ export async function resolveServer(
   }
 
   throw new CliError(
-    `Server "${idOrName}" not found\n  hint: list available servers with \`mcid-cli server list\``,
+    `Server "${idOrName}" not found${didYouMean(idOrName, servers.map((s) => s.name))}\n  hint: list available servers with \`mcid-cli server list\``,
     ExitCode.NotFound,
   );
 }
@@ -165,7 +198,7 @@ export async function resolveRole(
   }
 
   throw new CliError(
-    `Role "${idOrName}" not found on server ${serverId}\n  hint: list roles with \`mcid-cli role list --server ${serverId}\``,
+    `Role "${idOrName}" not found on server ${serverId}${didYouMean(idOrName, roles.map((r) => r.name))}\n  hint: list roles with \`mcid-cli role list --server ${serverId}\``,
     ExitCode.NotFound,
   );
 }
@@ -220,7 +253,7 @@ export async function resolveMember(
   }
 
   throw new CliError(
-    `Member "${idOrUsername}" not found\n  hint: check the username, or specify the Discord ID directly`,
+    `Member "${idOrUsername}" not found${didYouMean(clean, list.map((m) => m.username))}\n  hint: check the username, or specify the Discord ID directly`,
     ExitCode.NotFound,
   );
 }
@@ -257,7 +290,7 @@ export async function resolveWebhook(
   }
 
   throw new CliError(
-    `Webhook "${idOrNameOrSlug}" not found\n  hint: list webhooks with \`mcid-cli webhook list\``,
+    `Webhook "${idOrNameOrSlug}" not found${didYouMean(idOrNameOrSlug, webhooks.map((w) => w.name))}\n  hint: list webhooks with \`mcid-cli webhook list\``,
     ExitCode.NotFound,
   );
 }

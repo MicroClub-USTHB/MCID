@@ -43,6 +43,23 @@ describe('server channels', () => {
 });
 
 describe('server channel --messages', () => {
+  it('defaults to the main server when only a channel is given', async () => {
+    const result = await runCli(['server', 'channel', CHANNEL_ID, '--messages', '10'], {
+      routes: baseRoutes({
+        'GET /admin/servers/:serverId/channels': () => json(channelList),
+        [`GET /admin/servers/:serverId/channels/${CHANNEL_ID}/messages`]: () =>
+          json(messagePage),
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(
+      result.requests.some((request) =>
+        request.path.startsWith(`/admin/servers/${MAIN_SERVER_ID}/channels/`),
+      ),
+    ).toBe(true);
+  });
+
   const routes = baseRoutes({
     'GET /admin/servers/:serverId/channels': () => json(channelList),
     [`GET /admin/servers/:serverId/channels/${CHANNEL_ID}/messages`]: () => json(messagePage),

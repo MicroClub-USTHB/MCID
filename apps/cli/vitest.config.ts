@@ -9,15 +9,15 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**'],
-      // The reviewer's floor: the new command surface must stay covered, not
-      // just the lib/ helpers the old suite tested. Calibrated to the green
-      // suite with headroom under CI's full run (37/27/37/38 measured).
+      // The command surface must stay covered, not just the lib/ helpers the
+      // old suite tested. The floor moved up with the review tests; it sits
+      // one point under the measured CI run and moves again as tests land.
       thresholds: {
         'src/commands/**': {
-          statements: 35,
-          branches: 25,
-          functions: 35,
-          lines: 35,
+          statements: 36,
+          branches: 26,
+          functions: 36,
+          lines: 36,
         },
       },
     },
