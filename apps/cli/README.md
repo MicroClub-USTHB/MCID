@@ -4,7 +4,7 @@ The MCID command-line client. Authenticate once with Discord and manage projects
 Discord servers, sync, members, permissions, admin access, ops monitoring, and Inbound Webhooks
 directly from your terminal.
 
-Includes an interactive zero-dependency terminal UI launcher (arrow-key navigation) inspired by GLMproxy,
+Includes an interactive terminal UI launcher (arrow-key navigation, built on Node's readline with no runtime dependency) inspired by GLMproxy,
 plus scriptable output (`--json`, `-q`, `-o csv`, `--yes`) designed for automation and CI.
 
 ## Install
@@ -20,7 +20,7 @@ The package installs two commands, `mcid-cli` and its short alias `mcid`. Both r
 
 ## Interactive TUI Launcher
 
-Running `mcid` with no arguments in an interactive terminal launches the zero-dependency TUI menu:
+Running `mcid` with no arguments in an interactive terminal launches the dependency-free TUI menu:
 
 ```bash
 mcid

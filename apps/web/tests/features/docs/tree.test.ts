@@ -96,7 +96,20 @@ describe('docs navigation (meta.json)', () => {
       'Start here',
       'Build MCID',
       'Integrate with MCID',
+      'mcid-cli',
       'API reference',
+    ]);
+  });
+
+  it('keeps the mcid-cli group together, in reading order', () => {
+    const cli = treeSections(testSource.pageTree).find(
+      (section) => section.name === 'mcid-cli',
+    )!;
+
+    expect(cli.pages.map((page) => page.url)).toEqual([
+      '/docs/cli',
+      '/docs/cli/reference',
+      '/docs/cli/webhooks',
     ]);
   });
 

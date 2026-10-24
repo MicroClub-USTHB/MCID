@@ -43,3 +43,29 @@ for its interactive terminal UI widgets.
 - Non-interactive safety: Destructive actions require confirmation or `--yes`. In non-TTY environments without `--yes`, commands exit with code 64 (Usage).
 - Resolvers: Names, slugs, or IDs are accepted. Discord members accept `@username` or snowflake ID. `--server` defaults to main guild.
 - CI authentication: Supports `MCID_TOKEN` and `MCID_API_URL` environment variables.
+- Exit codes are part of the contract: `0` completed (even when the answer is negative), `1` precheck failed, `2` rejected/aborted, `3` auth, `4` not found, `5` unexpected, `64` usage.
+
+### Profiles and authentication
+
+- `login` always requires an explicit `--profile`; it creates state and must not guess.
+- Every other command resolves the active profile when `--profile` is omitted, and `--profile <name>` targets another deployment. Reads and writes follow the same rule; pass `--profile` in scripts that must not depend on the local active profile.
+- Sessions are encrypted with the OS keychain (a `0600` key file is the fallback). `MCID_TOKEN` overrides the stored session for CI.
+- The config lives at the platform config path (`MCID_CLI_CONFIG_PATH` overrides it for tests). Writes are atomic and `0600`; a config lock serialises concurrent commands.
+
+### Secrets never leak
+
+- API keys, session tokens, signing secrets and refresh tokens are never written in plaintext to logs, `--json` output or export files.
+- Masked output is the default; `--reveal` is the explicit opt-in for a secret that would otherwise be unrecoverable (the rotated token pair, the API key returned once on create).
+- `--print-curl` prints a placeholder API key unless `--reveal` is passed, and the printed signature is always a placeholder because signatures expire.
+- Exports and generated `.env` files are written with mode `0600` and refuse to overwrite without `--force`.
+
+### Schema rules live in @mcid/form-schema
+
+- The CLI must not reimplement schema validation or example payload generation. `buildExamplePayload` and `validatePayload` come from `@mcid/form-schema`, the same code the API runs.
+- Step payloads nest under `step.key`; enum options are `{ value, label }` and the payload carries `value`.
+- When the schema language changes, update the shared package and both consumers together, and regenerate the API reference.
+
+### Generated API types
+
+- `pnpm --filter mcid-cli generate:api-types` regenerates `src/generated/api.d.ts` from `apps/api/openapi.json`. CI runs it and fails when the committed file is stale, so commit the regenerated file with any API change.
+- Do not hand-edit generated files; ESLint and Prettier ignore them.

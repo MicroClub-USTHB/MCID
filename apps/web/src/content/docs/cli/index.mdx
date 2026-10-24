@@ -9,34 +9,43 @@ projects and API keys, servers and channels, members, roles and admin access, sy
 audits and settings, and the inbound webhook lifecycle including signed test
 submissions.
 
-## Install and first login
+## Five commands to get oriented
 
 ```bash
-npm install -g mcid-cli            # or: pnpm add -g mcid-cli
 mcid-cli login --profile prod --base-url https://mcid.example.com
+mcid-cli doctor --profile prod
+mcid-cli project list --profile prod
+mcid-cli server list --profile prod
+mcid-cli status --profile prod
 ```
 
-`login` opens Discord in your browser and stores the session encrypted in the OS
-keychain (a key file next to the config is the fallback). Profiles let you hold
-several deployments at once:
+`doctor` checks the config, the keychain, the API and the stored session, so run it
+first when a command behaves unexpectedly.
+
+## Profiles
+
+`login` always requires an explicit `--profile`, because it creates state. Every other
+command reads and writes through the active profile unless you pass `--profile`, so
+one deployment can be the default without leaking writes into another:
 
 ```bash
 mcid-cli whoami --profile prod     # who is signed in
 mcid-cli profile list              # what exists
-mcid-cli doctor --profile prod     # config, keychain, API, session
+mcid-cli project list              # active profile
+mcid-cli project list --profile staging
 ```
 
 ## How commands behave
 
-- **Every state-changing command takes `--profile` explicitly.** There is no silent
-  fallback to an active profile for writes; reads fall back to the active profile.
 - **Destructive commands confirm first.** Type the resource name to proceed, or pass
-  `--yes`. An aborted confirmation exits non-zero (code 2), so scripts never treat a
-  cancel as success.
+  `--yes`. An aborted confirmation exits with code 2, so scripts never treat a cancel
+  as success.
 - **Output formats are uniform.** List commands accept `--json`, `-o csv` and `-q`
   (ids only) where marked. Errors print one line to stderr and the process exits with
   the code the command documents (`2` rejected, `3` auth, `4` not found, `5`
   unexpected, `64` usage).
+- **`--debug` is global.** It prints request timings, retry hints and error stacks to
+  stderr, so stdout stays pipeable.
 
 ## Where to go next
 
@@ -48,3 +57,5 @@ mcid-cli doctor --profile prod     # config, keychain, API, session
   negative (a permission that came back denied). Non-zero means the command itself did
   not complete.
 </Callout>
+
+Source: `apps/cli/src/index.ts`, `apps/cli/src/config.ts`.
