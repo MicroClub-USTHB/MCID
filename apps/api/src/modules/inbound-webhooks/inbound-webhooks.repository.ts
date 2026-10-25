@@ -39,6 +39,9 @@ import type {
 } from '../../database/entities';
 import type { FormSchema } from '@mcid/form-schema';
 
+/** What a query runs on: the pool, or the transaction of a storage key lock. */
+type Executor = Pick<DrizzleDB, 'select' | 'selectDistinct' | 'insert'>;
+
 /** The draft is not open any more: submitted, expired, or past its expiry. */
 export class DraftNotOpenError extends Error {}
 
@@ -605,20 +608,43 @@ export class InboundWebhooksRepository {
       .where(inArray(inboundWebhookFiles.id, ids));
   }
 
-  async insertFile(data: {
-    webhookId: string;
-    storageKey: string;
-    sha256: string;
-    sizeBytes: number;
-    mime: string;
-    originalName: string | null;
-    expiresAt: Date;
-  }) {
-    const [row] = await this.db
+  async insertFile(
+    data: {
+      webhookId: string;
+      storageKey: string;
+      sha256: string;
+      sizeBytes: number;
+      mime: string;
+      originalName: string | null;
+      expiresAt: Date;
+    },
+    executor: Executor = this.db,
+  ) {
+    const [row] = await executor
       .insert(inboundWebhookFiles)
       .values(data)
       .returning();
     return row;
+  }
+
+  /**
+   * Runs `fn` while holding a lock on one storage key, across every API
+   * process. Objects are content-addressed, so an upload deciding whether
+   * to store a key and a cleanup deciding whether anyone still uses it
+   * would otherwise race. `fn` must use the transaction it is given: the
+   * lock holds a pooled connection, and a second one per caller could
+   * exhaust the pool.
+   */
+  async withStorageKeyLock<T>(
+    key: string,
+    fn: (tx: Executor) => Promise<T>,
+  ): Promise<T> {
+    return this.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`,
+      );
+      return fn(tx);
+    });
   }
 
   /** Uploads never attached to a submission before they expired. */
@@ -641,9 +667,10 @@ export class InboundWebhooksRepository {
   async findReferencedStorageKeys(
     keys: string[],
     exceptIds: string[],
+    executor: Executor = this.db,
   ): Promise<Set<string>> {
     if (keys.length === 0) return new Set();
-    const rows = await this.db
+    const rows = await executor
       .selectDistinct({ storageKey: inboundWebhookFiles.storageKey })
       .from(inboundWebhookFiles)
       .where(

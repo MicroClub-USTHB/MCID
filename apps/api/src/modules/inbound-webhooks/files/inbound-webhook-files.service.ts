@@ -97,19 +97,26 @@ export class InboundWebhookFilesService {
 
       // Keyed by content: the same bytes uploaded twice are stored once.
       const storageKey = `files/${file.sha256}`;
-      await this.ensureStored(storageKey, path, file.size);
-      const row = await this.repository.insertFile({
-        webhookId: webhook.id,
+      // Under the key's lock, so a cleanup cannot delete the object between
+      // the check that it exists and the row that now depends on it.
+      const row = await this.repository.withStorageKeyLock(
         storageKey,
-        sha256: file.sha256,
-        sizeBytes: file.size,
-        mime,
-        originalName: file.filename?.slice(0, 512) ?? null,
-        expiresAt: new Date(Date.now() + this.fileTtlHours() * 3_600_000),
-      });
-      // A sweep of an older upload of the same bytes may have removed the
-      // object between the check above and the row: put it back.
-      await this.ensureStored(storageKey, path, file.size);
+        async (tx) => {
+          await this.ensureStored(storageKey, path, file.size);
+          return this.repository.insertFile(
+            {
+              webhookId: webhook.id,
+              storageKey,
+              sha256: file.sha256,
+              sizeBytes: file.size,
+              mime,
+              originalName: file.filename?.slice(0, 512) ?? null,
+              expiresAt: new Date(Date.now() + this.fileTtlHours() * 3_600_000),
+            },
+            tx,
+          );
+        },
+      );
       return {
         fileId: row.id,
         sha256: row.sha256,
@@ -223,8 +230,6 @@ export class InboundWebhookFilesService {
    * TTL. The stored object goes too, unless another row still points at it:
    * identical content shares one object. Objects go before their rows, so a
    * failed delete leaves the row and the next sweep tries again.
-   * ponytail: a delete that lands between an upload's two storage checks
-   * still loses that object; lock per key if it ever shows up.
    */
   async sweepExpired(): Promise<number> {
     const expired = await this.repository.findExpiredPendingFiles(new Date());
@@ -248,17 +253,28 @@ export class InboundWebhookFilesService {
     files: { id: string; storageKey: string }[],
   ): Promise<{ removed: number; failed: Set<string> }> {
     const keys = [...new Set(files.map((f) => f.storageKey))];
-    const stillUsed = await this.repository.findReferencedStorageKeys(
-      keys,
-      files.map((f) => f.id),
-    );
+    const ids = files.map((f) => f.id);
     const failed = new Set<string>();
     let removed = 0;
     for (const key of keys) {
-      if (stillUsed.has(key)) continue;
       try {
-        await this.storage.delete(key);
-        removed += 1;
+        // The check and the delete share the key's lock, so an upload of the
+        // same bytes either lands first (and is seen) or waits and stores
+        // the object again.
+        const deleted = await this.repository.withStorageKeyLock(
+          key,
+          async (tx) => {
+            const used = await this.repository.findReferencedStorageKeys(
+              [key],
+              ids,
+              tx,
+            );
+            if (used.has(key)) return false;
+            await this.storage.delete(key);
+            return true;
+          },
+        );
+        if (deleted) removed += 1;
       } catch (error) {
         failed.add(key);
         this.logger.warn(
