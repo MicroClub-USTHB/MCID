@@ -9,8 +9,10 @@ import {
   inboundWebhooks,
 } from '../src/database/entities';
 import { InboundWebhookFilesService } from '../src/modules/inbound-webhooks/files/inbound-webhook-files.service';
+import { InboundWebhooksRepository } from '../src/modules/inbound-webhooks/inbound-webhooks.repository';
 import { STORAGE_ADAPTER } from '../src/modules/inbound-webhooks/files/storage.adapter';
 import { createTestApp } from './helpers/create-app';
+import { MemoryStorage } from './helpers/memory-storage';
 import {
   clearAllTables,
   closeTestDb,
@@ -58,32 +60,6 @@ const CV_SCHEMA = {
 
 const PDF = Buffer.from('%PDF-1.7\nhello\n');
 const ELF = Buffer.from([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0, 0, 0, 0, 0]);
-
-/** Objects by key: stands in for S3, so the suite needs no object store. */
-class MemoryStorage {
-  objects = new Map<string, Buffer>();
-  puts = 0;
-
-  assertReady() {}
-
-  exists(key: string) {
-    return Promise.resolve(this.objects.has(key));
-  }
-
-  async put(key: string, body: AsyncIterable<Buffer>, size: number) {
-    const chunks: Buffer[] = [];
-    for await (const chunk of body) chunks.push(chunk);
-    const data = Buffer.concat(chunks);
-    expect(data.length).toBe(size);
-    this.objects.set(key, data);
-    this.puts += 1;
-  }
-
-  delete(key: string) {
-    this.objects.delete(key);
-    return Promise.resolve();
-  }
-}
 
 describeIf('inbound webhook file uploads (e2e)', () => {
   let app: INestApplication;
@@ -424,6 +400,43 @@ describeIf('inbound webhook file uploads (e2e)', () => {
     const [file] = await db.select().from(inboundWebhookFiles);
     expect(file.submissionId).toBe(winner.body.id);
     expect(await db.select().from(inboundWebhookSubmissions)).toHaveLength(1);
+  });
+
+  it('does not delete an object while an upload of the same bytes holds its lock', async () => {
+    const { body } = await upload(PDF).expect(201);
+    const key = `files/${body.sha256}`;
+    await db
+      .update(inboundWebhookFiles)
+      .set({ expiresAt: new Date(Date.now() - 1000) });
+
+    const repository = app.get(InboundWebhooksRepository);
+    let sweep: Promise<number> | undefined;
+    await repository.withStorageKeyLock(key, async (tx) => {
+      // The sweep wants to delete the object, but the key is locked...
+      sweep = app.get(InboundWebhookFilesService).sweepExpired();
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(storage.objects.has(key)).toBe(true);
+
+      // ...and an upload of the same bytes registers its row meanwhile
+      await repository.insertFile(
+        {
+          webhookId,
+          storageKey: key,
+          sha256: body.sha256,
+          sizeBytes: PDF.length,
+          mime: 'application/pdf',
+          originalName: 'again.pdf',
+          expiresAt: new Date(Date.now() + 3_600_000),
+        },
+        tx,
+      );
+    });
+    await sweep;
+
+    // Once the lock is released the sweep sees the new row and leaves the object
+    expect(storage.objects.has(key)).toBe(true);
+    const rows = await db.select().from(inboundWebhookFiles);
+    expect(rows.map((r) => r.originalName)).toEqual(['again.pdf']);
   });
 
   describe('signature', () => {

@@ -262,6 +262,7 @@ The API reads `apps/api/.env`. Four of the values below (`PERMISSION_CACHE_TTL_M
 | `INBOUND_WEBHOOK_RATE_LIMIT` | no | `120` | Submissions a minute for each webhook and for each project. |
 | `INBOUND_WEBHOOK_DRAFT_TTL_H` | no | `24` | How many hours a multi-step draft stays open after it is created. |
 | `INBOUND_WEBHOOK_FILE_TTL_H` | no | `1` | How many hours an uploaded file waits for a submission to use it. After that a sweep, every ten minutes, deletes it. |
+| `INBOUND_WEBHOOK_SUBMISSION_RETENTION_DAYS` | no | `365` | How many days a submission is kept. An hourly job deletes older ones, with their files and the drafts they came from. A value that is not a number between 1 and 36500 is ignored and the default applies. |
 | `S3_ENDPOINT` | no | empty | The object store's URL, for MinIO or another S3-compatible store. Leave it empty for AWS S3. |
 | `S3_BUCKET` | for file uploads | empty | The bucket that holds uploaded files. While it, `S3_ACCESS_KEY` or `S3_SECRET_KEY` is empty, the upload endpoint answers 503. |
 | `S3_ACCESS_KEY` | for file uploads | empty | The access key for the bucket. |

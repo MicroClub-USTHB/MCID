@@ -59,6 +59,10 @@ describe('InboundWebhookFilesService', () => {
       insertFile: jest.fn((data) => Promise.resolve({ id: 'file-1', ...data })),
       findExpiredPendingFiles: jest.fn(),
       findReferencedStorageKeys: jest.fn(),
+      // Runs `fn` straight away, handing it a stand-in transaction
+      withStorageKeyLock: jest.fn((_key: string, fn: (tx: string) => unknown) =>
+        fn('tx'),
+      ),
       deletePendingFiles: jest.fn((ids: string[]) =>
         Promise.resolve(ids.length),
       ),
@@ -102,6 +106,7 @@ describe('InboundWebhookFilesService', () => {
           originalName: 'cv.pdf',
           storageKey: `files/${result.sha256}`,
         }),
+        'tx',
       );
       // The default TTL is one hour
       const { expiresAt } = repository.insertFile.mock.calls[0][0] as {
@@ -183,13 +188,19 @@ describe('InboundWebhookFilesService', () => {
       expect(req.readableDidRead).toBe(false);
     });
 
-    it('puts the object back when a sweep removed it before the row existed', async () => {
-      storage.exists.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
-      await service.receive(
+    it("checks the object and inserts the row under the key's lock, on one transaction", async () => {
+      const result = await service.receive(
         webhook(),
         multipart([{ name: 'file', filename: 'cv.pdf', body: pdf }]),
       );
-      expect(storage.put).toHaveBeenCalledTimes(1);
+      expect(repository.withStorageKeyLock).toHaveBeenCalledWith(
+        `files/${result.sha256}`,
+        expect.any(Function),
+      );
+      expect(repository.insertFile).toHaveBeenCalledWith(
+        expect.objectContaining({ storageKey: `files/${result.sha256}` }),
+        'tx',
+      );
     });
 
     it.each(['', 'soon', '0', '-3'])(
@@ -280,10 +291,15 @@ describe('InboundWebhookFilesService', () => {
       );
 
       expect(await service.sweepExpired()).toBe(3);
-      // The reference check ignores the rows being swept
+      // Each key is checked under its own lock, ignoring the rows being swept
+      expect(repository.withStorageKeyLock).toHaveBeenCalledWith(
+        'files/a',
+        expect.any(Function),
+      );
       expect(repository.findReferencedStorageKeys).toHaveBeenCalledWith(
-        ['files/a', 'files/b'],
+        ['files/a'],
         ['1', '2', '3'],
+        'tx',
       );
       expect(storage.delete).toHaveBeenCalledTimes(1);
       expect(storage.delete).toHaveBeenCalledWith('files/a');
