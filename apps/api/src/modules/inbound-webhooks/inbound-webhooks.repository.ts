@@ -709,15 +709,26 @@ export class InboundWebhooksRepository {
     return rows.length;
   }
 
-  /** The oldest submissions received before `cutoff`, at most `limit`. */
-  async findSubmissionsReceivedBefore(cutoff: Date, limit: number) {
+  /** The oldest submissions received before `cutoff`, at most `limit`, skipping `excludeIds`. */
+  async findSubmissionsReceivedBefore(
+    cutoff: Date,
+    limit: number,
+    excludeIds: string[] = [],
+  ) {
     return this.db
       .select({
         id: inboundWebhookSubmissions.id,
         draftId: inboundWebhookSubmissions.draftId,
       })
       .from(inboundWebhookSubmissions)
-      .where(lte(inboundWebhookSubmissions.receivedAt, cutoff))
+      .where(
+        and(
+          lte(inboundWebhookSubmissions.receivedAt, cutoff),
+          excludeIds.length > 0
+            ? notInArray(inboundWebhookSubmissions.id, excludeIds)
+            : undefined,
+        ),
+      )
       .orderBy(inboundWebhookSubmissions.receivedAt)
       .limit(limit);
   }

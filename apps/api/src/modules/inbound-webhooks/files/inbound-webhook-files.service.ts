@@ -230,16 +230,35 @@ export class InboundWebhookFilesService {
     const expired = await this.repository.findExpiredPendingFiles(new Date());
     if (expired.length === 0) return 0;
 
-    const keys = [...new Set(expired.map((f) => f.storageKey))];
+    const { failed } = await this.removeUnreferencedObjects(expired);
+    const removed = await this.repository.deletePendingFiles(
+      expired.filter((f) => !failed.has(f.storageKey)).map((f) => f.id),
+    );
+    this.logger.log(`Orphan sweep: removed ${removed} expired uploads`);
+    return removed;
+  }
+
+  /**
+   * Deletes the stored objects behind `files`, except those some other file
+   * row still points at (identical content is one object). `failed` holds the
+   * keys that could not be deleted, so the caller keeps their rows and tries
+   * again later; `removed` counts the objects actually deleted.
+   */
+  async removeUnreferencedObjects(
+    files: { id: string; storageKey: string }[],
+  ): Promise<{ removed: number; failed: Set<string> }> {
+    const keys = [...new Set(files.map((f) => f.storageKey))];
     const stillUsed = await this.repository.findReferencedStorageKeys(
       keys,
-      expired.map((f) => f.id),
+      files.map((f) => f.id),
     );
     const failed = new Set<string>();
+    let removed = 0;
     for (const key of keys) {
       if (stillUsed.has(key)) continue;
       try {
         await this.storage.delete(key);
+        removed += 1;
       } catch (error) {
         failed.add(key);
         this.logger.warn(
@@ -247,12 +266,7 @@ export class InboundWebhookFilesService {
         );
       }
     }
-
-    const removed = await this.repository.deletePendingFiles(
-      expired.filter((f) => !failed.has(f.storageKey)).map((f) => f.id),
-    );
-    this.logger.log(`Orphan sweep: removed ${removed} expired uploads`);
-    return removed;
+    return { removed, failed };
   }
 
   startSweepSchedule(): void {

@@ -118,8 +118,10 @@ describeIf('inbound webhook retention (e2e)', () => {
 
   it('removes drafts that ran out of time, and only those', async () => {
     const open = await addDraft('open', ahead(1));
-    await addDraft('open', ago(1));
-    await addDraft('expired', ago(2));
+    // Within the day of grace an expired draft still answers 410
+    const recentlyExpired = await addDraft('open', ago(0.5));
+    await addDraft('open', ago(2));
+    await addDraft('expired', ago(3));
     const submitted = await addDraft('submitted', ago(2));
 
     const counts = await retention.runCleanup();
@@ -128,7 +130,7 @@ describeIf('inbound webhook retention (e2e)', () => {
     const left = (await db.select().from(inboundWebhookDrafts)).map(
       (d) => d.id,
     );
-    expect(left.sort()).toEqual([open, submitted].sort());
+    expect(left.sort()).toEqual([open, recentlyExpired, submitted].sort());
   });
 
   it('removes a submission past retention with its file, object and draft', async () => {
@@ -138,7 +140,7 @@ describeIf('inbound webhook retention (e2e)', () => {
 
     const counts = await retention.runCleanup();
 
-    expect(counts).toMatchObject({ submissions: 1, files: 1 });
+    expect(counts).toMatchObject({ submissions: 1, objects: 1 });
     expect(await submissionIds()).toEqual([recent]);
     expect(
       (await db.select().from(inboundWebhookFiles)).map((f) => f.storageKey),
@@ -156,7 +158,7 @@ describeIf('inbound webhook retention (e2e)', () => {
     const counts = await retention.runCleanup();
 
     expect(counts.submissions).toBe(1);
-    expect(counts.files).toBe(0);
+    expect(counts.objects).toBe(0);
     expect(storage.objects.has('files/shared')).toBe(true);
     expect(await submissionIds()).toEqual([recent]);
   });
@@ -182,7 +184,7 @@ describeIf('inbound webhook retention (e2e)', () => {
   it('removes nothing from a webhook that only has recent data', async () => {
     await addSubmission(ago(1), 'files/a');
     const counts = await retention.runCleanup();
-    expect(counts).toEqual({ drafts: 0, submissions: 0, files: 0 });
+    expect(counts).toEqual({ drafts: 0, submissions: 0, objects: 0 });
     expect(
       await db
         .select()

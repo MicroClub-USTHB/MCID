@@ -64,6 +64,13 @@
       "when": 1791511412108,
       "tag": "0008_single_main_server",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792886833406,
+      "tag": "0009_minor_sleeper",
+      "breakpoints": true
     }
   ]
 }

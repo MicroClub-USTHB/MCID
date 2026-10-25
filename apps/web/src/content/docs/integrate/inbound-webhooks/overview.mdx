@@ -67,7 +67,7 @@ Most webhooks require a signature. [Signing and sending](/docs/integrate/inbound
 
 - A webhook that belongs to another project answers 404, the same as one that does not exist, so a key cannot be used to find out which webhooks exist.
 - Your project can send, but cannot read back what it sent. Reading needs a member session with a reader role.
-- Submissions are not kept forever. An hourly job deletes each one 365 days after it arrived, together with its files and the draft it came from, and an operator can change the period with `INBOUND_WEBHOOK_SUBMISSION_RETENTION_DAYS`. A draft that expired without being submitted is deleted by the same job. A webhook's submission count is a lifetime total and does not go down.
+- Submissions are not kept forever. An hourly job deletes each one 365 days after it arrived, together with its files and the draft it came from, and an operator can change the period with `INBOUND_WEBHOOK_SUBMISSION_RETENTION_DAYS`. A draft that expired without being submitted is deleted by the same job a day after it expires, until then it still answers 410. A webhook's submission count is a lifetime total and does not go down.
 - Files travel in two steps. You upload each file to `POST /api/inbound-webhooks/{id}/files`, then reference it by `fileId` from the JSON you submit. [Signing and sending](/docs/integrate/inbound-webhooks/signing-and-sending) describes the upload.
 
 For the endpoint's exact fields, see [Inbound webhooks (Ingest)](/docs/api-reference/project/inbound-webhooks-ingest) in the reference.
