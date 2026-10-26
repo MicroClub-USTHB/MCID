@@ -38,6 +38,7 @@ export interface ProjectRow {
   description: string | null;
   isInternal: boolean;
   webhookUrl: string | null;
+  redirectUri: string | null;
   apiKeyPrefix: string | null;
   apiKeyCreatedAt: Date;
   apiKeyLastUsedAt: Date | null;
@@ -149,6 +150,7 @@ export class ProjectsRepository {
         description: schema.projects.description,
         isInternal: schema.projects.isInternal,
         webhookUrl: schema.projects.webhookUrl,
+        redirectUri: schema.projects.redirectUri,
         apiKeyPrefix: schema.projects.apiKeyPrefix,
         apiKeyCreatedAt: schema.projects.apiKeyCreatedAt,
         apiKeyLastUsedAt: schema.projects.apiKeyLastUsedAt,
@@ -174,6 +176,7 @@ export class ProjectsRepository {
         description: schema.projects.description,
         isInternal: schema.projects.isInternal,
         webhookUrl: schema.projects.webhookUrl,
+        redirectUri: schema.projects.redirectUri,
         apiKeyPrefix: schema.projects.apiKeyPrefix,
         apiKeyCreatedAt: schema.projects.apiKeyCreatedAt,
         apiKeyLastUsedAt: schema.projects.apiKeyLastUsedAt,
@@ -204,6 +207,7 @@ export class ProjectsRepository {
         description: schema.projects.description,
         isInternal: schema.projects.isInternal,
         webhookUrl: schema.projects.webhookUrl,
+        redirectUri: schema.projects.redirectUri,
         apiKeyPrefix: schema.projects.apiKeyPrefix,
         apiKeyCreatedAt: schema.projects.apiKeyCreatedAt,
         apiKeyLastUsedAt: schema.projects.apiKeyLastUsedAt,
@@ -270,6 +274,7 @@ export class ProjectsRepository {
       description: project.description,
       isInternal: project.isInternal,
       webhookUrl: project.webhookUrl,
+      redirectUri: project.redirectUri,
       apiKeyPrefix: project.apiKeyPrefix,
       apiKeyCreatedAt: project.apiKeyCreatedAt,
       apiKeyLastUsedAt: project.apiKeyLastUsedAt,
