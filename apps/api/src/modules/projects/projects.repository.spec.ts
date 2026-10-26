@@ -97,6 +97,13 @@ describe('ProjectsRepository', () => {
       const results = await repo.findAll();
       expect(results).toEqual([]);
     });
+
+    it('selects the redirect URI', async () => {
+      const db = buildSequentialDb([[fakeProjectRow()]]);
+      const repo = await buildRepo(db);
+      await repo.findAll();
+      expect(db.select.mock.calls[0][0]).toHaveProperty('redirectUri');
+    });
   });
 
   describe('findOne', () => {
@@ -112,6 +119,13 @@ describe('ProjectsRepository', () => {
       const db = buildSequentialDb([[]]);
       const repo = await buildRepo(db);
       expect(await repo.findOne('ghost')).toBeNull();
+    });
+
+    it('selects the redirect URI so the dashboard can list it', async () => {
+      const db = buildSequentialDb([[fakeProjectRow()]]);
+      const repo = await buildRepo(db);
+      await repo.findOne('proj-1');
+      expect(db.select.mock.calls[0][0]).toHaveProperty('redirectUri');
     });
   });
 
@@ -129,6 +143,14 @@ describe('ProjectsRepository', () => {
       const db = buildSequentialDb([[]]);
       const repo = await buildRepo(db);
       expect(await repo.update('ghost', { name: 'x' })).toBeNull();
+    });
+
+    it('returns the redirect URI with the updated project', async () => {
+      const db = buildSequentialDb([[fakeProjectRow()]]);
+      const repo = await buildRepo(db);
+      await repo.update('proj-1', { name: 'Renamed' });
+      const chain = db.update.mock.results[0].value;
+      expect(chain.returning.mock.calls[0][0]).toHaveProperty('redirectUri');
     });
   });
 

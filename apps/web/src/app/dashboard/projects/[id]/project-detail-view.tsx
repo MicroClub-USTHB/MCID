@@ -13,7 +13,11 @@ import {
   useUpdateProjectMutation,
   useUpdateRedirectUriMutation,
 } from '@/features/projects/api/mutations';
-import { mapApiKeyResponse, mapProjectResponse } from '@/features/projects/api/mappers';
+import {
+  mapApiKeyResponse,
+  mapProjectResponse,
+  splitRedirectUris,
+} from '@/features/projects/api/mappers';
 import {
   ApiKeyDisplay,
   ApiKeyRevealModal,
@@ -66,7 +70,6 @@ function ProjectDetailView({ id }: ProjectDetailViewProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [deactivateOpen, setDeactivateOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [uris, setUris] = useState<string[]>([]);
 
   if (projectQuery.isPending) {
     return (
@@ -100,15 +103,15 @@ function ProjectDetailView({ id }: ProjectDetailViewProps) {
 
   const project = mapProjectResponse(projectQuery.data);
 
+  const uris = splitRedirectUris(projectQuery.data.redirectUri);
+
   function handleAddRedirectUri(uri: string) {
-    const next = [...uris, uri];
-    setUris(next);
-    updateRedirectMutation.mutate({ id, redirectUri: next.join(', ') });
+    if (uris.includes(uri)) return;
+    updateRedirectMutation.mutate({ id, redirectUri: [...uris, uri].join(', ') });
   }
 
   function handleRemoveRedirectUri(uri: string) {
     const next = uris.filter((item) => item !== uri);
-    setUris(next);
     updateRedirectMutation.mutate({ id, redirectUri: next.join(', ') });
   }
 
@@ -218,8 +221,7 @@ function ProjectDetailView({ id }: ProjectDetailViewProps) {
             Redirect URIs
           </h2>
           <p className="paragraph-xs text-muted-foreground">
-            Comma-separated callback URLs used for OAuth. Currently shows what you&apos;ve saved
-            this session.
+            Callback URLs allowed for OAuth. A URL must match one of these exactly.
           </p>
         </div>
         <RedirectUriManager

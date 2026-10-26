@@ -22,6 +22,7 @@ export interface ProjectDto {
   description: string | null;
   isInternal: boolean;
   webhookUrl: string | null;
+  redirectUri: string | null;
   apiKeyPrefix: string | null;
   apiKeyCreatedAt: string;
   apiKeyLastUsedAt: string | null;
