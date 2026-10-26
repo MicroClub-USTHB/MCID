@@ -44,6 +44,10 @@ export const inboundWebhookSubmissions = pgTable(
     projectIdx: index('idx_inbound_webhook_submissions_project').on(
       t.projectId,
     ),
+    // Retention scans the oldest submissions across every webhook
+    receivedIdx: index('idx_inbound_webhook_submissions_received').on(
+      t.receivedAt,
+    ),
   }),
 );
 

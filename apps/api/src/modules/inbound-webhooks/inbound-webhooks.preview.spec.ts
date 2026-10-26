@@ -56,6 +56,7 @@ describe('InboundWebhooksService.previewSchema', () => {
               ? 'api'
               : fallback,
       } as never,
+      {} as never,
     );
   });
 

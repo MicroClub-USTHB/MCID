@@ -9,7 +9,7 @@ These endpoints are for the backends and browsers of Micro Club projects. A back
 
 The endpoints the admin dashboard uses are in the [Admin API](/docs/api-reference/admin/overview).
 
-30 endpoints in 7 groups.
+34 endpoints in 7 groups.
 
 ## Authentication
 
@@ -47,6 +47,10 @@ The endpoints the admin dashboard uses are in the [Admin API](/docs/api-referenc
 
 | Method | Path | Summary |
 | --- | --- | --- |
+| `POST` | `/api/inbound-webhooks/{id}/drafts` | [Open a draft](/docs/api-reference/project/inbound-webhooks-ingest#open-a-draft) |
+| `POST` | `/api/inbound-webhooks/{id}/drafts/{draftId}/submit` | [Submit a draft](/docs/api-reference/project/inbound-webhooks-ingest#submit-a-draft) |
+| `PATCH` | `/api/inbound-webhooks/{id}/drafts/{draftId}/{stepKey}` | [Save one step of a draft](/docs/api-reference/project/inbound-webhooks-ingest#save-one-step-of-a-draft) |
+| `POST` | `/api/inbound-webhooks/{id}/files` | [Upload a file](/docs/api-reference/project/inbound-webhooks-ingest#upload-a-file) |
 | `POST` | `/api/inbound-webhooks/{id}/submit` | [Submit a payload](/docs/api-reference/project/inbound-webhooks-ingest#submit-a-payload) |
 
 ## Members

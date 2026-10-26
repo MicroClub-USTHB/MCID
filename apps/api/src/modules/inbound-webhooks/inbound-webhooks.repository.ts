@@ -3,11 +3,13 @@ import {
   and,
   desc,
   eq,
+  gt,
   gte,
   inArray,
   isNotNull,
   lte,
   ne,
+  notInArray,
   or,
   sql,
   SQL,
@@ -18,6 +20,7 @@ import { DRIZZLE } from '../../database/database.module';
 import { DrizzleDB } from '../../database/database.constants';
 import * as schema from '../../database/entities';
 import {
+  inboundWebhookDrafts,
   inboundWebhookFiles,
   inboundWebhookRoles,
   inboundWebhookSettings,
@@ -30,8 +33,20 @@ import {
   serverMemberRoles,
   servers,
 } from '../../database/entities';
-import type { InboundWebhookSettingsRow } from '../../database/entities';
+import type {
+  InboundWebhookDraft,
+  InboundWebhookSettingsRow,
+} from '../../database/entities';
 import type { FormSchema } from '@mcid/form-schema';
+
+/** What a query runs on: the pool, or the transaction of a storage key lock. */
+type Executor = Pick<DrizzleDB, 'select' | 'selectDistinct' | 'insert'>;
+
+/** The draft is not open any more: submitted, expired, or past its expiry. */
+export class DraftNotOpenError extends Error {}
+
+/** A file a submission references was attached elsewhere, or swept, meanwhile. */
+export class FileNotPendingError extends Error {}
 
 export interface InboundWebhookRow {
   id: string;
@@ -475,6 +490,24 @@ export class InboundWebhooksRepository {
     fileIds: string[];
   }) {
     return this.db.transaction(async (tx) => {
+      // Claim the draft first. The conditional update is what makes a second
+      // submit of the same draft fail, even when two requests race.
+      if (data.draftId) {
+        const now = new Date();
+        const [claimed] = await tx
+          .update(inboundWebhookDrafts)
+          .set({ status: 'submitted', updatedAt: now })
+          .where(
+            and(
+              eq(inboundWebhookDrafts.id, data.draftId),
+              eq(inboundWebhookDrafts.status, 'open'),
+              gt(inboundWebhookDrafts.expiresAt, now),
+            ),
+          )
+          .returning({ id: inboundWebhookDrafts.id });
+        if (!claimed) throw new DraftNotOpenError();
+      }
+
       const [row] = await tx
         .insert(inboundWebhookSubmissions)
         .values({
@@ -489,10 +522,21 @@ export class InboundWebhooksRepository {
         .returning();
 
       if (data.fileIds.length > 0) {
-        await tx
+        // Only a still-pending file can be claimed: the status check inside
+        // the transaction is what stops two submissions sharing one file.
+        const claimed = await tx
           .update(inboundWebhookFiles)
           .set({ status: 'committed', submissionId: row.id })
-          .where(inArray(inboundWebhookFiles.id, data.fileIds));
+          .where(
+            and(
+              inArray(inboundWebhookFiles.id, data.fileIds),
+              eq(inboundWebhookFiles.status, 'pending'),
+            ),
+          )
+          .returning({ id: inboundWebhookFiles.id });
+        if (claimed.length !== new Set(data.fileIds).size) {
+          throw new FileNotPendingError();
+        }
       }
 
       await tx
@@ -562,5 +606,261 @@ export class InboundWebhooksRepository {
       .select()
       .from(inboundWebhookFiles)
       .where(inArray(inboundWebhookFiles.id, ids));
+  }
+
+  async insertFile(
+    data: {
+      webhookId: string;
+      storageKey: string;
+      sha256: string;
+      sizeBytes: number;
+      mime: string;
+      originalName: string | null;
+      expiresAt: Date;
+    },
+    executor: Executor = this.db,
+  ) {
+    const [row] = await executor
+      .insert(inboundWebhookFiles)
+      .values(data)
+      .returning();
+    return row;
+  }
+
+  /**
+   * Runs `fn` while holding a lock on one storage key, across every API
+   * process. Objects are content-addressed, so an upload deciding whether
+   * to store a key and a cleanup deciding whether anyone still uses it
+   * would otherwise race. `fn` must use the transaction it is given: the
+   * lock holds a pooled connection, and a second one per caller could
+   * exhaust the pool.
+   */
+  async withStorageKeyLock<T>(
+    key: string,
+    fn: (tx: Executor) => Promise<T>,
+  ): Promise<T> {
+    return this.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`,
+      );
+      return fn(tx);
+    });
+  }
+
+  /** Uploads never attached to a submission before they expired. */
+  async findExpiredPendingFiles(now: Date) {
+    return this.db
+      .select({
+        id: inboundWebhookFiles.id,
+        storageKey: inboundWebhookFiles.storageKey,
+      })
+      .from(inboundWebhookFiles)
+      .where(
+        and(
+          eq(inboundWebhookFiles.status, 'pending'),
+          lte(inboundWebhookFiles.expiresAt, now),
+        ),
+      );
+  }
+
+  /** Which of these storage keys a row outside `exceptIds` still points at. */
+  async findReferencedStorageKeys(
+    keys: string[],
+    exceptIds: string[],
+    executor: Executor = this.db,
+  ): Promise<Set<string>> {
+    if (keys.length === 0) return new Set();
+    const rows = await executor
+      .selectDistinct({ storageKey: inboundWebhookFiles.storageKey })
+      .from(inboundWebhookFiles)
+      .where(
+        and(
+          inArray(inboundWebhookFiles.storageKey, keys),
+          notInArray(inboundWebhookFiles.id, exceptIds),
+        ),
+      );
+    return new Set(rows.map((r) => r.storageKey));
+  }
+
+  /** Deletes pending files by id; a file committed meanwhile is left alone. */
+  async deletePendingFiles(ids: string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    const rows = await this.db
+      .delete(inboundWebhookFiles)
+      .where(
+        and(
+          inArray(inboundWebhookFiles.id, ids),
+          eq(inboundWebhookFiles.status, 'pending'),
+        ),
+      )
+      .returning({ id: inboundWebhookFiles.id });
+    return rows.length;
+  }
+
+  /**
+   * A file saved in a draft step must outlive the draft, not just its own
+   * upload window: a wizard uploads early and submits late.
+   */
+  async attachFilesToDraft(ids: string[], draftId: string, until: Date) {
+    if (ids.length === 0) return;
+    await this.db
+      .update(inboundWebhookFiles)
+      .set({
+        draftId,
+        expiresAt: sql`GREATEST(${inboundWebhookFiles.expiresAt}, ${until.toISOString()}::timestamptz)`,
+      })
+      .where(
+        and(
+          inArray(inboundWebhookFiles.id, ids),
+          eq(inboundWebhookFiles.status, 'pending'),
+        ),
+      );
+  }
+
+  // ─── Retention ──────────────────────────────────────────────────────────
+
+  /**
+   * Drafts nobody can use any more. A submitted draft is kept: it is removed
+   * with its submission, not on its own clock.
+   */
+  async deleteExpiredDrafts(now: Date): Promise<number> {
+    const rows = await this.db
+      .delete(inboundWebhookDrafts)
+      .where(
+        and(
+          ne(inboundWebhookDrafts.status, 'submitted'),
+          lte(inboundWebhookDrafts.expiresAt, now),
+        ),
+      )
+      .returning({ id: inboundWebhookDrafts.id });
+    return rows.length;
+  }
+
+  /** The oldest submissions received before `cutoff`, at most `limit`, skipping `excludeIds`. */
+  async findSubmissionsReceivedBefore(
+    cutoff: Date,
+    limit: number,
+    excludeIds: string[] = [],
+  ) {
+    return this.db
+      .select({
+        id: inboundWebhookSubmissions.id,
+        draftId: inboundWebhookSubmissions.draftId,
+      })
+      .from(inboundWebhookSubmissions)
+      .where(
+        and(
+          lte(inboundWebhookSubmissions.receivedAt, cutoff),
+          excludeIds.length > 0
+            ? notInArray(inboundWebhookSubmissions.id, excludeIds)
+            : undefined,
+        ),
+      )
+      .orderBy(inboundWebhookSubmissions.receivedAt)
+      .limit(limit);
+  }
+
+  async findFilesOfSubmissions(submissionIds: string[]) {
+    if (submissionIds.length === 0) return [];
+    return this.db
+      .select({
+        id: inboundWebhookFiles.id,
+        submissionId: inboundWebhookFiles.submissionId,
+        storageKey: inboundWebhookFiles.storageKey,
+      })
+      .from(inboundWebhookFiles)
+      .where(inArray(inboundWebhookFiles.submissionId, submissionIds));
+  }
+
+  /**
+   * Deletes submissions with the data they hold: their file rows go by
+   * cascade, and so do the drafts they came from, which carry the same
+   * answers.
+   */
+  async deleteSubmissions(ids: string[], draftIds: string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    return this.db.transaction(async (tx) => {
+      const rows = await tx
+        .delete(inboundWebhookSubmissions)
+        .where(inArray(inboundWebhookSubmissions.id, ids))
+        .returning({ id: inboundWebhookSubmissions.id });
+      if (draftIds.length > 0) {
+        await tx
+          .delete(inboundWebhookDrafts)
+          .where(inArray(inboundWebhookDrafts.id, draftIds));
+      }
+      return rows.length;
+    });
+  }
+
+  // ─── Drafts ─────────────────────────────────────────────────────────────
+
+  async insertDraft(data: {
+    webhookId: string;
+    projectId: string;
+    expiresAt: Date;
+  }): Promise<InboundWebhookDraft> {
+    const [row] = await this.db
+      .insert(inboundWebhookDrafts)
+      .values(data)
+      .returning();
+    return row;
+  }
+
+  async findDraft(id: string): Promise<InboundWebhookDraft | null> {
+    const [row] = await this.db
+      .select()
+      .from(inboundWebhookDrafts)
+      .where(eq(inboundWebhookDrafts.id, id));
+    return row ?? null;
+  }
+
+  /**
+   * Stores one step's accepted values and marks the step completed, only while
+   * the draft is open and unexpired. `jsonb_set` touches just this step's key,
+   * so two requests patching different steps cannot overwrite each other.
+   * `value` is undefined for a step whose condition is false: nothing to
+   * store, but the step still counts as done. Returns null when the draft was
+   * not open.
+   */
+  async saveDraftStep(
+    id: string,
+    stepKey: string,
+    value: Record<string, unknown> | undefined,
+  ): Promise<InboundWebhookDraft | null> {
+    const now = new Date();
+    const data =
+      value === undefined
+        ? inboundWebhookDrafts.data
+        : sql`jsonb_set(${inboundWebhookDrafts.data}, ARRAY[${stepKey}]::text[], ${JSON.stringify(value)}::jsonb, true)`;
+    const [row] = await this.db
+      .update(inboundWebhookDrafts)
+      .set({
+        data,
+        completedSteps: sql`CASE WHEN ${inboundWebhookDrafts.completedSteps} ? ${stepKey} THEN ${inboundWebhookDrafts.completedSteps} ELSE ${inboundWebhookDrafts.completedSteps} || to_jsonb(${stepKey}::text) END`,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(inboundWebhookDrafts.id, id),
+          eq(inboundWebhookDrafts.status, 'open'),
+          gt(inboundWebhookDrafts.expiresAt, now),
+        ),
+      )
+      .returning();
+    return row ?? null;
+  }
+
+  /** Marks an open draft whose time ran out. No-op for any other status. */
+  async expireDraft(id: string): Promise<void> {
+    await this.db
+      .update(inboundWebhookDrafts)
+      .set({ status: 'expired', updatedAt: new Date() })
+      .where(
+        and(
+          eq(inboundWebhookDrafts.id, id),
+          eq(inboundWebhookDrafts.status, 'open'),
+        ),
+      );
   }
 }

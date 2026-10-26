@@ -23,12 +23,19 @@ services:
       - REDIS_PORT=6379
       - REDIS_PASSWORD=redis_password
       - REDIS_KEY_PREFIX=mcid
+      - S3_ENDPOINT=http://minio:9000
+      - S3_BUCKET=mcid-files
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
+      - S3_REGION=us-east-1
 
     depends_on:
       database:
         condition: service_healthy
       redis:
         condition: service_started
+      minio-init:
+        condition: service_completed_successfully
 
     command: sh -lc "corepack enable && pnpm install --filter '@mcid/api...' && until pnpm run db:push; do echo 'Waiting for database schema...' && sleep 2; done && pnpm exec turbo run dev --filter=@mcid/api --ui=stream"
 
@@ -67,6 +74,35 @@ services:
     volumes:
       - redis_data:/data
 
+  # S3-compatible object storage for inbound webhook file uploads
+  minio:
+    image: minio/minio
+    restart: always
+    command: server /data --console-address ':9001'
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio-init:
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      sh -c "mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb --ignore-existing local/mcid-files"
+
 volumes:
   my_db_data:
   redis_data:
+  minio_data:

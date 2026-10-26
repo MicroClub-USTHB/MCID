@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -21,6 +22,7 @@ const project = {
   description: null,
   isInternal: false,
   webhookUrl: null,
+  redirectUri: null,
   apiKeyPrefix: 'pk_abc',
   apiKeyCreatedAt: '2026-08-01T10:00:00.000Z',
   apiKeyLastUsedAt: null,
@@ -62,6 +64,32 @@ describe('project pages', () => {
     expect(screen.getByRole('heading', { name: 'Redirect URIs' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Server access' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Access audit log' })).toBeNull();
+  });
+
+  it('lists the stored redirect URIs and appends a new one to them', async () => {
+    let saved: unknown = null;
+    server.use(
+      http.get(`${API_URL}/admin/projects/proj_1`, () =>
+        HttpResponse.json({ ...project, redirectUri: 'https://a.test/cb, https://b.test/cb' })
+      ),
+      http.patch(`${API_URL}/admin/projects/proj_1/redirect-uri`, async ({ request }) => {
+        saved = await request.json();
+        return HttpResponse.json({ projectId: 'proj_1', redirectUri: '' });
+      })
+    );
+    render(<ProjectDetailView id="proj_1" />, { wrapper });
+
+    expect(await screen.findByText('https://a.test/cb')).toBeInTheDocument();
+    expect(screen.getByText('https://b.test/cb')).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('New redirect URI'), 'https://c.test/cb');
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    await waitFor(() =>
+      expect(saved).toEqual({
+        redirectUri: 'https://a.test/cb, https://b.test/cb, https://c.test/cb',
+      })
+    );
   });
 
   it('has no back button; the sidebar and breadcrumbs lead back to the list', async () => {

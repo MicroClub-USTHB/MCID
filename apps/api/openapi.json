@@ -8119,6 +8119,271 @@
         ]
       }
     },
+    "/api/inbound-webhooks/{id}/drafts": {
+      "post": {
+        "description": "Starts a multi-step submission. Send each step with PATCH, then submit the draft. The draft expires after INBOUND_WEBHOOK_DRAFT_TTL_H hours (24 by default). Only for webhooks whose schema has steps. The request has no body, so the signature covers an empty string.",
+        "operationId": "InboundWebhookIngestController_createDraft",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "t=<unix seconds>,v1=<hex hmac-sha256 of \"t.<raw body>\">",
+            "in": "header",
+            "name": "X-MCID-Signature",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The draft id and when it expires."
+          },
+          "400": {
+            "description": "The webhook has no steps (400), or the signature is bad (401)."
+          },
+          "403": {
+            "description": "Origin not in the allowlist."
+          },
+          "404": {
+            "description": "No such webhook for this project."
+          },
+          "409": {
+            "description": "Signature replayed."
+          },
+          "410": {
+            "description": "Webhook is inactive."
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ],
+        "summary": "Open a draft",
+        "tags": [
+          "Inbound Webhooks (Ingest)"
+        ]
+      }
+    },
+    "/api/inbound-webhooks/{id}/drafts/{draftId}/submit": {
+      "post": {
+        "description": "Checks everything saved so far as one payload, with conditions resolved across steps, and turns the draft into a submission. A step never sent fails its required fields. A draft can be submitted once. The request has no body, so the signature covers an empty string.",
+        "operationId": "InboundWebhookIngestController_submitDraft",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "draftId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "t=<unix seconds>,v1=<hex hmac-sha256 of \"t.<raw body>\">",
+            "in": "header",
+            "name": "X-MCID-Signature",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Accepted."
+          },
+          "403": {
+            "description": "Origin not in the allowlist."
+          },
+          "404": {
+            "description": "No such webhook or draft."
+          },
+          "409": {
+            "description": "The draft was already submitted, or the signature replayed."
+          },
+          "410": {
+            "description": "Webhook inactive, or the draft expired."
+          },
+          "422": {
+            "description": "The accumulated payload failed schema validation."
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ],
+        "summary": "Submit a draft",
+        "tags": [
+          "Inbound Webhooks (Ingest)"
+        ]
+      }
+    },
+    "/api/inbound-webhooks/{id}/drafts/{draftId}/{stepKey}": {
+      "patch": {
+        "description": "Checks only this step, with its conditions read against the steps already saved, and stores it. Sending a step again replaces it. Every error in the step is returned at once.",
+        "operationId": "InboundWebhookIngestController_patchDraftStep",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "draftId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "stepKey",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "t=<unix seconds>,v1=<hex hmac-sha256 of \"t.<raw body>\">",
+            "in": "header",
+            "name": "X-MCID-Signature",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The steps saved so far."
+          },
+          "403": {
+            "description": "Origin not in the allowlist."
+          },
+          "404": {
+            "description": "No such webhook or draft."
+          },
+          "409": {
+            "description": "The draft was already submitted, or the signature replayed."
+          },
+          "410": {
+            "description": "Webhook inactive, or the draft expired."
+          },
+          "422": {
+            "description": "The step failed schema validation, or the step is unknown."
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ],
+        "summary": "Save one step of a draft",
+        "tags": [
+          "Inbound Webhooks (Ingest)"
+        ]
+      }
+    },
+    "/api/inbound-webhooks/{id}/files": {
+      "post": {
+        "description": "Phase one of a file submission. Send one file as multipart/form-data; the response carries a fileId to reference from a file field in /submit or in a draft step. The type is read from the content, not from the Content-Type the sender gives, and must be accepted by one of the webhook's file fields. The upload expires after INBOUND_WEBHOOK_FILE_TTL_H hours (1 by default) unless a submission uses it. The multipart body is not signed, so the signature covers an empty string.",
+        "operationId": "InboundWebhookIngestController_uploadFile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "t=<unix seconds>,v1=<hex hmac-sha256 of \"t.\">",
+            "in": "header",
+            "name": "X-MCID-Signature",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "The fileId, sha256, size, detected mime and expiry."
+          },
+          "400": {
+            "description": "Not multipart, no file, several files, an empty file, or the webhook has no file fields (400); bad signature (401)."
+          },
+          "403": {
+            "description": "Origin not in the allowlist."
+          },
+          "404": {
+            "description": "No such webhook for this project."
+          },
+          "409": {
+            "description": "Signature replayed."
+          },
+          "410": {
+            "description": "Webhook is inactive."
+          },
+          "413": {
+            "description": "Larger than the biggest maxSizeBytes of the webhook."
+          },
+          "415": {
+            "description": "The content is not a type the webhook accepts."
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ],
+        "summary": "Upload a file",
+        "tags": [
+          "Inbound Webhooks (Ingest)"
+        ]
+      }
+    },
     "/api/inbound-webhooks/{id}/submissions": {
       "get": {
         "operationId": "InboundWebhookReadController_listSubmissions",

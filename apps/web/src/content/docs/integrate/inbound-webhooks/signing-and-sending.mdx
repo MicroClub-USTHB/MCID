@@ -204,6 +204,65 @@ Replay protection and the rate limit rely on Redis. If Redis is unreachable, MCI
 
 The tolerance is 300 seconds by default. An operator can change it with the `INBOUND_WEBHOOK_SIGNATURE_TOLERANCE_S` setting of the API. Keep your server's clock in sync, because a clock that drifts by more than the tolerance makes every request fail with `STALE_TIMESTAMP`.
 
+## Sending a form one step at a time
+
+A webhook whose schema has `steps` can also be filled over several requests, for a wizard that saves each page as it goes. A draft holds the steps sent so far. Three calls use the same API key, origin check and signature as `/submit`:
+
+```http
+POST  /api/inbound-webhooks/{id}/drafts
+PATCH /api/inbound-webhooks/{id}/drafts/{draftId}/{stepKey}
+POST  /api/inbound-webhooks/{id}/drafts/{draftId}/submit
+```
+
+| Call               | Body                                 | Answer                                                                |
+| ------------------ | ------------------------------------ | --------------------------------------------------------------------- |
+| `POST .../drafts`  | None. The signature covers `""`.     | `201` with `{ "draftId": "...", "expiresAt": "..." }`.                |
+| `PATCH .../{step}` | The step's fields, as a JSON object. | `200` with `{ "draftId", "stepKey", "completedSteps", "expiresAt" }`. |
+| `POST .../submit`  | None. The signature covers `""`.     | `201` with `{ "id": "...", "receivedAt": "..." }`.                    |
+
+- **A step is checked on its own.** Only the fields of that step are validated, and every error in it comes back at once as a 422. Its conditions can read the steps already saved. A step that does not apply because of its `condition` is accepted and ignored.
+- **Sending a step again replaces it.** This is how a caller resumes or corrects: it keeps the `draftId` and sends the step it wants to change. `completedSteps` in each answer lists what is saved.
+- **The submit checks everything.** The saved steps are validated as one payload, with conditions resolved across steps, so a step that was never sent fails its required fields and an answer changed later is rechecked. A 422 leaves the draft open.
+- **A draft is submitted once.** A second submit, or a patch after the submit, answers 409.
+- **A draft expires.** It lasts 24 hours from the moment it was opened, and an operator can change that with `INBOUND_WEBHOOK_DRAFT_TTL_H`. Sending to an expired draft answers 410, and the caller opens a new one.
+- **A draft belongs to one webhook and one project.** An unknown draft, or one of another webhook, answers 404.
+- A webhook with only `fields` has no steps and no drafts: `POST .../drafts` answers 400, so send the payload to `/submit`.
+
+Each of these calls counts toward the rate limit below, like a `/submit`.
+
+## Sending files
+
+A file never travels inside the JSON of a submission. A webhook with `file` or `files` fields takes them in two steps, so the signed body stays small and a wizard can upload on one page and submit on another:
+
+```text
+POST /api/inbound-webhooks/{id}/files      multipart/form-data, one part named "file"
+POST /api/inbound-webhooks/{id}/submit     JSON, with { "fileId": "..." } where the file belongs
+```
+
+The upload answers `201` with `{ "fileId", "sha256", "size", "mime", "expiresAt" }`. Put the `fileId` in the field, as `"cv": { "fileId": "..." }`, in `/submit` or in a draft step.
+
+```bash
+curl -X POST https://mcid.example/api/inbound-webhooks/$WEBHOOK_ID/files \
+  -H "X-API-Key: $MCID_API_KEY" \
+  -F "file=@cv.pdf"
+```
+
+- **The signature covers `""`.** The multipart body is not signed, because checking a signature means buffering the whole body before the caller is authenticated. The signature still proves the caller holds the secret, and it is still single-use.
+- **The type comes from the content.** MCID reads the file's first bytes and ignores the `Content-Type` the sender gives, so an executable renamed to `cv.pdf` is refused. A type with no recognizable signature, such as plain text or CSV, is refused too. The type must be in the `accept` list of at least one file field of the webhook, and `/submit` then checks it against the field that uses the file.
+- **The size is capped while it streams.** The cap is the largest `maxSizeBytes` of the webhook's file fields. A bigger file answers 413 and nothing is stored.
+- **Identical content is stored once.** Two uploads of the same bytes get two `fileId`s and share one stored object.
+- **An upload expires.** It lasts one hour, and an operator can change that with `INBOUND_WEBHOOK_FILE_TTL_H`. A file that no submission has used by then is deleted, and `/submit` answers `FILE_EXPIRED` for it. A file saved in a draft step lives as long as the draft instead, so a wizard can upload on one page and submit a day later.
+- **A file belongs to one webhook and one submission.** Another webhook's `fileId` is answered as `FILE_NOT_FOUND`, and a second submission using it gets `FILE_ALREADY_USED`.
+
+| Status | When |
+| --- | --- |
+| `400` | The body is not multipart, has no file, has more than one, or the file is empty. Also for a webhook with no file fields. |
+| `413` | The file is over the largest `maxSizeBytes`. |
+| `415` | The content is not a type the webhook accepts. |
+| `503` | File storage is not configured on the server. |
+
+The upload also answers with the errors every write call shares: 401, 403, 404, 409, 410 and 429. Each upload counts toward the rate limit below.
+
 ## Origin allowlist
 
 An admin can restrict a webhook to specific origins, for example `https://forms.example.com`. MCID then compares the request's `Origin` header with the list, exactly. A request with another origin, or none, gets a 403:
@@ -234,4 +293,4 @@ An operator can change the number with `INBOUND_WEBHOOK_RATE_LIMIT`. Retry later
 
 For every error code, see [Errors and limits](/docs/integrate/inbound-webhooks/errors-and-limits).
 
-Source: `apps/api/src/common/utils/inbound-webhook-signature.util.ts`, `apps/api/src/modules/inbound-webhooks/inbound-webhooks.service.ts`, `apps/api/src/modules/inbound-webhooks/inbound-webhook-ingest.controller.ts`, `apps/api/src/common/guards/api-key.guard.ts`.
+Source: `apps/api/src/common/utils/inbound-webhook-signature.util.ts`, `apps/api/src/modules/inbound-webhooks/inbound-webhooks.service.ts`, `apps/api/src/modules/inbound-webhooks/inbound-webhook-ingest.controller.ts`, `apps/api/src/modules/inbound-webhooks/files/inbound-webhook-files.service.ts`, `apps/api/src/common/guards/api-key.guard.ts`.
