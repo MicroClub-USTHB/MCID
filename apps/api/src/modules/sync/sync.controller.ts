@@ -10,7 +10,6 @@ import {
   NotFoundException,
   Param,
   ParseIntPipe,
-  DefaultValuePipe,
 } from '@nestjs/common';
 import {
   ApiAcceptedResponse,
@@ -31,6 +30,7 @@ import { SyncService } from './sync.service';
 import { TriggerSyncDto } from './dto/trigger-sync.dto';
 import { SyncStatusDto } from './dto/sync-status.dto';
 import { SyncLogsQueryDto } from './dto/sync-logs-query.dto';
+import { SyncChangesQueryDto } from './dto/sync-changes-query.dto';
 import { SyncLogsResponseDto } from './dto/sync-log.dto';
 import { SyncChangeDetailsResponseDto } from './dto/sync-change-detail.dto';
 import { AdminAccessGuard } from '../../common/guards/admin-access.guard';
@@ -175,8 +175,6 @@ export class SyncController {
       '(member added/removed, role updated, etc.) recorded during a sync operation.',
   })
   @ApiParam({ name: 'syncLogId', type: Number, example: 42 })
-  @ApiQuery({ name: 'limit', required: false, type: Number, example: 100 })
-  @ApiQuery({ name: 'offset', required: false, type: Number, example: 0 })
   @ApiOkResponse({
     description: 'Sync change details retrieved successfully.',
     type: SyncChangeDetailsResponseDto,
@@ -189,9 +187,13 @@ export class SyncController {
   })
   async getSyncChangeDetails(
     @Param('syncLogId', ParseIntPipe) syncLogId: number,
-    @Query('limit', new DefaultValuePipe(100), ParseIntPipe) limit: number,
-    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+    @Query() query: SyncChangesQueryDto,
   ): Promise<SyncChangeDetailsResponseDto> {
-    return this.syncService.getSyncChangeDetails(syncLogId, limit, offset);
+    return this.syncService.getSyncChangeDetails(
+      syncLogId,
+      query.limit ?? 100,
+      query.offset ?? 0,
+      query.action,
+    );
   }
 }

@@ -55,6 +55,10 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:3000/api
           NEXT_PUBLIC_APP_URL: http://localhost:3002
 
+      - name: Smoke-test the built CLI
+        # The bundle is what ships; the unit tests run the TypeScript source.
+        run: node apps/cli/bin/mcid-cli.js --help > /dev/null
+
       - name: Check the API docs are up to date
         # `pnpm docs:api` re-exports apps/api/openapi.json and regenerates the reference pages.
         # `git status` (not `git diff`) so a page for a brand-new group counts as a change too.
@@ -65,6 +69,18 @@ jobs:
             echo "$changes"
             git --no-pager diff --stat -- apps/api/openapi.json apps/web/src/content/docs/api-reference
             echo "::error::API docs are out of date, run pnpm docs:api and commit the result"
+            exit 1
+          fi
+
+      - name: Check the generated CLI API types are up to date
+        # The types are generated from the same openapi.json the step above
+        # just refreshed, so a stale schema or a stale type file fails here.
+        run: |
+          pnpm --filter mcid-cli generate:api-types
+          changes=$(git status --porcelain -- apps/cli/src/generated)
+          if [ -n "$changes" ]; then
+            echo "$changes"
+            echo "::error::apps/cli/src/generated/api.d.ts is out of date, run pnpm --filter mcid-cli generate:api-types and commit the result"
             exit 1
           fi
 

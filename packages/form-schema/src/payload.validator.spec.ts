@@ -1,5 +1,5 @@
 import { validatePayload, FileMeta } from './payload.validator';
-import type { Field, FormSchema } from '@mcid/form-schema';
+import type { Field, FormSchema } from './form-schema.types';
 
 const opts = { rejectUnknownFields: true };
 
@@ -547,9 +547,9 @@ describe('validatePayload (Layer 2)', () => {
       const stepped: FormSchema = {
         version: 1,
         steps: [
-          schema.steps[0],
+          schema.steps[0]!,
           {
-            ...schema.steps[1],
+            ...schema.steps[1]!,
             condition: { op: 'eq', field: 'identity.status', value: 'student' },
             fields: [{ key: 'university', type: 'string', required: true }],
           },

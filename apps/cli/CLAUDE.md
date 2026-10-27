@@ -1,52 +1,71 @@
 # mcid-cli
 
 A developer CLI that lets an MCID admin authenticate once (via
-browser-based Discord OAuth against MCID) and then author, validate, create,
-update, and inspect MCID **Inbound Webhooks** from the terminal, instead of
-hand-crafting `FormSchema` JSON and calling the admin API with a raw HTTP
-client.
+browser-based Discord OAuth against MCID) and manage MCID resources, projects,
+servers, sync, members, permissions, admin access, ops monitoring, and Inbound
+Webhooks from the terminal.
 
-mcid-cli is the command-line client for MCID. The MVP covers Inbound
-Webhooks only (login, schema authoring and pre-check, webhook management); it
-is meant to grow to cover the rest of MCID's admin features over time.
+## Architecture
 
-This is the `mcid-cli` workspace of the MCID monorepo (`apps/cli`). Run
-scripts from the repository root, e.g.
-`pnpm turbo run lint typecheck test --filter=mcid-cli`.
+mcid-cli is a thin client built on top of MCID's Admin and Project APIs.
+It runs on pure Node.js (Node >= 20, recommended >= 22) with zero runtime dependencies
+for its interactive terminal UI widgets.
 
-The original product requirements are a historical record in
-[`docs/mcid-cli-PRD.md`](../../docs/mcid-cli-PRD.md) at the repository root.
+- Commands are built with `commander`.
+- Interactive prompts (`promptSelect`, `promptInput`, `promptNumber`, `promptConfirm`) use Node's `readline` in raw mode with ANSI cursor control (adapted from GLMproxy).
+- Output helpers provide formatted tables, key-value cards, JSON, CSV, and quiet ID piping.
+- HTTP requests go through a unified `ApiClient` that maps HTTP statuses to exit codes and provides helpful remediation hints.
 
-## Relationship to MCID
+## Command Groups
 
-mcid-cli is a **thin client** in front of MCID's own API (`apps/api` in this
-monorepo). It owns no data. It validates a schema locally with
-`@mcid/form-schema`, the same Layer 1 validator the API runs, so the local
-pre-check can never disagree with the server; Layer 2 (submission-time)
-validation stays in the API. The endpoints it calls are documented in the
-generated Admin API reference (`apps/web/src/content/docs/api-reference/admin`).
+- `project`: Create apps, manage API keys, redirect URIs, server access permissions, and audit logs.
+- `server`: Register Discord guilds, enable/disable servers, inspect channels and messages.
+- `sync`: Trigger Discord guild synchronization with `--wait` live progress, inspect sync status and itemized changes.
+- `member`: Search Discord members across servers, view roles and resolved permissions, export to CSV/JSON.
+- `role`: View server roles and member counts, manage role permissions with impact previews, configure inheritance.
+- `access`: Explain effective admin access levels (`none < read < write < manage`), manage role grants and member overrides.
+- `webhook`: Create, inspect, test (`webhook send`), watch (`webhook watch`), and export inbound webhook forms.
+- `status`: Comprehensive health check across API, database, Redis, Discord gateway, and server sync.
+- `monitor`: Usage statistics, request volumes, error rates, and authentication failure logs.
+- `audit`: Query and stream (`--follow`) admin action audit logs.
+- `stats`: Member growth trends (with ASCII sparklines), role distribution, and cross-server overlap.
+- `settings`: View effective system configuration, patch editable knobs, and reset to defaults.
+- `dev`: Developer testing utilities: test project SSO flows end to end (`dev sso`), validate/refresh tokens, and test permissions.
+- `doctor`: Run diagnostic checks on Node runtime, config permissions, keychain access, API connectivity, and active session.
+- `completion`: Generate shell auto-completion for bash, zsh, and fish.
+- `open`: Launch browser directly to matching MCID web dashboard views.
 
-## Status
+## Conventions
 
-The MVP covers Inbound Webhooks: auth (`login`/`logout`/`whoami`/`profile *`/
-`config *`), `schema init`/`validate` with custom rules, and every `webhook`
-command. Other MCID features come later as new command groups.
+- Singular nouns: `project`, `server`, `member`, `role`, `access`, `webhook`, `sync`, `audit`, `stats`, `settings`, `dev`.
+- Standard verbs: `list` (alias `ls`), `get`, `create`, `update`, `delete` (alias `rm`).
+- Every command supports `--json`, `-q, --quiet`, and `-o, --output table|json|csv`.
+- Non-interactive safety: Destructive actions require confirmation or `--yes`. In non-TTY environments without `--yes`, commands exit with code 64 (Usage).
+- Resolvers: Names, slugs, or IDs are accepted. Discord members accept `@username` or snowflake ID. `--server` defaults to main guild.
+- CI authentication: Supports `MCID_TOKEN` and `MCID_API_URL` environment variables.
+- Exit codes are part of the contract: `0` completed (even when the answer is negative), `1` precheck failed, `2` rejected/aborted, `3` auth, `4` not found, `5` unexpected, `64` usage.
 
-## Working conventions
+### Profiles and authentication
 
-- Target users are MCID admins (the admin endpoints are gated by MCID's
-  `AdminAccessGuard` and each admin's permission levels), not external
-  integrators. Don't design for a broader audience than that.
-- mcid-cli never re-implements MCID's rules. Schema rules live in
-  `packages/form-schema` and are changed there; the CLI only adds custom
-  (house) rules on top, so its pre-check can only ever be *stricter* than the
-  server, never looser.
-- Session tokens and webhook signing secrets are encrypted at rest (OS
-  keychain, falling back to a local key file); never write a plaintext token
-  or secret to disk unencrypted, to a log, or to `--json` output. MCID never
-  re-issues a signing secret once rotated, so mcid-cli's encrypted local copy
-  is the only retrievable record of it — see `mcid-cli webhook secret get`.
-- Every state-changing command takes `--profile <name>` explicitly — no
-  command should rely on hidden local/active-profile state for scripts or CI.
-- Config file: `~/.mcid-cli/config.json` (override via `MCID_CLI_CONFIG_PATH`),
-  mode `0600`.
+- `login` always requires an explicit `--profile`; it creates state and must not guess.
+- Every other command resolves the active profile when `--profile` is omitted, and `--profile <name>` targets another deployment. Reads and writes follow the same rule; pass `--profile` in scripts that must not depend on the local active profile.
+- Sessions are encrypted with the OS keychain (a `0600` key file is the fallback). `MCID_TOKEN` overrides the stored session for CI.
+- The config lives at the platform config path (`MCID_CLI_CONFIG_PATH` overrides it for tests). Writes are atomic and `0600`; a config lock serialises concurrent commands.
+
+### Secrets never leak
+
+- API keys, session tokens, signing secrets and refresh tokens are never written in plaintext to logs, `--json` output or export files.
+- Masked output is the default; `--reveal` is the explicit opt-in for a secret that would otherwise be unrecoverable (the rotated token pair, the API key returned once on create).
+- `--print-curl` prints a placeholder API key unless `--reveal` is passed, and the printed signature is always a placeholder because signatures expire.
+- Exports and generated `.env` files are written with mode `0600` and refuse to overwrite without `--force`.
+
+### Schema rules live in @mcid/form-schema
+
+- The CLI must not reimplement schema validation or example payload generation. `buildExamplePayload` and `validatePayload` come from `@mcid/form-schema`, the same code the API runs.
+- Step payloads nest under `step.key`; enum options are `{ value, label }` and the payload carries `value`.
+- When the schema language changes, update the shared package and both consumers together, and regenerate the API reference.
+
+### Generated API types
+
+- `pnpm --filter mcid-cli generate:api-types` regenerates `src/generated/api.d.ts` from `apps/api/openapi.json`. CI runs it and fails when the committed file is stale, so commit the regenerated file with any API change.
+- Do not hand-edit generated files; ESLint and Prettier ignore them.

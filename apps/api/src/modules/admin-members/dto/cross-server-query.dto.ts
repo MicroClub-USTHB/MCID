@@ -7,6 +7,7 @@ import {
   Min,
   Max,
   IsArray,
+  IsDateString,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 
@@ -114,6 +115,15 @@ export class CrossServerQueryDto {
   @IsString()
   @IsOptional()
   search?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'ISO 8601 timestamp - only members who joined the selected server(s) (or any managed server, when no serverId is given) at or after it, with an active membership.',
+    example: '2026-03-01T00:00:00Z',
+  })
+  @IsOptional()
+  @IsDateString()
+  joinedAfter?: string;
 }
 
 export { CrossServerQueryDto as AdminMembersQueryDto };

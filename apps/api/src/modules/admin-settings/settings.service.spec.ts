@@ -107,6 +107,7 @@ describe('SettingsService', () => {
       expect(s.cache.permissionTtlMs).toEqual({
         value: 300_000,
         editable: true,
+        source: 'env',
       });
       expect(s.rateLimit.maxWebhooksPerProject.editable).toBe(true);
       expect(s.preferences.memberActivityThresholdDays.editable).toBe(true);
@@ -141,6 +142,11 @@ describe('SettingsService', () => {
       await service.updateSettings(
         { cache: { permissionTtlMs: 600_000 } },
         'admin-1',
+      );
+
+      // The CLI marks each editable knob as env or override from this field.
+      expect(service.getEffectiveSettings().cache.permissionTtlMs.source).toBe(
+        'override',
       );
 
       expect(repo.upsert).toHaveBeenCalledWith(

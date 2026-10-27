@@ -222,10 +222,28 @@ interface CallbackListener {
   close(): Promise<void>;
 }
 
-/** Starts a one-shot HTTP listener on 127.0.0.1 (never all interfaces) on an OS-chosen port. */
+export interface CallbackListenerOptions {
+  /** A fixed port, for flows whose redirect URI is already registered. */
+  port?: number;
+  /** Host used in the redirect URI; the listener itself always binds 127.0.0.1. */
+  redirectHost?: string;
+  /** Progress and hints (ignored callbacks). */
+  warn?: (line: string) => void;
+  /** Overrides the timeout message, so a silent login can explain `login_required`. */
+  timeoutMessage?: (seconds: number) => string;
+  timeoutExitCode?: ExitCode;
+}
+
+/**
+ * Starts a one-shot HTTP listener on 127.0.0.1 (never all interfaces), on an
+ * OS-chosen port unless one is given.
+ */
 export async function startCallbackListener(
-  warn: (line: string) => void,
+  optionsOrWarn?: ((line: string) => void) | CallbackListenerOptions,
 ): Promise<CallbackListener> {
+  const options: CallbackListenerOptions =
+    typeof optionsOrWarn === 'function' ? { warn: optionsOrWarn } : (optionsOrWarn ?? {});
+  const warn = options.warn ?? (() => {});
   let onRequest: (params: URLSearchParams) => CallbackResult = () => ({
     kind: 'ignore',
     reason: 'not ready',
@@ -260,22 +278,25 @@ export async function startCallbackListener(
 
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => resolve());
+    server.listen(options.port ?? 0, '127.0.0.1', () => resolve());
   });
   const { port } = server.address() as AddressInfo;
+  const redirectHost = options.redirectHost ?? '127.0.0.1';
 
   return {
-    redirectUri: `http://127.0.0.1:${port}${CALLBACK_PATH}`,
+    redirectUri: `http://${redirectHost}:${port}${CALLBACK_PATH}`,
     waitForCode(expectedState, timeoutMs) {
       return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
           onRequest = () => ({ kind: 'ignore', reason: 'login already timed out' });
+          const seconds = Math.round(timeoutMs / 1000);
           reject(
             new CliError(
-              `timed out after ${Math.round(timeoutMs / 1000)}s waiting for the browser login. ` +
-                'If your browser ended up on the MCID admin panel instead, this MCID instance does not ' +
-                'support CLI login yet (mcid-cli issue #2).',
-              ExitCode.Auth,
+              options.timeoutMessage?.(seconds) ??
+                `timed out after ${seconds}s waiting for the browser login. ` +
+                  'If your browser ended up on the MCID admin panel instead, this MCID instance does not ' +
+                  'support CLI login yet (mcid-cli issue #2).',
+              options.timeoutExitCode ?? ExitCode.Auth,
             ),
           );
         }, timeoutMs);
