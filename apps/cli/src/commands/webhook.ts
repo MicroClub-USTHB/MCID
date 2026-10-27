@@ -1,4 +1,3 @@
-import { createHmac } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { Command } from 'commander';
@@ -7,6 +6,7 @@ import { defaultKeyProvider, decrypt, webhookSecretContext } from '../crypto-sto
 import { CliError, ExitCode, exitWithError } from '../errors.js';
 import { unwrapArray } from '../lib/api-normalize.js';
 import { ApiClient } from '../lib/client.js';
+import { signBody } from '../lib/signature.js';
 import {
   formatAge,
   printJson,
@@ -88,6 +88,11 @@ export function registerWebhookCommand(program: Command): void {
     .description('List webhooks')
     .option('--project <projectId>', 'filter by project id')
     .option('--profile <name>', 'profile to use')
+    .option('--json', 'emit machine-readable JSON')
+    .option('-q, --quiet', 'only print webhook ids')
+    .option('--limit <n>', 'rows per page (default 30)')
+    .option('--page <n>', 'page number (default 1)')
+    .option('--all', 'show every row, not just one page')
     .action(async (options: WebhookListOptions) => {
       try {
         await webhookList(options, defaultWebhookDeps());
@@ -254,11 +259,7 @@ export function registerWebhookCommand(program: Command): void {
           }
 
           // Sign payload
-          const timestamp = Math.floor(Date.now() / 1000);
-          const sigHex = createHmac('sha256', storedSecret)
-            .update(`${timestamp}.${rawPayload}`, 'utf8')
-            .digest('hex');
-          const signatureHeader = `t=${timestamp},v1=${sigHex}`;
+          const signatureHeader = signBody(storedSecret, rawPayload);
           const submitUrl = `${client.origin}/api/inbound-webhooks/${resolved.id}/submit`;
           const apiKey = options.apiKey ?? process.env.MCID_API_KEY;
           const origin = options.origin ?? webhookDetail.acceptedOrigins?.[0];
@@ -413,7 +414,7 @@ export function registerWebhookCommand(program: Command): void {
     .action(listSubmissionsAction);
 
   // `webhook submissions <webhook>` keeps working as the shorthand for list.
-  submissionsListOptions(submissionsCmd.command('of <webhook>', { isDefault: true }))
+  submissionsListOptions(submissionsCmd.command('of <webhook>', { isDefault: true, hidden: true }))
     .description('List submissions (shorthand for: submissions list)')
     .action(listSubmissionsAction);
 

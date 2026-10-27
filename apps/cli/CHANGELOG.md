@@ -5,6 +5,25 @@ All notable changes to mcid-cli are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `--limit`, `--page` and `--all` (30 rows by default) on `project list`, `server list`, `role list`, `sync logs`, `webhook list` and `discord-webhook list`; `-q` and `--json` on the lists that lacked them.
+- `project create --server <server...> [--scope ...]` grants server access, and the wizard offers the main server.
+- `sync run --wait` prints member deltas (`+N, -M`) and exits with code `6` on timeout.
+- `server update --type`, `--sync-frequency-hours` and `--permission-policy`.
+- `member export --search` and `--joined-after` (also on the API export endpoint); `--role` takes names as well as IDs.
+- `audit export` takes the same filters as `audit list`.
+- `dev sso` offers to add a missing redirect URI.
+- `doctor --json`, a getting-started screen when run without arguments, and at least two validated examples on every command.
+- Docs: one page per command group and a "test your webhook from the terminal" walkthrough.
+
+### Fixed
+
+- The bundled `mcid-cli` crashed on start (`Dynamic require of "vm"`); the bundle now provides `require` and CI smoke-tests it.
+- Hyphenated aliases (`access role-set`, `dev token-validate`, ...) and `webhook submissions of` are hidden from `--help`.
+
 ## [1.0.0] - 2026-10-23
 
 MCID CLI 1.0 covers the full MCID MVP directly from the terminal.

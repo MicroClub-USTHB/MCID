@@ -30,6 +30,40 @@ describe('settings reset', () => {
   });
 });
 
+describe('audit export filters', () => {
+  it('forwards the same filters as audit list', async () => {
+    const result = await runCli(
+      [
+        'audit',
+        'export',
+        '--action',
+        'access',
+        '--since',
+        '2026-10-01',
+        '--file',
+        '/dev/null',
+        '--force',
+      ],
+      { routes: baseRoutes({ 'GET /admin/audit/logs/export': () => json([{ id: '1' }]) }) },
+    );
+
+    expect(result.exitCode).toBe(0);
+    const get = result.requests.find((r) => r.path === '/admin/audit/logs/export');
+    expect(get?.query['actionType']).toBe('access');
+    expect(get?.query['dateFrom']).toBe('2026-10-01');
+    expect(get?.query['limit']).toBeUndefined();
+  });
+
+  it('rejects an unknown category before any request', async () => {
+    const result = await runCli(['audit', 'export', '--action', 'nonsense'], {
+      routes: baseRoutes(),
+    });
+
+    expect(result.exitCode).toBe(64);
+    expect(result.requests.some((r) => r.path === '/admin/audit/logs/export')).toBe(false);
+  });
+});
+
 describe('audit list filters', () => {
   it('converts --since durations to an ISO dateFrom the API accepts', async () => {
     const result = await runCli(['audit', 'list', '--since', '24h'], {
@@ -125,7 +159,7 @@ describe('discord-webhook list', () => {
 
   it('pages with limit/offset until total rows are collected', async () => {
     // 150 webhooks with a 100-row page: exactly two requests, all rows kept.
-    const result = await runCli(['discord-webhook', 'list', '--project', 'Portal'], {
+    const result = await runCli(['discord-webhook', 'list', '--project', 'Portal', '--all'], {
       routes: baseRoutes({
         [`GET /admin/projects/${PROJECT_ID}/webhooks`]: listRoute(150),
       }),
@@ -138,6 +172,18 @@ describe('discord-webhook list', () => {
     expect(pages).toHaveLength(2);
     expect(pages[1]?.query['offset']).toBe('100');
     expect(result.stdout).toContain('wh-149');
+  });
+
+  it('shows one page of 30 and says how to get the rest', async () => {
+    const result = await runCli(['discord-webhook', 'list', '--project', 'Portal'], {
+      routes: baseRoutes({
+        [`GET /admin/projects/${PROJECT_ID}/webhooks`]: listRoute(150),
+      }),
+    });
+
+    expect(result.stdout).toContain('wh-29');
+    expect(result.stdout).not.toContain('wh-30');
+    expect(result.stderr).toContain('use --page 2 or --all');
   });
 });
 

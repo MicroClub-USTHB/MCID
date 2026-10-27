@@ -14,6 +14,7 @@ import {
   printTable,
   toCsv,
 } from '../lib/output.js';
+import { addListPaging, pageRows, type ListPaging } from '../lib/help.js';
 import { resolveServer } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
@@ -46,19 +47,26 @@ interface ChannelListResponse {
   categories: { id: string; name: string }[];
 }
 
+const SERVER_TYPES = ['main', 'competition', 'event', 'other'];
+const PERMISSION_POLICIES = ['deny_all', 'allow_all', 'custom'];
+
 export function registerServerCommand(program: Command): void {
   const serverCmd = program.command('server').description('Manage Discord servers and channels');
 
   // server list / ls
-  const listAction = async (options: {
-    profile?: string;
-    json?: boolean;
-    output?: 'table' | 'json' | 'csv';
-    quiet?: boolean;
-  }) => {
+  const listAction = async (
+    options: {
+      profile?: string;
+      json?: boolean;
+      output?: 'table' | 'json' | 'csv';
+      quiet?: boolean;
+    } & ListPaging,
+  ) => {
     try {
       const client = await getClient(options.profile);
-      const servers = await client.get<ServerRecord[]>('/servers', { resource: 'server' });
+      const allServers = await client.get<ServerRecord[]>('/servers', { resource: 'server' });
+
+      const servers = pageRows(allServers, options);
 
       if (options.quiet) {
         printQuiet(servers.map((s) => s.id));
@@ -111,10 +119,9 @@ export function registerServerCommand(program: Command): void {
     }
   };
 
-  serverCmd
-    .command('list')
-    .alias('ls')
-    .description('List all registered Discord servers')
+  addListPaging(
+    serverCmd.command('list').alias('ls').description('List all registered Discord servers'),
+  )
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as JSON')
     .option('-o, --output <format>', 'Output format (table|json|csv)', 'table')
@@ -200,19 +207,70 @@ export function registerServerCommand(program: Command): void {
     .command('update <server>')
     .description('Update server settings')
     .option('--name <name>', 'New name')
+    .option('--type <type>', `Server category (${SERVER_TYPES.join(', ')})`)
+    .option('--sync-frequency-hours <n>', 'Hours between automatic syncs (1 or more)')
+    .option(
+      '--permission-policy <policy>',
+      `Default permission policy (${PERMISSION_POLICIES.join(', ')})`,
+    )
     .option('--profile <name>', 'Profile to use')
-    .action(async (serverIdOrName: string, options: { name?: string; profile?: string }) => {
-      try {
-        const client = await getClient(options.profile);
-        const resolved = await resolveServer(client, serverIdOrName);
-        await client.patch(`/servers/${resolved.id}`, {
-          name: options.name,
-        });
-        printSuccess(`Server "${resolved.name}" updated`);
-      } catch (err) {
-        exitWithError('server update', err);
-      }
-    });
+    .action(
+      async (
+        serverIdOrName: string,
+        options: {
+          name?: string;
+          type?: string;
+          syncFrequencyHours?: string;
+          permissionPolicy?: string;
+          profile?: string;
+        },
+      ) => {
+        try {
+          if (options.type && !SERVER_TYPES.includes(options.type)) {
+            throw new CliError(
+              `Unknown type "${options.type}". Expected one of: ${SERVER_TYPES.join(', ')}`,
+              ExitCode.Usage,
+            );
+          }
+          if (options.permissionPolicy && !PERMISSION_POLICIES.includes(options.permissionPolicy)) {
+            throw new CliError(
+              `Unknown policy "${options.permissionPolicy}". Expected one of: ${PERMISSION_POLICIES.join(', ')}`,
+              ExitCode.Usage,
+            );
+          }
+          const hours =
+            options.syncFrequencyHours === undefined
+              ? undefined
+              : Number(options.syncFrequencyHours);
+          if (hours !== undefined && (!Number.isInteger(hours) || hours < 1)) {
+            throw new CliError(
+              '--sync-frequency-hours must be a whole number of 1 or more',
+              ExitCode.Usage,
+            );
+          }
+          const changes = {
+            ...(options.name !== undefined ? { name: options.name } : {}),
+            ...(options.type !== undefined ? { type: options.type } : {}),
+            ...(hours !== undefined ? { syncFrequencyHours: hours } : {}),
+            ...(options.permissionPolicy !== undefined
+              ? { defaultPermissionPolicy: options.permissionPolicy }
+              : {}),
+          };
+          if (Object.keys(changes).length === 0) {
+            throw new CliError(
+              'Nothing to update\n  hint: pass --name, --type, --sync-frequency-hours or --permission-policy',
+              ExitCode.Usage,
+            );
+          }
+          const client = await getClient(options.profile);
+          const resolved = await resolveServer(client, serverIdOrName);
+          await client.patch(`/servers/${resolved.id}`, changes);
+          printSuccess(`Server "${resolved.name}" updated`);
+        } catch (err) {
+          exitWithError('server update', err);
+        }
+      },
+    );
 
   // server enable <server>
   serverCmd

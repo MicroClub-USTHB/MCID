@@ -116,4 +116,41 @@ describe('member export', () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  it('sends --search and --joined-after, and resolves a role name to its ID', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mcid-export-'));
+    const target = join(dir, 'members.csv');
+
+    try {
+      const result = await runCli(
+        [
+          'member',
+          'export',
+          '--file',
+          target,
+          '--role',
+          'Mods',
+          '--search',
+          'ali',
+          '--joined-after',
+          '2026-03-01',
+        ],
+        {
+          routes: baseRoutes({
+            'GET /admin/stats/roles': () =>
+              json([{ roleId: '777777777777777777', roleName: 'Mods', memberCount: 12 }]),
+            'GET /admin/members/export': () => json([{ memberId: '1', username: 'alice' }]),
+          }),
+        },
+      );
+
+      expect(result.exitCode).toBe(0);
+      const get = result.requests.find((r) => r.path === '/admin/members/export');
+      expect(get?.query['roleId']).toBe('777777777777777777');
+      expect(get?.query['search']).toBe('ali');
+      expect(get?.query['joinedAfter']).toBe('2026-03-01');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });

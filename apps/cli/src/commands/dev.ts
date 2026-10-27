@@ -9,6 +9,7 @@ import { ApiClient } from '../lib/client.js';
 import { formatDate, printJson, printKeyValue, printSuccess } from '../lib/output.js';
 import { resolveMember, resolveProject, resolveServer } from '../lib/resolver.js';
 import { startCallbackListener } from '../login-flow.js';
+import { promptConfirm } from '../lib/prompts.js';
 import { colors } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
 
@@ -74,10 +75,24 @@ export function registerDevCommand(program: Command): void {
             .map((uri) => uri.trim())
             .filter(Boolean);
           if (!allowedRedirectUris.includes(redirectUri)) {
-            throw new CliError(
-              `Redirect URI "${redirectUri}" is not registered for project "${project.name}"\n  hint: run \`mcid-cli project redirect-uri add ${project.id} ${redirectUri}\``,
-              ExitCode.Rejected,
-            );
+            const addCommand = `mcid-cli project redirect-uri add ${project.id} ${redirectUri}`;
+            const addIt =
+              process.stdin.isTTY &&
+              (await promptConfirm({
+                message: `"${redirectUri}" is not a redirect URI of project "${project.name}". Add it now?`,
+                default: true,
+              }));
+            if (!addIt) {
+              throw new CliError(
+                `Redirect URI "${redirectUri}" is not registered for project "${project.name}"\n  hint: run \`${addCommand}\``,
+                ExitCode.Rejected,
+              );
+            }
+            // The PATCH replaces the stored list, so send the existing URIs along.
+            await adminClient.patch(`/admin/projects/${project.id}/redirect-uri`, {
+              redirectUri: [...allowedRedirectUris, redirectUri].join(','),
+            });
+            process.stdout.write(`  Added ${redirectUri} to project "${project.name}"\n`);
           }
           const grants = await adminClient.get<{ serverId: string }[]>(
             `/admin/projects/${project.id}/servers`,
@@ -291,7 +306,7 @@ export function registerDevCommand(program: Command): void {
   tokenValidateOptions(tokenCmd.command('validate <token>'))
     .description('Validate a session token using project API key')
     .action(tokenValidateAction);
-  tokenValidateOptions(devCmd.command('token-validate <token>'))
+  tokenValidateOptions(devCmd.command('token-validate <token>', { hidden: true }))
     .description(
       'Validate a session token using project API key (shorthand for: dev token validate)',
     )
@@ -348,7 +363,7 @@ export function registerDevCommand(program: Command): void {
   tokenRefreshOptions(tokenCmd.command('refresh <refreshToken>'))
     .description('Refresh an active session using refresh token')
     .action(tokenRefreshAction);
-  tokenRefreshOptions(devCmd.command('token-refresh <refreshToken>'))
+  tokenRefreshOptions(devCmd.command('token-refresh <refreshToken>', { hidden: true }))
     .description('Refresh an active session using refresh token (shorthand for: dev token refresh)')
     .action(tokenRefreshAction);
 

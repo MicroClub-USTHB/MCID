@@ -6,6 +6,8 @@ export const ExitCode = {
   Auth: 3,
   NotFound: 4,
   Unexpected: 5,
+  /** A `--wait` gave up before the operation finished. */
+  Timeout: 6,
   /** A missing or invalid argument or flag, reported by the argument parser. */
   Usage: 64,
 } as const;

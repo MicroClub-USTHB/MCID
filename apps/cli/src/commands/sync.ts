@@ -9,7 +9,15 @@ import {
   unwrapArray,
 } from '../lib/api-normalize.js';
 import { ApiClient } from '../lib/client.js';
-import { formatAge, printJson, printSuccess, printTable, toCsv } from '../lib/output.js';
+import {
+  formatAge,
+  printJson,
+  printQuiet,
+  printSuccess,
+  printTable,
+  toCsv,
+} from '../lib/output.js';
+import { type ListPaging, pageRows } from '../lib/help.js';
 import { resolveServer } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
@@ -94,8 +102,9 @@ export function registerSyncCommand(program: Command): void {
 
             if (statusRes.status === 'success') {
               if (process.stdout.isTTY) process.stdout.write('\r\x1b[2K');
+              const deltas = await memberDeltas(client, syncLogId);
               printSuccess(
-                `Synced ${resolved.name} in ${elapsedSec}s: ${statusRes.membersSynced} members, ${statusRes.rolesSynced} roles`,
+                `Synced ${resolved.name} in ${elapsedSec}s: ${statusRes.membersSynced} members${deltas}, ${statusRes.rolesSynced} roles`,
               );
               if (options.json) {
                 printJson(statusRes);
@@ -117,7 +126,7 @@ export function registerSyncCommand(program: Command): void {
           if (process.stdout.isTTY) process.stdout.write('\r\x1b[2K');
           throw new CliError(
             `Sync timed out after ${options.timeout}s\n  hint: check status with \`mcid-cli sync status --server ${resolved.id}\``,
-            ExitCode.Unexpected,
+            ExitCode.Timeout,
           );
         } catch (err) {
           exitWithError('sync run', err);
@@ -248,47 +257,64 @@ export function registerSyncCommand(program: Command): void {
     .option('--server <server>', 'Filter by server (defaults to main server)')
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as JSON')
-    .action(async (options: { server?: string; profile?: string; json?: boolean }) => {
-      try {
-        const client = await getClient(options.profile);
-        const resolved = await resolveServer(client, options.server);
-        const raw = await client.get(
-          `/admin/sync/logs?serverId=${encodeURIComponent(resolved.id)}`,
-        );
-        const logs = normalizeSyncLogs(raw);
+    .option('-q, --quiet', 'Only print sync log IDs')
+    .option('--limit <n>', 'Rows per page (default 30)')
+    .option('--page <n>', 'Page number (default 1)')
+    .option('--all', 'Show every row, not just one page')
+    .action(
+      async (
+        options: {
+          server?: string;
+          profile?: string;
+          json?: boolean;
+          quiet?: boolean;
+        } & ListPaging,
+      ) => {
+        try {
+          const client = await getClient(options.profile);
+          const resolved = await resolveServer(client, options.server);
+          const raw = await client.get(
+            `/admin/sync/logs?serverId=${encodeURIComponent(resolved.id)}`,
+          );
+          const logs = pageRows(normalizeSyncLogs(raw), options);
 
-        if (options.json) {
-          printJson(raw);
-          return;
-        }
+          if (options.json) {
+            printJson(raw);
+            return;
+          }
+          if (options.quiet) {
+            printQuiet(logs.map((l) => String(l['id'])));
+            return;
+          }
 
-        printTable({
-          columns: [
-            { header: 'LOG ID', key: 'id', format: (v) => colors.dim(String(v)) },
-            { header: 'TYPE', key: 'syncType', format: (v) => String(v) },
-            {
-              header: 'STATUS',
-              format: (_, r) => {
-                const st = String(r['status'] || '');
-                if (st === 'success') return colors.green('success');
-                if (st === 'failed') return colors.red('failed');
-                return colors.yellow(st);
+          printTable({
+            columns: [
+              { header: 'LOG ID', key: 'id', format: (v) => colors.dim(String(v)) },
+              { header: 'TYPE', key: 'syncType', format: (v) => String(v) },
+              {
+                header: 'STATUS',
+                format: (_, r) => {
+                  const st = String(r['status'] || '');
+                  if (st === 'success') return colors.green('success');
+                  if (st === 'failed') return colors.red('failed');
+                  return colors.yellow(st);
+                },
               },
-            },
-            {
-              header: 'STARTED',
-              key: 'startedAt',
-              format: (v) => formatAge(typeof v === 'string' ? v : undefined),
-            },
-            { header: 'MEMBERS', key: 'membersSynced', format: (v) => String(v ?? '-') },
-            { header: 'ROLES', key: 'rolesSynced', format: (v) => String(v ?? '-') },
-          ],
-          data: logs as unknown as Record<string, unknown>[],
-        });
-      } catch (err) {
-        exitWithError('sync logs', err);
-      }
-    });
+              {
+                header: 'STARTED',
+                key: 'startedAt',
+                format: (v) => formatAge(typeof v === 'string' ? v : undefined),
+              },
+              { header: 'MEMBERS', key: 'membersSynced', format: (v) => String(v ?? '-') },
+              { header: 'ROLES', key: 'rolesSynced', format: (v) => String(v ?? '-') },
+            ],
+            data: logs as unknown as Record<string, unknown>[],
+          });
+        } catch (err) {
+          exitWithError('sync logs', err);
+        }
+      },
+    );
 
   // sync changes <syncLogId> [--type added|removed|updated]
   syncCmd
@@ -312,24 +338,7 @@ export function registerSyncCommand(program: Command): void {
           const client = await getClient(options.profile);
           // Page with limit/offset until the API's `total` is covered; the
           // endpoint defaults to 100 rows and --type maps to `action`.
-          const pageSize = 100;
-          const changes: ReturnType<typeof normalizeSyncChanges> = [];
-          for (let offset = 0; ; offset += pageSize) {
-            const params = new URLSearchParams({
-              limit: String(pageSize),
-              offset: String(offset),
-            });
-            if (options.type) params.set('action', options.type);
-            const raw = await client.get(
-              `/admin/sync/logs/${encodeURIComponent(syncLogId)}/changes?${params.toString()}`,
-            );
-            const pageRows = normalizeSyncChanges(raw);
-            changes.push(...pageRows);
-            const total = (raw as { total?: number }).total;
-            if (pageRows.length < pageSize || (total !== undefined && changes.length >= total)) {
-              break;
-            }
-          }
+          const changes = await fetchSyncChanges(client, syncLogId, options.type);
 
           const outFormat = options.json ? 'json' : options.output || 'table';
           if (outFormat === 'json') {
@@ -358,6 +367,42 @@ export function registerSyncCommand(program: Command): void {
         }
       },
     );
+}
+
+async function fetchSyncChanges(
+  client: ApiClient,
+  syncLogId: string,
+  type?: string,
+): Promise<ReturnType<typeof normalizeSyncChanges>> {
+  const pageSize = 100;
+  const changes: ReturnType<typeof normalizeSyncChanges> = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const params = new URLSearchParams({ limit: String(pageSize), offset: String(offset) });
+    if (type) params.set('action', type);
+    const raw = await client.get(
+      `/admin/sync/logs/${encodeURIComponent(syncLogId)}/changes?${params.toString()}`,
+    );
+    const rows = normalizeSyncChanges(raw);
+    changes.push(...rows);
+    const total = (raw as { total?: number }).total;
+    if (rows.length < pageSize || (total !== undefined && changes.length >= total)) break;
+  }
+  return changes;
+}
+
+/** "(+12, -3)" for the members a sync added and removed, or "" when the change log is unavailable. */
+async function memberDeltas(client: ApiClient, syncLogId: string): Promise<string> {
+  if (!syncLogId) return '';
+  try {
+    const members = (await fetchSyncChanges(client, syncLogId)).filter(
+      (c) => String(c['entityType']) === 'member',
+    );
+    const added = members.filter((c) => String(c['action']) === 'added').length;
+    const removed = members.filter((c) => String(c['action']) === 'removed').length;
+    return ` (+${added}, -${removed})`;
+  } catch {
+    return '';
+  }
 }
 
 async function getClient(profileFlag?: string): Promise<ApiClient> {

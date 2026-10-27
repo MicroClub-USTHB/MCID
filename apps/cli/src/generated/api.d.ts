@@ -4790,6 +4790,8 @@ export interface operations {
                 roleId?: string[];
                 /** @description Search string to filter export data by username or global name */
                 search?: string;
+                /** @description ISO 8601 timestamp - only members who joined the selected server(s) (or any managed server, when no serverId is given) at or after it, with an active membership. */
+                joinedAfter?: string;
                 /** @description Output format */
                 format?: "csv" | "json";
             };

@@ -23,7 +23,8 @@ import {
   printTable,
   toCsv,
 } from '../lib/output.js';
-import { promptInput } from '../lib/prompts.js';
+import { addListPaging, pageRows, type ListPaging } from '../lib/help.js';
+import { promptConfirm, promptInput } from '../lib/prompts.js';
 import { resolveProject, resolveServer } from '../lib/resolver.js';
 import { PROJECT_OPERATIONS, PROJECT_SCOPES } from '@mcid/contracts';
 import { colors } from '../lib/tui.js';
@@ -49,17 +50,21 @@ export function registerProjectCommand(program: Command): void {
     .description('Manage MCID projects, API keys, redirect URIs, and server access');
 
   // project list / ls
-  const listAction = async (options: {
-    profile?: string;
-    json?: boolean;
-    output?: 'table' | 'json' | 'csv';
-    quiet?: boolean;
-  }) => {
+  const listAction = async (
+    options: {
+      profile?: string;
+      json?: boolean;
+      output?: 'table' | 'json' | 'csv';
+      quiet?: boolean;
+    } & ListPaging,
+  ) => {
     try {
       const client = await getClient(options.profile);
-      const projects = await client.get<ProjectRecord[]>('/admin/projects', {
+      const allProjects = await client.get<ProjectRecord[]>('/admin/projects', {
         resource: 'project',
       });
+
+      const projects = pageRows(allProjects, options);
 
       if (options.quiet) {
         printQuiet(projects.map((p) => p.id));
@@ -104,10 +109,7 @@ export function registerProjectCommand(program: Command): void {
     }
   };
 
-  projectCmd
-    .command('list')
-    .alias('ls')
-    .description('List all projects')
+  addListPaging(projectCmd.command('list').alias('ls').description('List all projects'))
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as raw JSON')
     .option('-o, --output <format>', 'Output format (table|json|csv)', 'table')
@@ -171,6 +173,11 @@ export function registerProjectCommand(program: Command): void {
     .option('--name <name>', 'Project name')
     .option('--description <desc>', 'Project description')
     .option('--redirect-uri <urls...>', 'Allowed redirect URI(s)')
+    .option('--server <servers...>', 'Grant the project access to these servers')
+    .option(
+      '--scope <scopes...>',
+      `Scopes for --server grants (${PROJECT_SCOPES.join(', ')}; default: all)`,
+    )
     .option('--env-file <path>', 'Write .env block to file')
     .option('--force', 'Overwrite existing MCID_API_KEY in env file')
     .option('--reveal', 'Include the full API key in JSON output')
@@ -181,6 +188,8 @@ export function registerProjectCommand(program: Command): void {
         name?: string;
         description?: string;
         redirectUri?: string[];
+        server?: string[];
+        scope?: string[];
         envFile?: string;
         force?: boolean;
         reveal?: boolean;
@@ -192,6 +201,16 @@ export function registerProjectCommand(program: Command): void {
 
           let name = options.name;
           let redirectUris = options.redirectUri;
+          let serverArgs = options.server;
+          const scopes = options.scope ?? [...PROJECT_SCOPES];
+          for (const scope of scopes) {
+            if (!(PROJECT_SCOPES as readonly string[]).includes(scope)) {
+              throw new CliError(
+                `Unknown scope "${scope}". Expected one of: ${PROJECT_SCOPES.join(', ')}`,
+                ExitCode.Usage,
+              );
+            }
+          }
 
           // Interactive wizard when flags omitted and TTY
           if (!name && process.stdin.isTTY) {
@@ -206,14 +225,30 @@ export function registerProjectCommand(program: Command): void {
               default: defaultUri,
             });
             redirectUris = [enteredUri || defaultUri];
+
+            if (!serverArgs) {
+              const main = await resolveServer(client, undefined);
+              const grantMain = await promptConfirm({
+                message: `Grant it access to ${main.name} (the main server)?`,
+                default: true,
+              });
+              if (grantMain) serverArgs = [main.id];
+            }
           }
 
           if (!name) {
             throw new CliError('Project name is required (--name <name>)', ExitCode.Usage);
           }
 
+          // Resolve before creating anything, so a typo cannot leave a half-set-up project.
+          const grantServers = [];
+          for (const serverArg of serverArgs ?? []) {
+            grantServers.push(await resolveServer(client, serverArg));
+          }
+
           const commaUris = redirectUris ? redirectUris.join(',') : undefined;
           let redirectUriError: string | undefined;
+          const grantErrors: string[] = [];
           // The API returns `{ apiKey, project }`, not a flattened project.
           const res = normalizeCreatedProject<ProjectRecord>(
             await client.post('/admin/projects', {
@@ -234,6 +269,16 @@ export function registerProjectCommand(program: Command): void {
             if (!redirectUriError) project.redirectUri = commaUris;
           }
 
+          for (const server of grantServers) {
+            try {
+              await client.put(`/admin/projects/${project.id}/servers/${server.id}`, { scopes });
+            } catch (err) {
+              grantErrors.push(
+                `${server.name}: ${err instanceof Error ? err.message : String(err)}`,
+              );
+            }
+          }
+
           if (options.json) {
             // The key is unrecoverable after this; masking it here would lose
             // the only copy, so --json always includes it in full.
@@ -245,6 +290,13 @@ export function registerProjectCommand(program: Command): void {
             `Project "${colors.bold(project.name)}" created (id: ${project.id})`,
             `mcid-cli project key show ${project.id}`,
           );
+
+          for (const grantError of grantErrors) {
+            process.stderr.write(
+              `${colors.red('!')} Project was created, but granting server access failed: ${grantError}\n` +
+                `  hint: retry with \`mcid-cli project access grant ${project.id} <server> --scope ${scopes.join(' ')}\`\n`,
+            );
+          }
 
           if (redirectUriError) {
             process.stderr.write(

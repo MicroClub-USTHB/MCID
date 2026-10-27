@@ -13,6 +13,7 @@ import {
   printTable,
   toCsv,
 } from '../lib/output.js';
+import { addListPaging, pageRows, type ListPaging } from '../lib/help.js';
 import { resolveRole, resolveServer } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
@@ -35,20 +36,22 @@ export function registerRoleCommand(program: Command): void {
     .description('Inspect Discord roles, manage role permissions, and configure inheritance rules');
 
   // role list / ls
-  const listAction = async (options: {
-    server?: string;
-    profile?: string;
-    json?: boolean;
-    output?: 'table' | 'json' | 'csv';
-    quiet?: boolean;
-  }) => {
+  const listAction = async (
+    options: {
+      server?: string;
+      profile?: string;
+      json?: boolean;
+      output?: 'table' | 'json' | 'csv';
+      quiet?: boolean;
+    } & ListPaging,
+  ) => {
     try {
       const client = await getClient(options.profile);
       const resolvedServer = await resolveServer(client, options.server);
       const raw = await client.get(
         `/admin/stats/roles?serverId=${encodeURIComponent(resolvedServer.id)}`,
       );
-      const roles = normalizeRoleStats(raw);
+      const roles = pageRows(normalizeRoleStats(raw), options);
 
       if (options.quiet) {
         printQuiet(roles.map((r) => r.id));
@@ -83,10 +86,9 @@ export function registerRoleCommand(program: Command): void {
     }
   };
 
-  roleCmd
-    .command('list')
-    .alias('ls')
-    .description('List roles on a server with member counts')
+  addListPaging(
+    roleCmd.command('list').alias('ls').description('List roles on a server with member counts'),
+  )
     .option('--server <server>', 'Discord server (defaults to main server)')
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as JSON')

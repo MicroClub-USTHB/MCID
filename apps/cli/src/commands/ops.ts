@@ -17,11 +17,13 @@ import {
   formatDate,
   printJson,
   printKeyValue,
+  printQuiet,
   printSuccess,
   printTable,
   toCsv,
   writeExportFile,
 } from '../lib/output.js';
+import { type ListPaging, pageRows } from '../lib/help.js';
 import { resolveMember, resolveProject, resolveServer } from '../lib/resolver.js';
 import { parseSince } from '../lib/time.js';
 import { colors, formatSparkline } from '../lib/tui.js';
@@ -261,10 +263,7 @@ export function registerOpsCommand(program: Command): void {
     .alias('ls')
     .description('List recent audit log entries')
     .option('--actor <member>', 'Filter by admin actor')
-    .option(
-      '--action <category>',
-      'Filter by action category (auth, project, server, role, webhook, member, sync, permission, access)',
-    )
+    .option('--action <category>', `Filter by action category (${AUDIT_CATEGORIES.join(', ')})`)
     .option('--resource <resource>', 'Filter by resource/entity type')
     .option('--since <date>', 'Start date (ISO timestamp or 30m, 24h, 7d)')
     .option('--until <date>', 'End date')
@@ -285,38 +284,10 @@ export function registerOpsCommand(program: Command): void {
         try {
           const client = await getClient(options.profile);
 
-          let actorId: string | undefined;
-          if (options.actor) {
-            const resolved = await resolveMember(client, options.actor);
-            actorId = resolved.discordId;
-          }
-
-          const ACTION_CATEGORIES = [
-            'auth',
-            'project',
-            'server',
-            'role',
-            'webhook',
-            'member',
-            'sync',
-            'permission',
-            'access',
-          ];
-          if (options.action && !ACTION_CATEGORIES.includes(options.action)) {
-            throw new CliError(
-              `Unknown action category "${options.action}". Expected one of: ${ACTION_CATEGORIES.join(', ')}`,
-              ExitCode.Usage,
-            );
-          }
-
+          const filters = await auditFilters(client, options);
           const buildParams = () => {
-            const params = new URLSearchParams();
+            const params = new URLSearchParams(filters);
             params.set('limit', '500');
-            if (actorId) params.set('actorId', actorId);
-            // --action filters the category; the row's action name is not filterable.
-            if (options.action) params.set('actionType', options.action);
-            if (options.since) params.set('dateFrom', parseSince(options.since, '--since'));
-            if (options.until) params.set('dateTo', parseSince(options.until, '--until'));
             return params;
           };
 
@@ -386,24 +357,39 @@ export function registerOpsCommand(program: Command): void {
   auditCmd
     .command('export')
     .description('Export audit logs to CSV')
+    .option('--actor <member>', 'Filter by admin actor')
+    .option('--action <category>', `Filter by action category (${AUDIT_CATEGORIES.join(', ')})`)
+    .option('--since <date>', 'Start date (ISO timestamp or 30m, 24h, 7d)')
+    .option('--until <date>', 'End date')
     .option('--file <path>', 'Destination CSV file path')
     .option('--force', 'Overwrite the destination file if it exists')
     .option('--profile <name>', 'Profile to use')
-    .action(async (options: { file?: string; force?: boolean; profile?: string }) => {
-      try {
-        const client = await getClient(options.profile);
-        const data = await client.get<Record<string, unknown>[] | string>(
-          '/admin/audit/logs/export',
-        );
-        const csvContent = typeof data === 'string' ? data : toCsv(data);
-        const defaultFilename = `audit-${new Date().toISOString().slice(0, 10)}.csv`;
-        const path = options.file || defaultFilename;
-        await writeExportFile(path, csvContent, options.force);
-        printSuccess(`Exported audit logs to ${path}`);
-      } catch (err) {
-        exitWithError('audit export', err);
-      }
-    });
+    .action(
+      async (options: {
+        actor?: string;
+        action?: string;
+        since?: string;
+        until?: string;
+        file?: string;
+        force?: boolean;
+        profile?: string;
+      }) => {
+        try {
+          const client = await getClient(options.profile);
+          const query = (await auditFilters(client, options)).toString();
+          const data = await client.get<Record<string, unknown>[] | string>(
+            `/admin/audit/logs/export${query ? `?${query}` : ''}`,
+          );
+          const csvContent = typeof data === 'string' ? data : toCsv(data);
+          const defaultFilename = `audit-${new Date().toISOString().slice(0, 10)}.csv`;
+          const path = options.file || defaultFilename;
+          await writeExportFile(path, csvContent, options.force);
+          printSuccess(`Exported audit logs to ${path}`);
+        } catch (err) {
+          exitWithError('audit export', err);
+        }
+      },
+    );
 
   // ── stats ──────────────────────────────────────────────────────────
   const statsCmd = program.command('stats').description('Community and server statistics');
@@ -794,46 +780,65 @@ export function registerOpsCommand(program: Command): void {
     .requiredOption('--project <project>', 'Project name or ID')
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as JSON')
-    .action(async (options: { project: string; profile?: string; json?: boolean }) => {
-      try {
-        const client = await getClient(options.profile);
-        const resolved = await resolveProject(client, options.project);
-        // The endpoint returns {webhooks, total, limit, offset}; page until done.
-        const pageSize = 100;
-        const webhooks: Record<string, unknown>[] = [];
-        for (let offset = 0; ; offset += pageSize) {
-          const page = await client.get<{
-            webhooks?: Record<string, unknown>[];
-            total?: number;
-          }>(
-            `/admin/projects/${encodeURIComponent(resolved.id)}/webhooks?limit=${pageSize}&offset=${offset}`,
-          );
-          webhooks.push(...(page.webhooks ?? []));
-          if (
-            (page.webhooks ?? []).length < pageSize ||
-            (page.total !== undefined && webhooks.length >= page.total)
-          ) {
-            break;
+    .option('-q, --quiet', 'Only print webhook IDs')
+    .option('--limit <n>', 'Rows per page (default 30)')
+    .option('--page <n>', 'Page number (default 1)')
+    .option('--all', 'Show every row, not just one page')
+    .action(
+      async (
+        options: {
+          project: string;
+          profile?: string;
+          json?: boolean;
+          quiet?: boolean;
+        } & ListPaging,
+      ) => {
+        try {
+          const client = await getClient(options.profile);
+          const resolved = await resolveProject(client, options.project);
+          // The endpoint returns {webhooks, total, limit, offset}; page until done.
+          const pageSize = 100;
+          const allWebhooks: Record<string, unknown>[] = [];
+          for (let offset = 0; ; offset += pageSize) {
+            const page = await client.get<{
+              webhooks?: Record<string, unknown>[];
+              total?: number;
+            }>(
+              `/admin/projects/${encodeURIComponent(resolved.id)}/webhooks?limit=${pageSize}&offset=${offset}`,
+            );
+            allWebhooks.push(...(page.webhooks ?? []));
+            if (
+              (page.webhooks ?? []).length < pageSize ||
+              (page.total !== undefined && allWebhooks.length >= page.total)
+            ) {
+              break;
+            }
           }
-        }
 
-        if (options.json) {
-          printJson(webhooks);
-          return;
-        }
+          const webhooks = pageRows(allWebhooks, options);
 
-        printTable({
-          columns: [
-            { header: 'ID', key: 'id', format: (v) => colors.dim(String(v)) },
-            { header: 'NAME', key: 'name', format: (v) => colors.bold(String(v ?? '-')) },
-            { header: 'CHANNEL', key: 'channelId', format: (v) => colors.dim(String(v ?? '-')) },
-          ],
-          data: webhooks,
-        });
-      } catch (err) {
-        exitWithError('discord-webhook list', err);
-      }
-    });
+          if (options.quiet) {
+            printQuiet(webhooks.map((w) => String(w['id'])));
+            return;
+          }
+          if (options.json) {
+            printJson(webhooks);
+            return;
+          }
+
+          printTable({
+            columns: [
+              { header: 'ID', key: 'id', format: (v) => colors.dim(String(v)) },
+              { header: 'NAME', key: 'name', format: (v) => colors.bold(String(v ?? '-')) },
+              { header: 'CHANNEL', key: 'channelId', format: (v) => colors.dim(String(v ?? '-')) },
+            ],
+            data: webhooks,
+          });
+        } catch (err) {
+          exitWithError('discord-webhook list', err);
+        }
+      },
+    );
 
   discordWhCmd
     .command('get <id>')
@@ -876,6 +881,40 @@ export function registerOpsCommand(program: Command): void {
         exitWithError('discord-webhook delete', err);
       }
     });
+}
+
+const AUDIT_CATEGORIES = [
+  'auth',
+  'project',
+  'server',
+  'role',
+  'webhook',
+  'member',
+  'sync',
+  'permission',
+  'access',
+];
+
+/** The filters `audit list` and `audit export` share, in the API's query names. */
+async function auditFilters(
+  client: ApiClient,
+  options: { actor?: string; action?: string; since?: string; until?: string },
+): Promise<URLSearchParams> {
+  if (options.action && !AUDIT_CATEGORIES.includes(options.action)) {
+    throw new CliError(
+      `Unknown action category "${options.action}". Expected one of: ${AUDIT_CATEGORIES.join(', ')}`,
+      ExitCode.Usage,
+    );
+  }
+  const params = new URLSearchParams();
+  if (options.actor) {
+    params.set('actorId', (await resolveMember(client, options.actor)).discordId);
+  }
+  // --action filters the category; the row's action name is not filterable.
+  if (options.action) params.set('actionType', options.action);
+  if (options.since) params.set('dateFrom', parseSince(options.since, '--since'));
+  if (options.until) params.set('dateTo', parseSince(options.until, '--until'));
+  return params;
 }
 
 async function getClient(profileFlag?: string): Promise<ApiClient> {

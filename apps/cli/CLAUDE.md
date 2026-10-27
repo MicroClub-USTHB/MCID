@@ -43,7 +43,7 @@ for its interactive terminal UI widgets.
 - Non-interactive safety: Destructive actions require confirmation or `--yes`. In non-TTY environments without `--yes`, commands exit with code 64 (Usage).
 - Resolvers: Names, slugs, or IDs are accepted. Discord members accept `@username` or snowflake ID. `--server` defaults to main guild.
 - CI authentication: Supports `MCID_TOKEN` and `MCID_API_URL` environment variables.
-- Exit codes are part of the contract: `0` completed (even when the answer is negative), `1` precheck failed, `2` rejected/aborted, `3` auth, `4` not found, `5` unexpected, `64` usage.
+- Exit codes are part of the contract: `0` completed (even when the answer is negative), `1` precheck failed, `2` rejected/aborted, `3` auth, `4` not found, `5` unexpected, `6` a `--wait` timed out, `64` usage.
 
 ### Profiles and authentication
 

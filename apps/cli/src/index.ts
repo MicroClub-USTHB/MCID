@@ -22,6 +22,7 @@ import { registerAccessCommand } from './commands/access.js';
 import { registerOpsCommand } from './commands/ops.js';
 import { registerDevCommand } from './commands/dev.js';
 import { addExamples } from './lib/help.js';
+import { addCommandExamples } from './lib/examples.js';
 
 // When stdout is closed early (e.g. `mcid-cli webhook list | head`), stop quietly
 // instead of crashing with an unhandled EPIPE stack trace.
@@ -102,11 +103,11 @@ const GROUP_EXAMPLES: Record<string, string[]> = {
   role: ['mcid-cli role list --server "Micro Club"', 'mcid-cli role permissions lead'],
   access: ['mcid-cli access explain @alice', 'mcid-cli access role set lead project=write'],
   webhook: ['mcid-cli webhook list', 'mcid-cli webhook send contact-form --example --print-curl'],
-  ops: ['mcid-cli status', 'mcid-cli audit list --since 24h --action-type access'],
+  ops: ['mcid-cli status', 'mcid-cli audit list --since 24h --action access'],
   dev: ['mcid-cli dev sso --project portal', 'mcid-cli dev check @alice project:read'],
   schema: [
     'mcid-cli schema validate form.json',
-    'mcid-cli schema preview form.json --step contact',
+    'mcid-cli schema preview form.json --profile prod',
   ],
 };
 
@@ -114,9 +115,29 @@ for (const command of program.commands) {
   const examples = GROUP_EXAMPLES[command.name()];
   if (examples) addExamples(command, examples);
 }
+addCommandExamples(program);
+
+const GETTING_STARTED = `mcid-cli ${version}: the MCID command-line client
+
+Getting started
+  mcid-cli login --profile prod       sign in with Discord
+  mcid-cli whoami                     check who you are and what you can do
+  mcid-cli doctor                     check your setup
+  mcid-cli project create --name "Portal" --server "Micro Club"
+  mcid-cli dev sso --project portal   test sign-in before you write code
+
+Main groups
+  project  server  sync  member  role  access  webhook  audit  stats  settings  dev
+
+Run mcid-cli <group> --help for the commands of a group, or mcid-cli --help for everything.
+`;
 
 async function main() {
   if (process.argv.length <= 2) {
+    if (!process.stdin.isTTY || process.env.CI) {
+      process.stdout.write(GETTING_STARTED);
+      process.exit(0);
+    }
     if (process.stdin.isTTY && !process.env.CI) {
       try {
         const action = await launchInteractiveLauncher();
