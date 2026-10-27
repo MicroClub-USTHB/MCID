@@ -235,6 +235,21 @@ describe('AdminMembersService', () => {
       expect(rows[0]).toHaveProperty('server_id', 's1');
     });
 
+    it('passes joinedAfter through to the member queries', async () => {
+      await service.getExportData({
+        filter: 'all',
+        joinedAfter: '2026-03-01T00:00:00Z',
+        format: 'json',
+      });
+      expect(repository.countMembers).toHaveBeenCalledWith(
+        'all',
+        undefined,
+        undefined,
+        undefined,
+        '2026-03-01T00:00:00Z',
+      );
+    });
+
     it('filters rows to matching serverIds when multiple serverIds are provided', async () => {
       const rows = await service.getExportData({
         filter: 'all',

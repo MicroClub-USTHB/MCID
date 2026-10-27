@@ -1,3 +1,4 @@
+import { WEBHOOK_SIGNATURE_VECTORS } from '@mcid/contracts';
 import {
   computeSignature,
   generateSigningSecret,
@@ -142,4 +143,21 @@ describe('inbound-webhook-signature.util', () => {
       );
     });
   });
+
+  // The same vectors pin mcid-cli's signer (apps/cli/src/lib/signature.test.ts),
+  // so a header the CLI prints is one this verifier accepts.
+  it.each(WEBHOOK_SIGNATURE_VECTORS)(
+    'accepts the shared signed-body vector (t=$timestamp)',
+    ({ secret, timestamp, body, header }) => {
+      expect(signPayload(secret, body, timestamp)).toBe(header);
+      expect(
+        verifySignature({
+          header,
+          secret,
+          rawBody: body,
+          now: new Date(timestamp * 1000),
+        }).ok,
+      ).toBe(true);
+    },
+  );
 });

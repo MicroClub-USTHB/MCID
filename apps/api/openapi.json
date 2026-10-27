@@ -4748,6 +4748,16 @@
             }
           },
           {
+            "description": "ISO 8601 timestamp - only members who joined the selected server(s) (or any managed server, when no serverId is given) at or after it, with an active membership.",
+            "in": "query",
+            "name": "joinedAfter",
+            "required": false,
+            "schema": {
+              "example": "2026-03-01T00:00:00Z",
+              "type": "string"
+            }
+          },
+          {
             "description": "Output format",
             "in": "query",
             "name": "format",

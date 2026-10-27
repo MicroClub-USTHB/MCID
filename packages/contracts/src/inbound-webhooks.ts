@@ -483,3 +483,25 @@ export const INBOUND_WEBHOOK_TEMPLATES: InboundWebhookTemplate[] = [
     },
   },
 ];
+
+/**
+ * Signed-body vectors shared by the API verifier and mcid-cli's signer, so a
+ * change on either side that breaks the other fails a test (header format is
+ * `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<body>">`).
+ */
+export const WEBHOOK_SIGNATURE_VECTORS = [
+  {
+    secret: "whsec_test_secret",
+    timestamp: 1790000000,
+    body: '{"name":"Ada","email":"ada@example.test"}',
+    header:
+      "t=1790000000,v1=a15315a58947817d5874ed3e333b2c52468ed4c2ee6841d677b708040c36dabe",
+  },
+  {
+    secret: "whsec_other",
+    timestamp: 1790000123,
+    body: '{"unicode":"é"}',
+    header:
+      "t=1790000123,v1=12a07f098edb4ddac511c8633b77212af391b066de75ba5a30be5ecb6318b8bc",
+  },
+] as const;
