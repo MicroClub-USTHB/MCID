@@ -154,3 +154,36 @@ describe('server list / get sync fields', () => {
     expect(result.stdout).not.toContain('never');
   });
 });
+
+describe('server update', () => {
+  it('sends only the fields that were given', async () => {
+    const result = await runCli(
+      [
+        'server',
+        'update',
+        'Micro Club',
+        '--sync-frequency-hours',
+        '6',
+        '--permission-policy',
+        'allow_all',
+      ],
+      { routes: baseRoutes({ [`PATCH /servers/${MAIN_SERVER_ID}`]: () => json({}) }) },
+    );
+
+    expect(result.exitCode).toBe(0);
+    const patch = result.requests.find((r) => r.method === 'PATCH');
+    expect(patch?.body).toEqual({ syncFrequencyHours: 6, defaultPermissionPolicy: 'allow_all' });
+  });
+
+  it('rejects an unknown type and an empty update before any request', async () => {
+    const badType = await runCli(['server', 'update', 'Micro Club', '--type', 'club'], {
+      routes: baseRoutes(),
+    });
+    const empty = await runCli(['server', 'update', 'Micro Club'], { routes: baseRoutes() });
+
+    expect(badType.exitCode).toBe(64);
+    expect(empty.exitCode).toBe(64);
+    expect(badType.requests.some((r) => r.method === 'PATCH')).toBe(false);
+    expect(empty.requests.some((r) => r.method === 'PATCH')).toBe(false);
+  });
+});

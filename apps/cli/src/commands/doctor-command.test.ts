@@ -61,4 +61,20 @@ describe('doctor', () => {
 
     expect(result.exitCode).not.toBe(0);
   });
+
+  it('prints the checks as JSON with --json', { timeout: 20_000 }, async () => {
+    await tempConfigEnv();
+    const result = await runCli(['doctor', '--json'], {
+      routes: baseRoutes({
+        'GET /': () => json({ name: 'mcid', status: 'ok' }),
+        'GET /auth/admin/me': () =>
+          json({ id: '333333333333333333', username: 'john_doe', isAdmin: true }),
+      }),
+    });
+
+    const parsed = JSON.parse(result.stdout) as { ok: boolean; checks: { name: string }[] };
+    expect(typeof parsed.ok).toBe('boolean');
+    expect(parsed.checks.map((c) => c.name)).toContain('API reachability');
+    expect(result.stdout).not.toContain('Running mcid-cli diagnostics');
+  });
 });

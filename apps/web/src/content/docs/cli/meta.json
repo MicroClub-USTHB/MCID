@@ -1,5 +1,15 @@
 {
   "title": "mcid-cli",
   "description": "Run the MCID MVP from the terminal: projects, servers, members, access, sync, audits and inbound webhooks.",
-  "pages": ["index", "reference", "webhooks"]
+  "pages": [
+    "index",
+    "projects",
+    "servers-and-sync",
+    "members-and-roles",
+    "access",
+    "ops",
+    "dev",
+    "webhooks",
+    "reference"
+  ]
 }

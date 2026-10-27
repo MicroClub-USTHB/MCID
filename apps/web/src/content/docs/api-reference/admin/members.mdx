@@ -85,6 +85,7 @@ Exports the member report as a downloadable CSV or JSON file. Supports serverId,
 | `serverId` | query | `array of string` | no | Discord server ID(s) to filter export data. Supports repeated params (?serverId=A&serverId=B) or comma-separated values (?serverId=A,B). |
 | `roleId` | query | `array of string` | no | Discord role ID(s) to filter export data. Supports repeated params (?roleId=A&roleId=B) or comma-separated values (?roleId=A,B). |
 | `search` | query | `string` | no | Search string to filter export data by username or global name |
+| `joinedAfter` | query | `string` | no | ISO 8601 timestamp - only members who joined the selected server(s) (or any managed server, when no serverId is given) at or after it, with an active membership. |
 | `format` | query | `"csv" or "json"` | no | Output format Default: `"json"`. |
 
 **Responses**

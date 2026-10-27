@@ -106,8 +106,14 @@ describe('docs navigation (meta.json)', () => {
 
     expect(cli.pages.map((page) => page.url)).toEqual([
       '/docs/cli',
-      '/docs/cli/reference',
+      '/docs/cli/projects',
+      '/docs/cli/servers-and-sync',
+      '/docs/cli/members-and-roles',
+      '/docs/cli/access',
+      '/docs/cli/ops',
+      '/docs/cli/dev',
       '/docs/cli/webhooks',
+      '/docs/cli/reference',
     ]);
   });
 

@@ -9,7 +9,7 @@ plus scriptable output (`--json`, `-q`, `-o csv`, `--yes`) designed for automati
 
 ## Install
 
-Requires Node.js 20 or newer (Node.js 22+ recommended).
+Requires Node.js 22 or newer.
 
 ```bash
 npm install --global mcid-cli

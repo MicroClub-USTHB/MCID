@@ -329,7 +329,7 @@ export function registerAccessCommand(program: Command): void {
   accessRoleSetOptions(roleCmd.command('set <role> <grants...>'))
     .description('Update admin grants on a role (resource=level pairs)')
     .action(roleSetAction);
-  accessRoleSetOptions(accessCmd.command('role-set <role> <grants...>'))
+  accessRoleSetOptions(accessCmd.command('role-set <role> <grants...>', { hidden: true }))
     .description('Shorthand for: access role set')
     .action(roleSetAction);
 
@@ -372,7 +372,7 @@ export function registerAccessCommand(program: Command): void {
   accessMemberGetOptions(memberCmd.command('get <member>'))
     .description('Get member-specific access overrides')
     .action(memberGetAction);
-  accessMemberGetOptions(accessCmd.command('member-get <member>'))
+  accessMemberGetOptions(accessCmd.command('member-get <member>', { hidden: true }))
     .description('Shorthand for: access member get')
     .action(memberGetAction);
 
@@ -427,7 +427,7 @@ export function registerAccessCommand(program: Command): void {
   accessMemberSetOptions(memberCmd.command('set <member> <grants...>'))
     .description('Set member-specific access overrides')
     .action(memberSetAction);
-  accessMemberSetOptions(accessCmd.command('member-set <member> <grants...>'))
+  accessMemberSetOptions(accessCmd.command('member-set <member> <grants...>', { hidden: true }))
     .description('Shorthand for: access member set')
     .action(memberSetAction);
 
@@ -466,7 +466,7 @@ export function registerAccessCommand(program: Command): void {
   accessMemberUnsetOptions(memberCmd.command('unset <member> <resource>'))
     .description('Delete a member-specific access override')
     .action(memberUnsetAction);
-  accessMemberUnsetOptions(accessCmd.command('member-unset <member> <resource>'))
+  accessMemberUnsetOptions(accessCmd.command('member-unset <member> <resource>', { hidden: true }))
     .description('Shorthand for: access member unset')
     .action(memberUnsetAction);
 

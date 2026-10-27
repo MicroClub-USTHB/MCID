@@ -80,7 +80,7 @@ export const LANDING = {
       {
         icon: 'cli',
         title: 'mcid-cli',
-        body: 'Log in from the terminal, check a form schema before you ship it and manage your webhooks without the panel.',
+        body: 'Run MCID from the terminal: create projects and keys, sync servers, check member access, test sign-in and manage your webhooks without the panel.',
       },
       {
         icon: 'audit',

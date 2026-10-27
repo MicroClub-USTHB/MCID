@@ -1,0 +1,53 @@
+---
+title: 'mcid-cli servers and sync'
+description: 'Register and manage Discord servers, read their channels, and run a sync with live progress from the terminal.'
+---
+
+`server` manages the Discord servers MCID knows about. `sync` runs and inspects the
+syncs that keep MCID and Discord in step. Both default to the main server.
+
+## Servers
+
+```bash
+mcid-cli server list
+mcid-cli server get "Micro Club"
+mcid-cli server add 123456789012345678 --name "Hackathon 2026"
+mcid-cli server update "Hackathon 2026" --sync-frequency-hours 6
+mcid-cli server disable "Hackathon 2026"
+```
+
+- `server add` refuses a guild that is already registered and points you at `server
+update`, so a re-run cannot reset a server's settings.
+- `server update` takes `--name`, `--type` (`main`, `competition`, `event`, `other`),
+  `--sync-frequency-hours` and `--permission-policy` (`deny_all`, `allow_all`,
+  `custom`), and sends only the ones you pass.
+- The main server cannot be disabled or deleted.
+
+## Channels
+
+```bash
+mcid-cli server channels "Micro Club"
+mcid-cli server channel "Micro Club" general --messages 20
+```
+
+## Run and follow a sync
+
+```bash
+mcid-cli sync run --wait
+mcid-cli sync run --server "Micro Club" --wait --timeout 300
+mcid-cli sync status --all
+mcid-cli sync logs --limit 10
+mcid-cli sync changes 4242 --type removed -o csv
+```
+
+Without `--wait`, `sync run` prints the sync log id and the `sync changes` command that
+follows it. With `--wait` it polls until the sync ends and prints a summary such as
+`Synced Micro Club in 42s: 1204 members (+12, -3), 58 roles`.
+
+| Exit code | Meaning                                     |
+| --------- | ------------------------------------------- |
+| `0`       | The sync succeeded.                         |
+| `2`       | The sync failed.                            |
+| `6`       | `--wait` gave up after `--timeout` seconds. |
+
+Source: `apps/cli/src/commands/server.ts`, `apps/cli/src/commands/sync.ts`, `apps/cli/src/errors.ts`.

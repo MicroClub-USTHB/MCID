@@ -1,0 +1,70 @@
+---
+title: 'mcid-cli projects'
+description: 'Create a project, get its API key and .env block, manage redirect URIs and grant it access to servers from the terminal.'
+---
+
+A project is one club app: it has an API key, redirect URIs and the servers it may
+read. `mcid-cli project` does the whole setup in a minute, with the same rules as the
+admin panel.
+
+## Set up a new app
+
+```bash
+mcid-cli project create --name "Portal" \
+  --redirect-uri http://localhost:3000/callback \
+  --server "Micro Club" --env-out .env --profile prod
+mcid-cli dev sso --project portal --profile prod
+```
+
+`create` prints the new API key once and writes a ready-to-paste block:
+
+```bash
+MCID_API_URL=https://mcid.microclub.info/api
+MCID_API_KEY=prefix.secret
+MCID_REDIRECT_URI=http://localhost:3000/callback
+```
+
+- `--server` grants the project access to each listed server. Servers are resolved
+  before anything is created, so a typo cannot leave a half-set-up project. Without
+  `--scope` the grant has every scope (`read_members` and `check_permissions`).
+- Run `project create` with no flags in a terminal and it asks for the name, the
+  redirect URI and whether to grant the main server.
+- `--env-out` writes the block with owner-only permissions and refuses to replace an
+  existing `MCID_API_KEY` unless you pass `--force`.
+- The key is never written to the CLI config file, and `--json` always includes it
+  because it cannot be shown again.
+
+## Redirect URIs
+
+```bash
+mcid-cli project redirect-uri list portal
+mcid-cli project redirect-uri add portal https://portal.example.com/callback
+mcid-cli project redirect-uri remove portal http://localhost:3000/callback
+```
+
+`add` and `remove` read the stored list, change it and write it back, so the other URIs
+are kept.
+
+## Keys
+
+| Command                         | What it does                                                     |
+| ------------------------------- | ---------------------------------------------------------------- |
+| `project key show <project>`    | Shows the key prefix and status. The secret cannot be recovered. |
+| `project key rotate <project>`  | Issues a new key; the old one stops working at once.             |
+| `project key revoke <project>`  | Disables the key.                                                |
+| `project key restore <project>` | Re-enables a revoked key.                                        |
+
+## Server access
+
+```bash
+mcid-cli project access list portal
+mcid-cli project access grant portal "Micro Club" --scope read_members check_permissions
+mcid-cli project access revoke portal "Micro Club"
+mcid-cli project access matrix
+mcid-cli project access log --project portal
+```
+
+`grant` validates `--scope` and `--operation` against the shared contracts before any
+request. When you omit `--operation` it keeps the operations the grant already has.
+
+Source: `apps/cli/src/commands/project.ts`, `apps/cli/src/commands/dev.ts`.

@@ -79,6 +79,16 @@ describe('sync run', () => {
     const result = await runCli(['sync', 'run', '--wait'], {
       routes: baseRoutes({
         'POST /admin/sync/full': () => json({ syncLogId: '4242' }),
+        'GET /admin/sync/logs/:syncLogId/changes': () =>
+          json({
+            total: 4,
+            changes: [
+              { entityType: 'member', entityId: '1', action: 'added' },
+              { entityType: 'member', entityId: '2', action: 'added' },
+              { entityType: 'member', entityId: '3', action: 'removed' },
+              { entityType: 'role', entityId: '4', action: 'added' },
+            ],
+          }),
         'GET /admin/sync/status': () =>
           json({
             serverId: MAIN_SERVER_ID,
@@ -90,7 +100,7 @@ describe('sync run', () => {
     });
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toMatch(/Synced .* 1204 members, 58 roles/);
+    expect(result.stdout).toMatch(/Synced .* 1204 members \(\+2, -1\), 58 roles/);
   });
 
   it('exits non-zero when the sync itself fails under --wait', async () => {
@@ -115,7 +125,7 @@ describe('sync run', () => {
       }),
     });
 
-    expect(result.exitCode).not.toBe(0);
+    expect(result.exitCode).toBe(6);
     expect(result.stderr).toContain('Sync timed out');
   });
 });

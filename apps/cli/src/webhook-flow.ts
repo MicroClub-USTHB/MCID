@@ -17,6 +17,7 @@ import {
   type KeyProvider,
 } from './crypto-store.js';
 import { CliError, ExitCode } from './errors.js';
+import { type ListPaging, pageRows } from './lib/help.js';
 import {
   createInboundWebhook,
   deleteInboundWebhook,
@@ -102,14 +103,24 @@ export function formatTable(header: string[], rows: string[][]): string[] {
   return [line(header), ...rows.map(line)];
 }
 
-export interface WebhookListOptions {
+export interface WebhookListOptions extends ListPaging {
   profile?: string;
   project?: string;
+  json?: boolean;
+  quiet?: boolean;
 }
 
 export async function webhookList(options: WebhookListOptions, deps: WebhookDeps): Promise<void> {
   const session = await loadSession(options.profile, deps);
-  const webhooks = await listInboundWebhooks(session, options.project);
+  const webhooks = pageRows(await listInboundWebhooks(session, options.project), options);
+  if (options.quiet) {
+    for (const w of webhooks) deps.out(w.id);
+    return;
+  }
+  if (options.json) {
+    deps.out(JSON.stringify(webhooks, null, 2));
+    return;
+  }
   if (webhooks.length === 0) {
     deps.out(
       options.project

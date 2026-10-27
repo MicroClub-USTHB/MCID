@@ -11,14 +11,14 @@ export default defineConfig({
       include: ['src/**'],
       // The command surface must stay covered, not just the lib/ helpers the
       // old suite tested. Each floor sits ~1.5pt under the measured run
-      // (37.4 statements / 28.2 branches / 35.8 functions / 37.7 lines) so
+      // (46.2 statements / 36.8 branches / 43.3 functions / 46.6 lines) so
       // normal platform drift does not fail CI, and moves up as tests land.
       thresholds: {
         'src/commands/**': {
-          statements: 36,
-          branches: 26,
-          functions: 34,
-          lines: 36,
+          statements: 44,
+          branches: 35,
+          functions: 41,
+          lines: 44,
         },
       },
     },

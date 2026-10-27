@@ -18,9 +18,10 @@ export function registerDoctorCommand(program: Command): void {
     .command('doctor')
     .description('Check local configuration, credentials, and API reachability')
     .option('--profile <name>', 'Profile to test')
-    .action(async (options: { profile?: string }) => {
+    .option('--json', 'Output the checks as JSON')
+    .action(async (options: { profile?: string; json?: boolean }) => {
       try {
-        const allPassed = await runDoctor(options.profile);
+        const allPassed = await runDoctor(options.profile, options.json);
         if (!allPassed) process.exitCode = ExitCode.Unexpected;
       } catch (err) {
         exitWithError('doctor', err);
@@ -28,11 +29,11 @@ export function registerDoctorCommand(program: Command): void {
     });
 }
 
-export async function runDoctor(profileFlag?: string | undefined): Promise<boolean> {
+export async function runDoctor(profileFlag?: string | undefined, json = false): Promise<boolean> {
   const previousExitCode = process.exitCode;
   process.exitCode = undefined;
   try {
-    return await runDoctorChecks(profileFlag).finally(() => {
+    return await runDoctorChecks(profileFlag, json).finally(() => {
       if (process.exitCode === undefined) process.exitCode = previousExitCode;
     });
   } catch (err) {
@@ -41,8 +42,8 @@ export async function runDoctor(profileFlag?: string | undefined): Promise<boole
   }
 }
 
-async function runDoctorChecks(profileFlag?: string | undefined): Promise<boolean> {
-  process.stdout.write(`${colors.bold('Running mcid-cli diagnostics...')}\n\n`);
+async function runDoctorChecks(profileFlag?: string | undefined, json = false): Promise<boolean> {
+  if (!json) process.stdout.write(`${colors.bold('Running mcid-cli diagnostics...')}\n\n`);
   const checks: CheckResult[] = [];
 
   // 1. Node.js version check
@@ -244,6 +245,12 @@ async function runDoctorChecks(profileFlag?: string | undefined): Promise<boolea
       passed: false,
       message: (err as Error).message,
     });
+  }
+
+  if (json) {
+    const ok = checks.every((check) => check.passed);
+    process.stdout.write(`${JSON.stringify({ ok, checks }, null, 2)}\n`);
+    return ok;
   }
 
   // Print results

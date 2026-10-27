@@ -14,7 +14,7 @@ import {
   writeExportFile,
 } from '../lib/output.js';
 import { normalizeMemberDetail, normalizeMemberList, unwrapArray } from '../lib/api-normalize.js';
-import { resolveMember, resolveServer } from '../lib/resolver.js';
+import { resolveMember, resolveRole, resolveServer } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
 import { resolveProjectKey } from './dev.js';
@@ -98,6 +98,7 @@ export function registerMemberCommand(program: Command): void {
       }
 
       const resolved = await resolveServer(client, options.server);
+      const roleIds = await resolveRoleIds(client, resolved.id, options.role);
       // The API defaults to 20 rows per page; ask for a full page and page
       // through with --all instead of silently truncating.
       const limit = Math.min(100, Math.max(1, Number(options.limit ?? 100) || 100));
@@ -111,9 +112,7 @@ export function registerMemberCommand(program: Command): void {
         });
         if (options.search) params.set('search', options.search);
         if (options.joinedAfter) params.set('joinedAfter', options.joinedAfter);
-        if (options.role && options.role.length > 0) {
-          for (const r of options.role) params.append('roleId', r);
-        }
+        for (const roleId of roleIds) params.append('roleId', roleId);
         const raw = await client.get(`/admin/members?${params.toString()}`);
         const pageRows = normalizeMemberList(raw);
         members.push(...pageRows);
@@ -172,7 +171,7 @@ export function registerMemberCommand(program: Command): void {
     .alias('ls')
     .description('List members on a Discord server with optional filters')
     .option('--server <server>', 'Discord server (defaults to main server)')
-    .option('--role <role...>', 'Filter by role ID')
+    .option('--role <role...>', 'Filter by role name or ID')
     .option('--search <query>', 'Search username, nickname, or ID')
     .option('--joined-after <date>', 'Filter members joined after ISO date')
     .option('--limit <n>', 'Rows per page, 1-100 (default 100)')
@@ -372,7 +371,9 @@ export function registerMemberCommand(program: Command): void {
     .command('export')
     .description('Export members to a CSV or JSON file')
     .option('--server <server>', 'Server to export (defaults to main server)')
-    .option('--role <role...>', 'Filter by role ID')
+    .option('--role <role...>', 'Filter by role name or ID')
+    .option('--search <query>', 'Search username or display name')
+    .option('--joined-after <date>', 'Only members who joined after this ISO date')
     .option('-o, --output <format>', 'Export format (csv|json)', 'csv')
     .option('--file <path>', 'Destination file path')
     .option('--force', 'Overwrite the destination file if it exists')
@@ -381,6 +382,8 @@ export function registerMemberCommand(program: Command): void {
       async (options: {
         server?: string;
         role?: string[];
+        search?: string;
+        joinedAfter?: string;
         output?: 'csv' | 'json';
         file?: string;
         force?: boolean;
@@ -395,9 +398,11 @@ export function registerMemberCommand(program: Command): void {
             serverId: resolvedServer.id,
             format,
           });
-          if (options.role && options.role.length > 0) {
-            for (const r of options.role) params.append('roleId', r);
+          for (const roleId of await resolveRoleIds(client, resolvedServer.id, options.role)) {
+            params.append('roleId', roleId);
           }
+          if (options.search) params.set('search', options.search);
+          if (options.joinedAfter) params.set('joinedAfter', options.joinedAfter);
 
           const data = await client.get<Record<string, unknown>[] | string>(
             `/admin/members/export?${params.toString()}`,
@@ -422,6 +427,17 @@ export function registerMemberCommand(program: Command): void {
         }
       },
     );
+}
+
+/** Role filters accept names as well as IDs; each is resolved on the chosen server. */
+async function resolveRoleIds(
+  client: ApiClient,
+  serverId: string,
+  roles: string[] | undefined,
+): Promise<string[]> {
+  const ids: string[] = [];
+  for (const role of roles ?? []) ids.push((await resolveRole(client, serverId, role)).id);
+  return ids;
 }
 
 async function getClient(profileFlag?: string): Promise<ApiClient> {
