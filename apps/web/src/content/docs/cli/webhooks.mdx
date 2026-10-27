@@ -37,6 +37,21 @@ exports webhook X instead of looking for a webhook named "export". Exports are w
 with owner-only file permissions and refuse to overwrite an existing `--file` without
 `--force`.
 
+## Test your webhook from the terminal
+
+This is the quickest way to find out that a form works before you write any signing
+code.
+
+1. Create the webhook from your schema and keep the secret on this machine:
+   `mcid-cli webhook create ./schema.json --name "Contact form" --project portal --profile prod`.
+2. Check the schema is accepted: `mcid-cli schema preview ./schema.json --profile prod`.
+3. Send a generated payload: `mcid-cli webhook send contact-form --example --profile prod`.
+4. Watch it arrive: `mcid-cli webhook watch contact-form --profile prod` in a second terminal.
+5. Copy the signing into your own code with `mcid-cli webhook send contact-form --example --print-curl`.
+
+`watch` prints a compact row per new submission, and `--json` streams one JSON object
+per line for `jq`. Stop it with Ctrl+C.
+
 ## Send signed test payloads
 
 ```bash

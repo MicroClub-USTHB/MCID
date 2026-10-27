@@ -9,6 +9,20 @@ projects and API keys, servers and channels, members, roles and admin access, sy
 audits and settings, and the inbound webhook lifecycle including signed test
 submissions.
 
+## From install to your first project
+
+```bash
+npm install -g mcid-cli
+mcid-cli login --profile prod --base-url https://mcid.microclub.info
+mcid-cli project create --name "Portal" --redirect-uri http://localhost:3000/callback --server "Micro Club" --env-file .env --profile prod
+mcid-cli dev sso --project portal --profile prod
+mcid-cli project key rotate portal --profile prod
+```
+
+`dev sso` is the step to do before you write any integration code: it signs in through
+your project the way your app will, so a wrong redirect URI or missing server access
+shows up right away. Rotate the key only when you need a new one.
+
 ## Five commands to get oriented
 
 ```bash
@@ -43,13 +57,19 @@ mcid-cli project list --profile staging
 - **Output formats are uniform.** List commands accept `--json`, `-o csv` and `-q`
   (ids only) where marked. Errors print one line to stderr and the process exits with
   the code the command documents (`2` rejected, `3` auth, `4` not found, `5`
-  unexpected, `64` usage).
+  unexpected, `6` a `--wait` timed out, `64` usage).
 - **`--debug` is global.** It prints request timings, retry hints and error stacks to
   stderr, so stdout stays pipeable.
 
 ## Where to go next
 
 - The command reference with examples per group: [mcid-cli commands](/docs/cli/reference)
+- [Projects](/docs/cli/projects): create an app, its keys, redirect URIs and server access
+- [Servers and sync](/docs/cli/servers-and-sync): register servers and follow a sync
+- [Members and roles](/docs/cli/members-and-roles): find members and preview permission changes
+- [Admin access](/docs/cli/access): explain and change admin levels
+- [Ops](/docs/cli/ops): status, audit, statistics and settings
+- [Dev](/docs/cli/dev): test sign-in and permission checks as a project
 - Inbound webhook sending from the CLI: [mcid-cli webhooks](/docs/cli/webhooks)
 
 <Callout type="note">

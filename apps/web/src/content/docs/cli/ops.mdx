@@ -1,0 +1,62 @@
+---
+title: 'mcid-cli ops'
+description: 'Check system health, read audit logs and statistics, export reports, edit settings and manage Discord webhooks from the terminal.'
+---
+
+The ops commands answer the questions leads ask without opening the panel, and give
+scripts the same data as JSON or CSV.
+
+## Status
+
+```bash
+mcid-cli status
+mcid-cli status --json
+```
+
+`status` shows the API, the database, Redis, the Discord gateway and the last sync per
+server. It exits non-zero when the API or the database is down, so it works as an
+uptime check. Redis is optional and only produces a warning.
+
+## Monitoring and audit
+
+```bash
+mcid-cli monitor usage --period 30d
+mcid-cli monitor auth-failures --since 24h
+mcid-cli audit list --action access --since 7d
+mcid-cli audit list --follow
+mcid-cli audit export --action access --since 7d --file access-audit.csv
+```
+
+Dates accept an ISO timestamp, or a relative value such as `30m`, `24h` or `7d`.
+`audit export` takes the same `--actor`, `--action`, `--since` and `--until` filters as
+`audit list`. The `--action` value is the audit category: `auth`, `project`, `server`,
+`role`, `webhook`, `member`, `sync`, `permission` or `access`.
+
+## Statistics
+
+```bash
+mcid-cli stats members --server "Micro Club"
+mcid-cli stats growth --period 90d
+mcid-cli stats export --type growth --file growth.csv
+```
+
+## Settings
+
+```bash
+mcid-cli settings get
+mcid-cli settings set cache.statsTtlMs=60000
+mcid-cli settings reset
+```
+
+`settings set` validates the keys, shows the difference and asks before sending.
+`settings reset` clears every override, because the API has no per-key reset.
+
+## Discord webhooks
+
+```bash
+mcid-cli discord-webhook list --project portal
+mcid-cli discord-webhook get 1a2b3c
+mcid-cli discord-webhook delete 1a2b3c
+```
+
+Source: `apps/cli/src/commands/ops.ts`.
