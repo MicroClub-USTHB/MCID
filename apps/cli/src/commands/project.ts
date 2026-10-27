@@ -178,10 +178,7 @@ export function registerProjectCommand(program: Command): void {
       '--scope <scopes...>',
       `Scopes for --server grants (${PROJECT_SCOPES.join(', ')}; default: all)`,
     )
-    .option(
-      '--env-out <path>',
-      'Write the .env block to a file',
-    )
+    .option('--env-out <path>', 'Write the .env block to a file')
     .option('--force', 'Overwrite existing MCID_API_KEY in env file')
     .option('--reveal', 'Include the full API key in JSON output')
     .option('--profile <name>', 'Profile to use')
