@@ -14,7 +14,7 @@ submissions.
 ```bash
 npm install -g mcid-cli
 mcid-cli login --profile prod --base-url https://mcid.microclub.info
-mcid-cli project create --name "Portal" --redirect-uri http://localhost:3000/callback --server "Micro Club" --env-file .env --profile prod
+mcid-cli project create --name "Portal" --redirect-uri http://localhost:3000/callback --server "Micro Club" --env-out .env --profile prod
 mcid-cli dev sso --project portal --profile prod
 mcid-cli project key rotate portal --profile prod
 ```
@@ -73,9 +73,8 @@ mcid-cli project list --profile staging
 - Inbound webhook sending from the CLI: [mcid-cli webhooks](/docs/cli/webhooks)
 
 <Callout type="note">
-  Exit code `0` always means the command completed, including commands whose answer is
-  negative (a permission that came back denied). Non-zero means the command itself did
-  not complete.
+  Exit code `0` always means the command completed, including commands whose answer is negative (a
+  permission that came back denied). Non-zero means the command itself did not complete.
 </Callout>
 
 Source: `apps/cli/src/index.ts`, `apps/cli/src/config.ts`.

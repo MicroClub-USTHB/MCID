@@ -93,7 +93,7 @@ export const COMMAND_EXAMPLES: Record<string, readonly string[]> = {
   'project get': ['mcid-cli project get portal', 'mcid-cli project get portal --json'],
   'project create': [
     'mcid-cli project create --name "Portal" --redirect-uri http://localhost:3000/callback --server "Micro Club"',
-    'mcid-cli project create --name "Portal" --env-file .env',
+    'mcid-cli project create --name "Portal" --env-out .env',
   ],
   'project update': [
     'mcid-cli project update portal --name "Member Portal"',

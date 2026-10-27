@@ -178,7 +178,10 @@ export function registerProjectCommand(program: Command): void {
       '--scope <scopes...>',
       `Scopes for --server grants (${PROJECT_SCOPES.join(', ')}; default: all)`,
     )
-    .option('--env-file <path>', 'Write .env block to file')
+    .option(
+      '--env-out <path>',
+      'Write the .env block to a file',
+    )
     .option('--force', 'Overwrite existing MCID_API_KEY in env file')
     .option('--reveal', 'Include the full API key in JSON output')
     .option('--profile <name>', 'Profile to use')
@@ -190,7 +193,7 @@ export function registerProjectCommand(program: Command): void {
         redirectUri?: string[];
         server?: string[];
         scope?: string[];
-        envFile?: string;
+        envOut?: string;
         force?: boolean;
         reveal?: boolean;
         profile?: string;
@@ -319,10 +322,10 @@ export function registerProjectCommand(program: Command): void {
             `MCID_REDIRECT_URI=${primaryUri}`,
           ].join('\n');
 
-          if (options.envFile) {
+          if (options.envOut) {
             let existing = '';
             try {
-              existing = await readFile(options.envFile, 'utf8');
+              existing = await readFile(options.envOut, 'utf8');
             } catch {
               // file doesn't exist
             }
@@ -330,7 +333,7 @@ export function registerProjectCommand(program: Command): void {
             const hasApiKey = /^\s*MCID_API_KEY\s*=/m.test(existing);
             if (hasApiKey && !options.force) {
               throw new CliError(
-                `File "${options.envFile}" already contains MCID_API_KEY\n  hint: pass --force to overwrite`,
+                `File "${options.envOut}" already contains MCID_API_KEY\n  hint: pass --force to overwrite`,
                 ExitCode.Rejected,
               );
             }
@@ -340,8 +343,8 @@ export function registerProjectCommand(program: Command): void {
               : existing
                 ? `${existing.trimEnd()}\n\n${envBlock}\n`
                 : `${envBlock}\n`;
-            await writeFile(options.envFile, newContent, { encoding: 'utf8', mode: 0o600 });
-            printSuccess(`Saved environment configuration to ${options.envFile}`);
+            await writeFile(options.envOut, newContent, { encoding: 'utf8', mode: 0o600 });
+            printSuccess(`Saved environment configuration to ${options.envOut}`);
           } else {
             process.stdout.write(`${colors.dim('.env configuration block:')}\n`);
             process.stdout.write(`${envBlock}\n`);

@@ -151,11 +151,11 @@ describe('project create', () => {
     expect(saved).not.toContain('mcid_live_onceonlykey123');
   });
 
-  it('writes the --env-file with mode 0600', async () => {
+  it('writes the --env-out with mode 0600', async () => {
     const tmp = await mkdtemp(join(tmpdir(), 'mcid-create-'));
     const target = join(tmp, '.env');
 
-    const result = await runCli(['project', 'create', '--name', 'Portal', '--env-file', target], {
+    const result = await runCli(['project', 'create', '--name', 'Portal', '--env-out', target], {
       routes: baseRoutes({
         'POST /admin/projects': () =>
           json({ apiKey: 'mcid_live_onceonlykey123', project: projectRecord }, 201),
@@ -170,7 +170,7 @@ describe('project create', () => {
     const tmp = await mkdtemp(join(tmpdir(), 'mcid-create-'));
     const target = join(tmp, '.env');
 
-    const result = await runCli(['project', 'create', '--name', 'Portal', '--env-file', target], {
+    const result = await runCli(['project', 'create', '--name', 'Portal', '--env-out', target], {
       routes: baseRoutes({
         'POST /admin/projects': () =>
           json({ apiKey: 'mcid_live_secondkey456', project: projectRecord }, 201),
@@ -178,7 +178,7 @@ describe('project create', () => {
     });
 
     // Second create into the same file: the guard must reject before overwrite.
-    const second = await runCli(['project', 'create', '--name', 'Portal', '--env-file', target], {
+    const second = await runCli(['project', 'create', '--name', 'Portal', '--env-out', target], {
       routes: baseRoutes({
         'POST /admin/projects': () =>
           json({ apiKey: 'mcid_live_secondkey456', project: projectRecord }, 201),

@@ -12,7 +12,7 @@ admin panel.
 ```bash
 mcid-cli project create --name "Portal" \
   --redirect-uri http://localhost:3000/callback \
-  --server "Micro Club" --env-file .env --profile prod
+  --server "Micro Club" --env-out .env --profile prod
 mcid-cli dev sso --project portal --profile prod
 ```
 
@@ -29,7 +29,7 @@ MCID_REDIRECT_URI=http://localhost:3000/callback
   `--scope` the grant has every scope (`read_members` and `check_permissions`).
 - Run `project create` with no flags in a terminal and it asks for the name, the
   redirect URI and whether to grant the main server.
-- `--env-file` writes the block with owner-only permissions and refuses to replace an
+- `--env-out` writes the block with owner-only permissions and refuses to replace an
   existing `MCID_API_KEY` unless you pass `--force`.
 - The key is never written to the CLI config file, and `--json` always includes it
   because it cannot be shown again.
@@ -47,12 +47,12 @@ are kept.
 
 ## Keys
 
-| Command | What it does |
-| --- | --- |
-| `project key show <project>` | Shows the key prefix and status. The secret cannot be recovered. |
-| `project key rotate <project>` | Issues a new key; the old one stops working at once. |
-| `project key revoke <project>` | Disables the key. |
-| `project key restore <project>` | Re-enables a revoked key. |
+| Command                         | What it does                                                     |
+| ------------------------------- | ---------------------------------------------------------------- |
+| `project key show <project>`    | Shows the key prefix and status. The secret cannot be recovered. |
+| `project key rotate <project>`  | Issues a new key; the old one stops working at once.             |
+| `project key revoke <project>`  | Disables the key.                                                |
+| `project key restore <project>` | Re-enables a revoked key.                                        |
 
 ## Server access
 

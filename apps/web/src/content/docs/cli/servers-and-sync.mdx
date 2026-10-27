@@ -17,7 +17,7 @@ mcid-cli server disable "Hackathon 2026"
 ```
 
 - `server add` refuses a guild that is already registered and points you at `server
-  update`, so a re-run cannot reset a server's settings.
+update`, so a re-run cannot reset a server's settings.
 - `server update` takes `--name`, `--type` (`main`, `competition`, `event`, `other`),
   `--sync-frequency-hours` and `--permission-policy` (`deny_all`, `allow_all`,
   `custom`), and sends only the ones you pass.
@@ -44,10 +44,10 @@ Without `--wait`, `sync run` prints the sync log id and the `sync changes` comma
 follows it. With `--wait` it polls until the sync ends and prints a summary such as
 `Synced Micro Club in 42s: 1204 members (+12, -3), 58 roles`.
 
-| Exit code | Meaning |
-| --- | --- |
-| `0` | The sync succeeded. |
-| `2` | The sync failed. |
-| `6` | `--wait` gave up after `--timeout` seconds. |
+| Exit code | Meaning                                     |
+| --------- | ------------------------------------------- |
+| `0`       | The sync succeeded.                         |
+| `2`       | The sync failed.                            |
+| `6`       | `--wait` gave up after `--timeout` seconds. |
 
 Source: `apps/cli/src/commands/server.ts`, `apps/cli/src/commands/sync.ts`, `apps/cli/src/errors.ts`.

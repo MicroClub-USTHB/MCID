@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - The bundled `mcid-cli` crashed on start (`Dynamic require of "vm"`); the bundle now provides `require` and CI smoke-tests it.
+- `project create --env-out <path>` writes the `.env` block. The flag cannot be called `--env-file`: Node itself consumes that flag anywhere on the command line and exits with `node: <file>: not found` when the file does not exist yet.
 - Hyphenated aliases (`access role-set`, `dev token-validate`, ...) and `webhook submissions of` are hidden from `--help`.
 
 ## [1.0.0] - 2026-10-23
