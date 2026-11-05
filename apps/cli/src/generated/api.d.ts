@@ -1758,6 +1758,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/project/inbound-webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the project's own inbound webhooks
+         * @description Ordered by creation time, oldest first. Never returns a signing secret or another project's webhook.
+         */
+        get: operations["InboundWebhookProjectController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{projectId}/webhooks": {
         parameters: {
             query?: never;
@@ -3178,6 +3198,39 @@ export interface components {
              * @example recruitment-2026
              */
             slug?: string;
+        };
+        ProjectInboundWebhookListDto: {
+            items: components["schemas"]["ProjectInboundWebhookSummaryDto"][];
+            /**
+             * @description All of the project's webhooks
+             * @example 1
+             */
+            total: number;
+        };
+        ProjectInboundWebhookSummaryDto: {
+            /** @example true */
+            active: boolean;
+            /**
+             * @description ISO 8601 creation timestamp
+             * @example 2026-11-01T09:00:00.000Z
+             */
+            createdAt: string;
+            /** @example 0b6f5c1e-7d2a-4c8e-9f1a-3e5b7c9d1f20 */
+            id: string;
+            /** @example Hackathon 2026 */
+            name: string;
+            /**
+             * @description The webhook FormSchema
+             * @example {
+             *       "fields": [],
+             *       "version": 1
+             *     }
+             */
+            schema: {
+                [key: string]: unknown;
+            };
+            /** @example hackathon-2026 */
+            slug: string;
         };
         ProjectServerAccessDto: {
             /**
@@ -8253,6 +8306,50 @@ export interface operations {
             };
             /** @description Server is disabled or project has no access. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    InboundWebhookProjectController_list: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The requested page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectInboundWebhookListDto"];
+                };
+            };
+            /** @description Invalid `limit` or `offset`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or invalid API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project rate limit. */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
