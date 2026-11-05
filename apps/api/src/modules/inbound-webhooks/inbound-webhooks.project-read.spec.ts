@@ -14,6 +14,7 @@ describe('InboundWebhooksService.listSubmissionsForProject', () => {
   const repository = {
     findById: jest.fn(),
     listSubmissionsAfter: jest.fn(),
+    findSubmission: jest.fn(),
   };
   const audit = { insert: jest.fn().mockResolvedValue(undefined) };
   const service = new InboundWebhooksService(
@@ -64,4 +65,51 @@ describe('InboundWebhooksService.listSubmissionsForProject', () => {
       ).rejects.toBeInstanceOf(BadRequestException);
     },
   );
+});
+
+describe('InboundWebhooksService.getSubmissionForProject', () => {
+  const repository = { findById: jest.fn(), findSubmission: jest.fn() };
+  const audit = { insert: jest.fn().mockResolvedValue(undefined) };
+  const service = new InboundWebhooksService(
+    repository as never,
+    audit as never,
+    {} as never,
+    {} as never,
+    {} as never,
+  );
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    repository.findById.mockResolvedValue({ id: 'wh', projectId: 'p1' });
+    repository.findSubmission.mockResolvedValue({
+      ...row(1),
+      ipAddress: '1.1.1.1',
+    });
+  });
+
+  it('returns the list fields only and audits the read', async () => {
+    const res = await service.getSubmissionForProject('wh', ID, 'p1');
+    expect(res).toEqual({
+      id: ID,
+      payload: { n: 1 },
+      receivedAt: '2026-01-01T00:00:00.123Z',
+      origin: null,
+    });
+    expect(audit.insert).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides another project's webhook behind a 404", async () => {
+    await expect(
+      service.getSubmissionForProject('wh', ID, 'p2'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(repository.findSubmission).not.toHaveBeenCalled();
+  });
+
+  it('answers 404 for an unknown submission, without auditing', async () => {
+    repository.findSubmission.mockResolvedValue(null);
+    await expect(
+      service.getSubmissionForProject('wh', ID, 'p1'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(audit.insert).not.toHaveBeenCalled();
+  });
 });

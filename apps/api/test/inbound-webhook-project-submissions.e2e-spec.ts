@@ -197,4 +197,57 @@ describeIf('GET /api/project/inbound-webhooks/:id/submissions (e2e)', () => {
     const rows = await db.select().from(auditLogs);
     expect(rows.filter((r) => r.action === 'submissions.read')).toHaveLength(1);
   });
+
+  describe('GET /:id/submissions/:submissionId', () => {
+    const one = (id: string, sid: string, key = mine.apiKey) =>
+      request(app.getHttpServer())
+        .get(
+          `/api/project/inbound-webhooks/${id}/submissions/${sid}?serverId=${serverId}`,
+        )
+        .set('X-API-Key', key);
+
+    it('returns an own submission with the list fields, and audits it', async () => {
+      await addSubmissions(1);
+      const [sub] = await db.select().from(inboundWebhookSubmissions);
+      const res = await one(webhookId, sub.id).expect(200);
+      expect(Object.keys(res.body).sort()).toEqual([
+        'id',
+        'origin',
+        'payload',
+        'receivedAt',
+      ]);
+      expect(res.body.id).toBe(sub.id);
+      const rows = await db.select().from(auditLogs);
+      expect(rows.filter((r) => r.action === 'submissions.read')).toHaveLength(
+        1,
+      );
+    });
+
+    it("answers 404 for another project's submission and an unknown id", async () => {
+      const [fs] = await db
+        .insert(inboundWebhookSubmissions)
+        .values({
+          webhookId: foreignWebhookId,
+          projectId: other.id,
+          payload: {},
+        })
+        .returning({ id: inboundWebhookSubmissions.id });
+      await one(webhookId, fs.id).expect(404);
+      await one(foreignWebhookId, fs.id).expect(404);
+      await one(webhookId, '11111111-1111-4111-8111-111111111111').expect(404);
+    });
+
+    it('answers 400 for a malformed id and 403 without the scope', async () => {
+      await one(webhookId, 'nope').expect(400);
+      const bare = await seedTestProject(db, serverId, {
+        name: 'Bare',
+        scopes: ['read_members'],
+      });
+      await one(
+        webhookId,
+        '11111111-1111-4111-8111-111111111111',
+        bare.apiKey,
+      ).expect(403);
+    });
+  });
 });
