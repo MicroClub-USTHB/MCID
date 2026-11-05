@@ -120,6 +120,18 @@ describeIf('GET /api/project/inbound-webhooks/:id/submissions (e2e)', () => {
     expect(second.body.nextCursor).toBeNull();
   });
 
+  it('withholds rows younger than the read lag until they are safe to serve', async () => {
+    await addSubmissions(1);
+    await db.insert(inboundWebhookSubmissions).values({
+      webhookId,
+      projectId: mine.id,
+      payload: { n: 'fresh' },
+    });
+    const res = await get(webhookId).expect(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.nextCursor).toBeNull();
+  });
+
   it('filters on receivedAt and returns the member-endpoint fields', async () => {
     await addSubmissions(10);
     const res = await get(
