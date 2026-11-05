@@ -31,6 +31,36 @@ Ordered by creation time, oldest first. Never returns a signing secret or anothe
 
 <SwaggerLink tag="Inbound Webhooks (Project)" operationId="InboundWebhookProjectController_list" />
 
+## List a webhook's submissions after a cursor
+
+<Endpoint method="GET" path="/api/project/inbound-webhooks/{id}/submissions" />
+
+Oldest first, keyset-paged on (receivedAt, id), so rows arriving between pages are neither skipped nor repeated. Every read is audited.
+
+**Authentication:** Project API key (`X-API-Key` header)
+
+**Parameters**
+
+| Name | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `id` | path | `string` | yes |  |
+| `cursor` | query | `string` | no | Opaque `nextCursor` of the previous page. |
+| `limit` | query | `number` | no | Default: `50`. |
+| `dateFrom` | query | `string (date-time)` | no | ISO 8601 - submissions received at or after it. |
+| `dateTo` | query | `string (date-time)` | no | ISO 8601 - submissions received at or before it. |
+
+**Responses**
+
+| Status | Description | Body |
+| --- | --- | --- |
+| `200` |  | `ProjectSubmissionPageDto` |
+| `400` | Malformed cursor or query. |  |
+| `401` | Missing or invalid API key. |  |
+| `404` | No such webhook for this project. |  |
+| `429` | Project rate limit. |  |
+
+<SwaggerLink tag="Inbound Webhooks (Project)" operationId="InboundWebhookProjectController_listSubmissions" />
+
 ## Schemas
 
 ### ProjectInboundWebhookListDto schema
@@ -50,5 +80,21 @@ Ordered by creation time, oldest first. Never returns a signing secret or anothe
 | `name` | `string` | yes |  |
 | `schema` | `object` | yes | The webhook FormSchema |
 | `slug` | `string` | yes |  |
+
+### ProjectSubmissionDto schema
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | yes |  |
+| `origin` | `string or null` | yes |  |
+| `payload` | `object` | yes |  |
+| `receivedAt` | `string` | yes |  |
+
+### ProjectSubmissionPageDto schema
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | `array of ProjectSubmissionDto` | yes |  |
+| `nextCursor` | `string or null` | yes | Pass as `cursor` for the next page. Null at the end. |
 
 Source: `apps/api/openapi.json`.
