@@ -137,6 +137,13 @@ describeIf('GET /api/project/inbound-webhooks/:id/submissions (e2e)', () => {
 
   it('answers 400 for a malformed cursor and for limit above 200', async () => {
     await get(webhookId, '?cursor=not-a-cursor').expect(400);
+    // JS Date.parse accepts both, Postgres does not
+    for (const r of ['1', '2026-02-31 00:00:00+00']) {
+      const cursor = Buffer.from(
+        JSON.stringify({ r, i: '11111111-1111-4111-8111-111111111111' }),
+      ).toString('base64url');
+      await get(webhookId, `?cursor=${cursor}`).expect(400);
+    }
     await get(webhookId, '?limit=201').expect(400);
   });
 

@@ -37,7 +37,8 @@ export class PostgresExceptionFilter extends BaseExceptionFilter {
       // 22001 = string data right truncation
       // 22021 = invalid byte sequence for encoding "UTF8" (e.g. \x00 null bytes)
       // 22P02 = invalid text representation (e.g. invalid uuid format)
-      if (['22001', '22021', '22P02'].includes(pgCode)) {
+      // 22007 / 22008 = invalid datetime format / field out of range
+      if (['22001', '22021', '22P02', '22007', '22008'].includes(pgCode)) {
         const response = host.switchToHttp().getResponse<Response>();
         return response.status(HttpStatus.BAD_REQUEST).json({
           statusCode: HttpStatus.BAD_REQUEST,
