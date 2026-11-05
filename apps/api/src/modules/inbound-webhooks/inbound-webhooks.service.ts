@@ -546,6 +546,33 @@ export class InboundWebhooksService {
     };
   }
 
+  /** Project-key read of one submission; another project's webhook or submission is a 404. */
+  async getSubmissionForProject(
+    webhookId: string,
+    submissionId: string,
+    projectId: string,
+  ) {
+    const webhook = await this.repository.findById(webhookId);
+    if (!webhook || webhook.projectId !== projectId) {
+      throw new NotFoundException('Inbound webhook not found');
+    }
+    const row = await this.repository.findSubmission(webhookId, submissionId);
+    if (!row) throw new NotFoundException('Submission not found');
+
+    await this.audit({
+      action: 'submissions.read',
+      entityId: webhookId,
+      details: { submissionId, projectId, viaApiKey: true },
+    });
+
+    return {
+      id: row.id,
+      payload: row.payload,
+      receivedAt: row.receivedAt.toISOString(),
+      origin: row.origin,
+    };
+  }
+
   async getSubmission(
     webhookId: string,
     submissionId: string,

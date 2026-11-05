@@ -9403,6 +9403,76 @@
         ]
       }
     },
+    "/api/project/inbound-webhooks/{id}/submissions/{submissionId}": {
+      "get": {
+        "description": "Same fields as a list item. Every read is audited. Requires the `read_inbound_submissions` scope on the `serverId` given in the query.",
+        "operationId": "InboundWebhookProjectController_getSubmission",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "submissionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Discord server on which the project holds the `read_inbound_submissions` scope.",
+            "in": "query",
+            "name": "serverId",
+            "required": true,
+            "schema": {
+              "example": "123456789012345678",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectSubmissionDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "description": "Malformed submission id or query."
+          },
+          "401": {
+            "description": "Missing or invalid API key."
+          },
+          "403": {
+            "description": "The project lacks the `read_inbound_submissions` scope or read access on `serverId`."
+          },
+          "404": {
+            "description": "No such webhook or submission for this project (never says which)."
+          },
+          "429": {
+            "description": "Project rate limit."
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ],
+        "summary": "Get one of a webhook's submissions",
+        "tags": [
+          "Inbound Webhooks (Project)"
+        ]
+      }
+    },
     "/api/projects/{projectId}/webhooks": {
       "get": {
         "description": "Returns the webhooks owned by the requesting project. Channel and server names are resolved from the bot cache and may be null.",

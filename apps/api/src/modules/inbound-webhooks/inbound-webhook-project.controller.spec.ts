@@ -29,6 +29,7 @@ describe('InboundWebhookProjectController', () => {
   let app: INestApplication;
   const service = {
     listForProject: jest.fn().mockResolvedValue({ rows: [row], total: 1 }),
+    getSubmissionForProject: jest.fn().mockResolvedValue({ id: 's1' }),
     listSubmissionsForProject: jest
       .fn()
       .mockResolvedValue({ items: [], nextCursor: null }),
@@ -133,6 +134,30 @@ describe('InboundWebhookProjectController', () => {
     await request(app.getHttpServer())
       .get(
         '/project/inbound-webhooks/iw_01/submissions?serverId=123456789012345678&limit=201',
+      )
+      .set('x-api-key', 'k')
+      .expect(400);
+  });
+
+  it('reads one submission for the key project', async () => {
+    const sid = '0b6f5c1e-7d2a-4c8e-9f1a-3e5b7c9d1f20';
+    await request(app.getHttpServer())
+      .get(
+        `/project/inbound-webhooks/iw_01/submissions/${sid}?serverId=123456789012345678`,
+      )
+      .set('x-api-key', 'k')
+      .expect(200, { id: 's1' });
+    expect(service.getSubmissionForProject).toHaveBeenCalledWith(
+      'iw_01',
+      sid,
+      'proj-1',
+    );
+  });
+
+  it('rejects a malformed submission id with 400', async () => {
+    await request(app.getHttpServer())
+      .get(
+        '/project/inbound-webhooks/iw_01/submissions/nope?serverId=123456789012345678',
       )
       .set('x-api-key', 'k')
       .expect(400);

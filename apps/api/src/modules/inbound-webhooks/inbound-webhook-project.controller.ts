@@ -1,4 +1,12 @@
-import { Controller, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiForbiddenResponse,
@@ -18,8 +26,10 @@ import { ApiKeyGuard } from '../../common/guards/api-key.guard';
 import { SkipGlobalThrottle } from '../../common/guards/app-throttler.guard';
 import { ProjectThrottlerGuard } from '../channels/guards/project-throttler.guard';
 import { ListProjectInboundWebhooksDto } from './dto/list-project-inbound-webhooks.dto';
+import { ProjectServerQueryDto } from './dto/project-server-query.dto';
 import { ListProjectSubmissionsDto } from './dto/list-project-submissions.dto';
 import {
+  ProjectSubmissionDto,
   ProjectSubmissionPageDto,
   ProjectInboundWebhookListDto,
 } from './dto/project-inbound-webhook-response.dto';
@@ -104,5 +114,39 @@ export class InboundWebhookProjectController {
       dateFrom: query.dateFrom,
       dateTo: query.dateTo,
     });
+  }
+
+  @Get(':id/submissions/:submissionId')
+  @RequireScope('read_inbound_submissions')
+  @ApiOperation({
+    summary: "Get one of a webhook's submissions",
+    description:
+      'Same fields as a list item. Every read is audited. Requires the `read_inbound_submissions` scope on the `serverId` given in the query.',
+  })
+  @ApiParam({ name: 'id' })
+  @ApiParam({ name: 'submissionId' })
+  @ApiOkResponse({ type: ProjectSubmissionDto })
+  @ApiBadRequestResponse({ description: 'Malformed submission id or query.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid API key.' })
+  @ApiForbiddenResponse({
+    description:
+      'The project lacks the `read_inbound_submissions` scope or read access on `serverId`.',
+  })
+  @ApiNotFoundResponse({
+    description:
+      'No such webhook or submission for this project (never says which).',
+  })
+  @ApiTooManyRequestsResponse({ description: 'Project rate limit.' })
+  getSubmission(
+    @Param('id') id: string,
+    @Param('submissionId', ParseUUIDPipe) submissionId: string,
+    @Query() _query: ProjectServerQueryDto,
+    @Req() req: Request & { project?: { id: string } },
+  ): Promise<ProjectSubmissionDto> {
+    return this.service.getSubmissionForProject(
+      id,
+      submissionId,
+      req.project!.id,
+    );
   }
 }

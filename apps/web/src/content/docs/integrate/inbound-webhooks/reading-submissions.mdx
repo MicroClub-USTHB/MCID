@@ -123,6 +123,17 @@ curl -s "$MCID_URL/project/inbound-webhooks/$WEBHOOK_ID/submissions?serverId=$SE
 - `limit` (default 50, at most 200), `dateFrom` and `dateTo` work as above. A malformed `cursor` is a 400.
 - The webhook must belong to the key's project, otherwise the answer is 404. The project rate limit applies, and every read is recorded in the audit log.
 
+### Read one submission with a project key
+
+To re-read a single submission, for example to verify or repair it, ask for it by id:
+
+```bash
+curl -s "$MCID_URL/project/inbound-webhooks/$WEBHOOK_ID/submissions/$SUBMISSION_ID?serverId=$SERVER_ID" \
+  -H "X-API-Key: $MCID_API_KEY"
+```
+
+The answer is one item with the same fields as a list item: `id`, `payload`, `receivedAt` and `origin`. The scope, `serverId` and rate limit rules are the same as for the list. A submission id that is not a UUID is a 400. The answer is 404 when the webhook belongs to another project, or the submission does not exist on it, and the two cases look the same. Every read is recorded in the audit log.
+
 ## What an error means
 
 | Status | `message`                    | Meaning                                                                     |
