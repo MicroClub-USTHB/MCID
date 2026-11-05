@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
   and,
+  asc,
   desc,
   eq,
   gt,
@@ -181,6 +182,26 @@ export class InboundWebhooksRepository {
       .where(eq(inboundWebhooks.projectId, projectId))
       .orderBy(desc(inboundWebhooks.createdAt));
     return rows as InboundWebhookRow[];
+  }
+
+  /** One page of a project's webhooks, oldest first, with the full count. */
+  async listByProjectPage(projectId: string, limit: number, offset: number) {
+    const where = eq(inboundWebhooks.projectId, projectId);
+    const [rows, [{ total }]] = await Promise.all([
+      this.db
+        .select(PUBLIC_COLUMNS)
+        .from(inboundWebhooks)
+        .where(where)
+        // id breaks ties so pages never overlap
+        .orderBy(asc(inboundWebhooks.createdAt), asc(inboundWebhooks.id))
+        .limit(limit)
+        .offset(offset),
+      this.db
+        .select({ total: sql<number>`count(*)::int` })
+        .from(inboundWebhooks)
+        .where(where),
+    ]);
+    return { rows: rows as InboundWebhookRow[], total };
   }
 
   async listAll(): Promise<InboundWebhookRow[]> {

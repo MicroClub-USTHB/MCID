@@ -233,6 +233,10 @@ export class InboundWebhooksService {
       : this.repository.listAll();
   }
 
+  listForProject(projectId: string, limit: number, offset: number) {
+    return this.repository.listByProjectPage(projectId, limit, offset);
+  }
+
   async update(
     id: string,
     dto: UpdateInboundWebhookDto,

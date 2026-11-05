@@ -9117,6 +9117,58 @@
         ]
       }
     },
+    "/api/project/inbound-webhooks": {
+      "get": {
+        "description": "Ordered by creation time, oldest first. Never returns a signing secret or another project's webhook.",
+        "operationId": "InboundWebhookProjectController_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`{ items, total }` for the requested page."
+          },
+          "401": {
+            "description": "Missing or invalid API key."
+          },
+          "403": {
+            "description": "The project lacks access."
+          },
+          "429": {
+            "description": "Project rate limit."
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ],
+        "summary": "List the project's own inbound webhooks",
+        "tags": [
+          "Inbound Webhooks (Project)"
+        ]
+      }
+    },
     "/api/projects/{projectId}/webhooks": {
       "get": {
         "description": "Returns the webhooks owned by the requesting project. Channel and server names are resolved from the bot cache and may be null.",
