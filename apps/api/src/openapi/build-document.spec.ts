@@ -44,6 +44,7 @@ describe('buildOpenApiDocument', () => {
       'Channels',
       'Inbound Webhooks (Admin)',
       'Inbound Webhooks (Ingest)',
+      'Inbound Webhooks (Project)',
       'Inbound Webhooks (Read)',
       'Members',
       'Monitoring',
