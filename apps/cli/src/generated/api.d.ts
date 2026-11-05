@@ -1798,6 +1798,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/project/inbound-webhooks/{id}/submissions/{submissionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get one of a webhook's submissions
+         * @description Same fields as a list item. Every read is audited. Requires the `read_inbound_submissions` scope on the `serverId` given in the query.
+         */
+        get: operations["InboundWebhookProjectController_getSubmission"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{projectId}/webhooks": {
         parameters: {
             query?: never;
@@ -8449,6 +8469,66 @@ export interface operations {
                 content?: never;
             };
             /** @description No such webhook for this project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project rate limit. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    InboundWebhookProjectController_getSubmission: {
+        parameters: {
+            query: {
+                /** @description Discord server on which the project holds the `read_inbound_submissions` scope. */
+                serverId: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+                submissionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectSubmissionDto"];
+                };
+            };
+            /** @description Malformed submission id or query. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or invalid API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The project lacks the `read_inbound_submissions` scope or read access on `serverId`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such webhook or submission for this project (never says which). */
             404: {
                 headers: {
                     [name: string]: unknown;
