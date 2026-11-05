@@ -1943,6 +1943,71 @@
         ],
         "type": "object"
       },
+      "ProjectInboundWebhookListDto": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectInboundWebhookSummaryDto"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "All of the project's webhooks",
+            "example": 1,
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "type": "object"
+      },
+      "ProjectInboundWebhookSummaryDto": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "example": true,
+            "type": "boolean"
+          },
+          "createdAt": {
+            "description": "ISO 8601 creation timestamp",
+            "example": "2026-11-01T09:00:00.000Z",
+            "type": "string"
+          },
+          "id": {
+            "example": "0b6f5c1e-7d2a-4c8e-9f1a-3e5b7c9d1f20",
+            "type": "string"
+          },
+          "name": {
+            "example": "Hackathon 2026",
+            "type": "string"
+          },
+          "schema": {
+            "additionalProperties": true,
+            "description": "The webhook FormSchema",
+            "example": {
+              "fields": [],
+              "version": 1
+            },
+            "type": "object"
+          },
+          "slug": {
+            "example": "hackathon-2026",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "active",
+          "schema",
+          "createdAt"
+        ],
+        "type": "object"
+      },
       "ProjectServerAccessDto": {
         "additionalProperties": false,
         "properties": {
@@ -9146,13 +9211,20 @@
         ],
         "responses": {
           "200": {
-            "description": "`{ items, total }` for the requested page."
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectInboundWebhookListDto"
+                }
+              }
+            },
+            "description": "The requested page."
+          },
+          "400": {
+            "description": "Invalid `limit` or `offset`."
           },
           "401": {
             "description": "Missing or invalid API key."
-          },
-          "403": {
-            "description": "The project lacks access."
           },
           "429": {
             "description": "Project rate limit."

@@ -1,6 +1,6 @@
 import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
 import {
-  ApiForbiddenResponse,
+  ApiBadRequestResponse,
   ApiOkResponse,
   ApiOperation,
   ApiSecurity,
@@ -14,6 +14,7 @@ import { ApiKeyGuard } from '../../common/guards/api-key.guard';
 import { SkipGlobalThrottle } from '../../common/guards/app-throttler.guard';
 import { ProjectThrottlerGuard } from '../channels/guards/project-throttler.guard';
 import { ListProjectInboundWebhooksDto } from './dto/list-project-inbound-webhooks.dto';
+import { ProjectInboundWebhookListDto } from './dto/project-inbound-webhook-response.dto';
 import { InboundWebhooksService } from './inbound-webhooks.service';
 
 /**
@@ -36,14 +37,17 @@ export class InboundWebhookProjectController {
     description:
       "Ordered by creation time, oldest first. Never returns a signing secret or another project's webhook.",
   })
-  @ApiOkResponse({ description: '`{ items, total }` for the requested page.' })
+  @ApiOkResponse({
+    description: 'The requested page.',
+    type: ProjectInboundWebhookListDto,
+  })
+  @ApiBadRequestResponse({ description: 'Invalid `limit` or `offset`.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid API key.' })
-  @ApiForbiddenResponse({ description: 'The project lacks access.' })
   @ApiTooManyRequestsResponse({ description: 'Project rate limit.' })
   async list(
     @Query() query: ListProjectInboundWebhooksDto,
     @Req() req: Request & { project?: { id: string } },
-  ) {
+  ): Promise<ProjectInboundWebhookListDto> {
     const { rows, total } = await this.service.listForProject(
       req.project!.id,
       query.limit ?? 50,
@@ -55,8 +59,8 @@ export class InboundWebhookProjectController {
         name: w.name,
         slug: w.slug,
         active: w.isActive,
-        schema: w.schema,
-        createdAt: w.createdAt,
+        schema: w.schema as unknown as Record<string, unknown>,
+        createdAt: w.createdAt.toISOString(),
       })),
       total,
     };

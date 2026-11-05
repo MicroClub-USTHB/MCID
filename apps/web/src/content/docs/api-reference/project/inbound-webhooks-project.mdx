@@ -24,11 +24,31 @@ Ordered by creation time, oldest first. Never returns a signing secret or anothe
 
 | Status | Description | Body |
 | --- | --- | --- |
-| `200` | `{ items, total }` for the requested page. |  |
+| `200` | The requested page. | `ProjectInboundWebhookListDto` |
+| `400` | Invalid `limit` or `offset`. |  |
 | `401` | Missing or invalid API key. |  |
-| `403` | The project lacks access. |  |
 | `429` | Project rate limit. |  |
 
 <SwaggerLink tag="Inbound Webhooks (Project)" operationId="InboundWebhookProjectController_list" />
+
+## Schemas
+
+### ProjectInboundWebhookListDto schema
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | `array of ProjectInboundWebhookSummaryDto` | yes |  |
+| `total` | `number` | yes | All of the project's webhooks |
+
+### ProjectInboundWebhookSummaryDto schema
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `active` | `boolean` | yes |  |
+| `createdAt` | `string` | yes | ISO 8601 creation timestamp |
+| `id` | `string` | yes |  |
+| `name` | `string` | yes |  |
+| `schema` | `object` | yes | The webhook FormSchema |
+| `slug` | `string` | yes |  |
 
 Source: `apps/api/openapi.json`.
