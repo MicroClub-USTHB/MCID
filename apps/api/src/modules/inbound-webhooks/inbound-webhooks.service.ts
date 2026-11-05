@@ -31,6 +31,7 @@ import {
   InboundWebhookRow,
   InboundWebhooksRepository,
   ListSubmissionsFilters,
+  SubmissionCursor,
 } from './inbound-webhooks.repository';
 import { isFlatSchema, validateSchema } from '@mcid/form-schema';
 import type { FormSchema, SchemaError } from '@mcid/form-schema';
@@ -500,6 +501,48 @@ export class InboundWebhooksService {
       total,
       limit: filters.limit,
       offset: filters.offset,
+    };
+  }
+
+  /** Project-key read: oldest first, keyset-paged, cursor opaque to the caller. */
+  async listSubmissionsForProject(
+    webhookId: string,
+    projectId: string,
+    f: { limit: number; cursor?: string; dateFrom?: Date; dateTo?: Date },
+  ) {
+    // 404 for another project's webhook, as ingest does
+    const webhook = await this.repository.findById(webhookId);
+    if (!webhook || webhook.projectId !== projectId) {
+      throw new NotFoundException('Inbound webhook not found');
+    }
+    const cursor = f.cursor ? decodeCursor(f.cursor) : undefined;
+    const found = await this.repository.listSubmissionsAfter(webhookId, {
+      ...f,
+      cursor,
+    });
+    const rows = found.slice(0, f.limit);
+    const last = rows[rows.length - 1];
+    const nextCursor =
+      found.length > f.limit && last
+        ? Buffer.from(
+            JSON.stringify({ r: last.cursorAt, i: last.id }),
+          ).toString('base64url')
+        : null;
+
+    await this.audit({
+      action: 'submissions.read',
+      entityId: webhookId,
+      details: { count: rows.length, projectId, viaApiKey: true },
+    });
+
+    return {
+      items: rows.map((r) => ({
+        id: r.id,
+        payload: r.payload,
+        receivedAt: r.receivedAt.toISOString(),
+        origin: r.origin,
+      })),
+      nextCursor,
     };
   }
 
@@ -1211,4 +1254,26 @@ function collectFileIds(value: unknown, acc: string[] = []): string[] {
     for (const v of Object.values(record)) collectFileIds(v, acc);
   }
   return acc;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function decodeCursor(raw: string): SubmissionCursor {
+  try {
+    const c = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as {
+      r?: unknown;
+      i?: unknown;
+    };
+    if (
+      typeof c.r === 'string' &&
+      typeof c.i === 'string' &&
+      UUID.test(c.i) &&
+      !Number.isNaN(Date.parse(c.r))
+    ) {
+      return { r: c.r, i: c.i };
+    }
+  } catch {
+    // fall through
+  }
+  throw new BadRequestException('Invalid cursor');
 }

@@ -105,6 +105,12 @@ export interface ListSubmissionsFilters {
   dateTo?: Date;
 }
 
+export interface SubmissionCursor {
+  /** `received_at` as Postgres prints it, so microseconds survive the round trip. */
+  r: string;
+  i: string;
+}
+
 @Injectable()
 export class InboundWebhooksRepository {
   constructor(
@@ -603,6 +609,42 @@ export class InboundWebhooksRepository {
     ]);
 
     return { rows, total: count };
+  }
+
+  /**
+   * Keyset page, oldest first, on (received_at, id). `limit + 1` rows come back
+   * so the caller can tell whether another page exists.
+   */
+  async listSubmissionsAfter(
+    webhookId: string,
+    f: {
+      limit: number;
+      cursor?: SubmissionCursor;
+      dateFrom?: Date;
+      dateTo?: Date;
+    },
+  ) {
+    const t = inboundWebhookSubmissions;
+    const conditions: (SQL | undefined)[] = [
+      eq(t.webhookId, webhookId),
+      f.dateFrom ? gte(t.receivedAt, f.dateFrom) : undefined,
+      f.dateTo ? lte(t.receivedAt, f.dateTo) : undefined,
+      f.cursor
+        ? sql`(${t.receivedAt}, ${t.id}) > (${f.cursor.r}::timestamptz, ${f.cursor.i}::uuid)`
+        : undefined,
+    ];
+    return this.db
+      .select({
+        id: t.id,
+        payload: t.payload,
+        receivedAt: t.receivedAt,
+        origin: t.origin,
+        cursorAt: sql<string>`${t.receivedAt}::text`,
+      })
+      .from(t)
+      .where(and(...conditions))
+      .orderBy(asc(t.receivedAt), asc(t.id))
+      .limit(f.limit + 1);
   }
 
   async findSubmission(webhookId: string, submissionId: string) {
