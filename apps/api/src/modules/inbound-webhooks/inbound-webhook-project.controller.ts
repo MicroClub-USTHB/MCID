@@ -1,8 +1,10 @@
-import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
+  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiParam,
   ApiSecurity,
   ApiTags,
   ApiTooManyRequestsResponse,
@@ -14,7 +16,11 @@ import { ApiKeyGuard } from '../../common/guards/api-key.guard';
 import { SkipGlobalThrottle } from '../../common/guards/app-throttler.guard';
 import { ProjectThrottlerGuard } from '../channels/guards/project-throttler.guard';
 import { ListProjectInboundWebhooksDto } from './dto/list-project-inbound-webhooks.dto';
-import { ProjectInboundWebhookListDto } from './dto/project-inbound-webhook-response.dto';
+import { ListProjectSubmissionsDto } from './dto/list-project-submissions.dto';
+import {
+  ProjectSubmissionPageDto,
+  ProjectInboundWebhookListDto,
+} from './dto/project-inbound-webhook-response.dto';
 import { InboundWebhooksService } from './inbound-webhooks.service';
 
 /**
@@ -64,5 +70,32 @@ export class InboundWebhookProjectController {
       })),
       total,
     };
+  }
+
+  @Get(':id/submissions')
+  @ApiOperation({
+    summary: "List a webhook's submissions after a cursor",
+    description:
+      'Oldest first, keyset-paged on (receivedAt, id), so rows arriving between pages are neither skipped nor repeated. Every read is audited.',
+  })
+  @ApiParam({ name: 'id' })
+  @ApiOkResponse({ type: ProjectSubmissionPageDto })
+  @ApiBadRequestResponse({ description: 'Malformed cursor or query.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid API key.' })
+  @ApiNotFoundResponse({
+    description: 'No such webhook for this project.',
+  })
+  @ApiTooManyRequestsResponse({ description: 'Project rate limit.' })
+  listSubmissions(
+    @Param('id') id: string,
+    @Query() query: ListProjectSubmissionsDto,
+    @Req() req: Request & { project?: { id: string } },
+  ): Promise<ProjectSubmissionPageDto> {
+    return this.service.listSubmissionsForProject(id, req.project!.id, {
+      limit: query.limit ?? 50,
+      cursor: query.cursor,
+      dateFrom: query.dateFrom,
+      dateTo: query.dateTo,
+    });
   }
 }

@@ -1,0 +1,2 @@
+DROP INDEX "idx_inbound_webhook_submissions_webhook";--> statement-breakpoint
+CREATE INDEX "idx_inbound_webhook_submissions_webhook" ON "inbound_webhook_submissions" USING btree ("webhook_id","received_at","id");

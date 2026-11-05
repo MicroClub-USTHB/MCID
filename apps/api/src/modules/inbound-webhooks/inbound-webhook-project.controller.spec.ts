@@ -29,6 +29,9 @@ describe('InboundWebhookProjectController', () => {
   let app: INestApplication;
   const service = {
     listForProject: jest.fn().mockResolvedValue({ rows: [row], total: 1 }),
+    listSubmissionsForProject: jest
+      .fn()
+      .mockResolvedValue({ items: [], nextCursor: null }),
   };
   const apiKeyGuard = {
     canActivate: jest.fn((ctx: ExecutionContext) => {
@@ -110,5 +113,24 @@ describe('InboundWebhookProjectController', () => {
     await request(app.getHttpServer())
       .get('/project/inbound-webhooks')
       .expect(401);
+  });
+
+  it('passes the key project, cursor, limit and dates to the submissions read', async () => {
+    await request(app.getHttpServer())
+      .get('/project/inbound-webhooks/iw_01/submissions?cursor=abc&limit=7')
+      .set('x-api-key', 'k')
+      .expect(200, { items: [], nextCursor: null });
+    expect(service.listSubmissionsForProject).toHaveBeenCalledWith(
+      'iw_01',
+      'proj-1',
+      expect.objectContaining({ cursor: 'abc', limit: 7 }),
+    );
+  });
+
+  it('rejects a submissions limit above 200 with 400', async () => {
+    await request(app.getHttpServer())
+      .get('/project/inbound-webhooks/iw_01/submissions?limit=201')
+      .set('x-api-key', 'k')
+      .expect(400);
   });
 });
