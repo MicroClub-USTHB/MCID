@@ -1787,7 +1787,7 @@ export interface paths {
         };
         /**
          * List a webhook's submissions after a cursor
-         * @description Oldest first, keyset-paged on (receivedAt, id), so rows arriving between pages are neither skipped nor repeated. Every read is audited.
+         * @description Oldest first, keyset-paged on (receivedAt, id), so rows arriving between pages are neither skipped nor repeated. Every read is audited. Requires the `read_inbound_submissions` scope on the `serverId` given in the query.
          */
         get: operations["InboundWebhookProjectController_listSubmissions"];
         put?: never;
@@ -3260,7 +3260,7 @@ export interface components {
              *       "check_permissions"
              *     ]
              */
-            scopes?: ("read_members" | "check_permissions")[];
+            scopes?: ("read_members" | "check_permissions" | "read_inbound_submissions")[];
             /** @example 123456789012345678 */
             serverId: string;
         };
@@ -3504,7 +3504,7 @@ export interface components {
              *       "check_permissions"
              *     ]
              */
-            scopes?: ("read_members" | "check_permissions")[];
+            scopes?: ("read_members" | "check_permissions" | "read_inbound_submissions")[];
         };
         SettingValueDto: {
             /** @description Whether PATCH /api/admin/settings accepts it */
@@ -5332,7 +5332,7 @@ export interface operations {
                 /** @description Filter by server ID. */
                 serverId?: string;
                 /** @description Filter by scope. */
-                scope?: "read_members" | "check_permissions";
+                scope?: "read_members" | "check_permissions" | "read_inbound_submissions";
                 /** @description Filter by project name (partial, case-insensitive). */
                 projectName?: string;
             };
@@ -5378,7 +5378,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Filter projects by required scope. */
-                scope?: "read_members" | "check_permissions";
+                scope?: "read_members" | "check_permissions" | "read_inbound_submissions";
                 /** @description Filter by project active status. */
                 isActive?: boolean;
             };
@@ -5845,7 +5845,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Filter servers by required scope. */
-                scope?: "read_members" | "check_permissions";
+                scope?: "read_members" | "check_permissions" | "read_inbound_submissions";
             };
             header?: never;
             path: {
@@ -8400,7 +8400,9 @@ export interface operations {
     };
     InboundWebhookProjectController_listSubmissions: {
         parameters: {
-            query?: {
+            query: {
+                /** @description Discord server on which the project holds the `read_inbound_submissions` scope. */
+                serverId: string;
                 /** @description Opaque `nextCursor` of the previous page. */
                 cursor?: string;
                 limit?: number;
@@ -8434,6 +8436,13 @@ export interface operations {
             };
             /** @description Missing or invalid API key. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The project lacks the `read_inbound_submissions` scope or read access on `serverId`. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

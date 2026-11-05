@@ -117,7 +117,9 @@ describe('InboundWebhookProjectController', () => {
 
   it('passes the key project, cursor, limit and dates to the submissions read', async () => {
     await request(app.getHttpServer())
-      .get('/project/inbound-webhooks/iw_01/submissions?cursor=abc&limit=7')
+      .get(
+        '/project/inbound-webhooks/iw_01/submissions?serverId=123456789012345678&cursor=abc&limit=7',
+      )
       .set('x-api-key', 'k')
       .expect(200, { items: [], nextCursor: null });
     expect(service.listSubmissionsForProject).toHaveBeenCalledWith(
@@ -129,7 +131,9 @@ describe('InboundWebhookProjectController', () => {
 
   it('rejects a submissions limit above 200 with 400', async () => {
     await request(app.getHttpServer())
-      .get('/project/inbound-webhooks/iw_01/submissions?limit=201')
+      .get(
+        '/project/inbound-webhooks/iw_01/submissions?serverId=123456789012345678&limit=201',
+      )
       .set('x-api-key', 'k')
       .expect(400);
   });

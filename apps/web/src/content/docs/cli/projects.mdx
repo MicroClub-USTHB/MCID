@@ -26,7 +26,7 @@ MCID_REDIRECT_URI=http://localhost:3000/callback
 
 - `--server` grants the project access to each listed server. Servers are resolved
   before anything is created, so a typo cannot leave a half-set-up project. Without
-  `--scope` the grant has every scope (`read_members` and `check_permissions`).
+  `--scope` the grant has every scope (`read_members`, `check_permissions` and `read_inbound_submissions`).
 - Run `project create` with no flags in a terminal and it asks for the name, the
   redirect URI and whether to grant the main server.
 - `--env-out` writes the block with owner-only permissions and refuses to replace an
