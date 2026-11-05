@@ -35,7 +35,7 @@ Ordered by creation time, oldest first. Never returns a signing secret or anothe
 
 <Endpoint method="GET" path="/api/project/inbound-webhooks/{id}/submissions" />
 
-Oldest first, keyset-paged on (receivedAt, id), so rows arriving between pages are neither skipped nor repeated. Every read is audited.
+Oldest first, keyset-paged on (receivedAt, id), so rows arriving between pages are neither skipped nor repeated. Every read is audited. Requires the `read_inbound_submissions` scope on the `serverId` given in the query.
 
 **Authentication:** Project API key (`X-API-Key` header)
 
@@ -44,6 +44,7 @@ Oldest first, keyset-paged on (receivedAt, id), so rows arriving between pages a
 | Name | In | Type | Required | Description |
 | --- | --- | --- | --- | --- |
 | `id` | path | `string` | yes |  |
+| `serverId` | query | `string` | yes | Discord server on which the project holds the `read_inbound_submissions` scope. |
 | `cursor` | query | `string` | no | Opaque `nextCursor` of the previous page. |
 | `limit` | query | `number` | no | Default: `50`. |
 | `dateFrom` | query | `string (date-time)` | no | ISO 8601 - submissions received at or after it. |
@@ -56,6 +57,7 @@ Oldest first, keyset-paged on (receivedAt, id), so rows arriving between pages a
 | `200` |  | `ProjectSubmissionPageDto` |
 | `400` | Malformed cursor or query. |  |
 | `401` | Missing or invalid API key. |  |
+| `403` | The project lacks the `read_inbound_submissions` scope or read access on `serverId`. |  |
 | `404` | No such webhook for this project. |  |
 | `429` | Project rate limit. |  |
 

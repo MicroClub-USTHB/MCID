@@ -17,6 +17,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 export enum ProjectScope {
   READ_MEMBERS = 'read_members',
   CHECK_PERMISSIONS = 'check_permissions',
+  READ_INBOUND_SUBMISSIONS = 'read_inbound_submissions',
 }
 
 export class ProjectServerAccessDto {

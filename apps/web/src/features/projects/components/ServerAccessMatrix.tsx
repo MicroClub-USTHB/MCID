@@ -11,7 +11,11 @@ import { McCheckbox } from '@/shared/components/ui/mc-checkbox';
 import { McSwitch } from '@/shared/components/ui/mc-switch';
 import { useCan } from '@/shared/lib/use-access';
 
-const PROJECT_SCOPES: readonly ProjectScope[] = ['read_members', 'check_permissions'];
+const PROJECT_SCOPES: readonly ProjectScope[] = [
+  'read_members',
+  'check_permissions',
+  'read_inbound_submissions',
+];
 const PROJECT_OPERATIONS: readonly ProjectOperation[] = [
   'READ',
   'SEND_MESSAGES',
@@ -27,6 +31,7 @@ const OPERATION_LABELS: Record<ProjectOperation, string> = {
 const SCOPE_LABELS: Record<ProjectScope, string> = {
   read_members: 'Read members',
   check_permissions: 'Check permissions',
+  read_inbound_submissions: 'Read inbound submissions',
 };
 
 export interface ServerAccessChange {

@@ -1,6 +1,7 @@
 import { Controller, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
+  ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -12,6 +13,7 @@ import {
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
+import { RequireScope } from '../../common/decorators/require-scope.decorator';
 import { ApiKeyGuard } from '../../common/guards/api-key.guard';
 import { SkipGlobalThrottle } from '../../common/guards/app-throttler.guard';
 import { ProjectThrottlerGuard } from '../channels/guards/project-throttler.guard';
@@ -73,15 +75,20 @@ export class InboundWebhookProjectController {
   }
 
   @Get(':id/submissions')
+  @RequireScope('read_inbound_submissions')
   @ApiOperation({
     summary: "List a webhook's submissions after a cursor",
     description:
-      'Oldest first, keyset-paged on (receivedAt, id), so rows arriving between pages are neither skipped nor repeated. Every read is audited.',
+      'Oldest first, keyset-paged on (receivedAt, id), so rows arriving between pages are neither skipped nor repeated. Every read is audited. Requires the `read_inbound_submissions` scope on the `serverId` given in the query.',
   })
   @ApiParam({ name: 'id' })
   @ApiOkResponse({ type: ProjectSubmissionPageDto })
   @ApiBadRequestResponse({ description: 'Malformed cursor or query.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid API key.' })
+  @ApiForbiddenResponse({
+    description:
+      'The project lacks the `read_inbound_submissions` scope or read access on `serverId`.',
+  })
   @ApiNotFoundResponse({
     description: 'No such webhook for this project.',
   })

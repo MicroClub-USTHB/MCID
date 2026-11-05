@@ -103,7 +103,7 @@ The detail adds where the request came from:
 A project backend that imports registrations on a schedule uses its API key, not a member session:
 
 ```bash
-curl -s "$MCID_URL/project/inbound-webhooks/$WEBHOOK_ID/submissions?limit=100&cursor=$CURSOR" \
+curl -s "$MCID_URL/project/inbound-webhooks/$WEBHOOK_ID/submissions?serverId=$SERVER_ID&limit=100&cursor=$CURSOR" \
   -H "X-API-Key: $MCID_API_KEY"
 ```
 
@@ -116,6 +116,7 @@ curl -s "$MCID_URL/project/inbound-webhooks/$WEBHOOK_ID/submissions?limit=100&cu
 }
 ```
 
+- `serverId` is required: the project needs the `read_inbound_submissions` scope with `READ` access on that server, otherwise the answer is 403.
 - Oldest submissions come first, and each item has the same fields as the member list.
 - `nextCursor` is opaque. Store it and send it back as `cursor`. It is `null` on the last page. Keep the old cursor when a pull fails and retry.
 - The cursor is built from `receivedAt` and the submission id, so submissions that arrive between two pages are neither skipped nor repeated. A project read withholds submissions received in the last 10 seconds, so one whose transaction commits late is never passed over; the next pull returns it.

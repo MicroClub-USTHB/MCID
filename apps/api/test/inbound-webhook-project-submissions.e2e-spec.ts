@@ -26,6 +26,7 @@ describeIf('GET /api/project/inbound-webhooks/:id/submissions (e2e)', () => {
   let other: ProjectFixture;
   let webhookId: string;
   let foreignWebhookId: string;
+  let serverId: string;
 
   const addWebhook = async (projectId: string, slug: string) => {
     const [w] = await db
@@ -59,7 +60,9 @@ describeIf('GET /api/project/inbound-webhooks/:id/submissions (e2e)', () => {
 
   const get = (id: string, qs = '', key = mine.apiKey) =>
     request(app.getHttpServer())
-      .get(`/api/project/inbound-webhooks/${id}/submissions${qs}`)
+      .get(
+        `/api/project/inbound-webhooks/${id}/submissions?serverId=${serverId}${qs.replace('?', '&')}`,
+      )
       .set('X-API-Key', key);
 
   const drain = async (limit: number) => {
@@ -88,7 +91,11 @@ describeIf('GET /api/project/inbound-webhooks/:id/submissions (e2e)', () => {
   beforeEach(async () => {
     await clearAllTables(db);
     const admin = await seedAdminContext(db);
-    mine = await seedTestProject(db, admin.serverId, { name: 'Mine' });
+    serverId = admin.serverId;
+    mine = await seedTestProject(db, admin.serverId, {
+      name: 'Mine',
+      scopes: ['read_inbound_submissions'],
+    });
     other = await seedTestProject(db, admin.serverId, { name: 'Other' });
     webhookId = await addWebhook(mine.id, 'mine');
     foreignWebhookId = await addWebhook(other.id, 'foreign');
@@ -164,9 +171,23 @@ describeIf('GET /api/project/inbound-webhooks/:id/submissions (e2e)', () => {
     await get('11111111-1111-4111-8111-111111111111').expect(404);
   });
 
-  it('answers 401 without a valid key', async () => {
+  it('answers 403 without the scope and 400 without a serverId', async () => {
+    const bare = await seedTestProject(db, serverId, {
+      name: 'Bare',
+      scopes: ['read_members'],
+    });
+    await get(webhookId, '', bare.apiKey).expect(403);
     await request(app.getHttpServer())
       .get(`/api/project/inbound-webhooks/${webhookId}/submissions`)
+      .set('X-API-Key', mine.apiKey)
+      .expect(400);
+  });
+
+  it('answers 401 without a valid key', async () => {
+    await request(app.getHttpServer())
+      .get(
+        `/api/project/inbound-webhooks/${webhookId}/submissions?serverId=${serverId}`,
+      )
       .expect(401);
   });
 

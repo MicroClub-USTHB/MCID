@@ -2020,7 +2020,8 @@
             "items": {
               "enum": [
                 "read_members",
-                "check_permissions"
+                "check_permissions",
+                "read_inbound_submissions"
               ],
               "type": "string"
             },
@@ -2502,7 +2503,8 @@
             "items": {
               "enum": [
                 "read_members",
-                "check_permissions"
+                "check_permissions",
+                "read_inbound_submissions"
               ],
               "type": "string"
             },
@@ -5517,7 +5519,8 @@
             "schema": {
               "enum": [
                 "read_members",
-                "check_permissions"
+                "check_permissions",
+                "read_inbound_submissions"
               ],
               "type": "string"
             }
@@ -5605,7 +5608,8 @@
             "schema": {
               "enum": [
                 "read_members",
-                "check_permissions"
+                "check_permissions",
+                "read_inbound_submissions"
               ],
               "type": "string"
             }
@@ -6080,7 +6084,8 @@
             "schema": {
               "enum": [
                 "read_members",
-                "check_permissions"
+                "check_permissions",
+                "read_inbound_submissions"
               ],
               "type": "string"
             }
@@ -9296,7 +9301,7 @@
     },
     "/api/project/inbound-webhooks/{id}/submissions": {
       "get": {
-        "description": "Oldest first, keyset-paged on (receivedAt, id), so rows arriving between pages are neither skipped nor repeated. Every read is audited.",
+        "description": "Oldest first, keyset-paged on (receivedAt, id), so rows arriving between pages are neither skipped nor repeated. Every read is audited. Requires the `read_inbound_submissions` scope on the `serverId` given in the query.",
         "operationId": "InboundWebhookProjectController_listSubmissions",
         "parameters": [
           {
@@ -9304,6 +9309,16 @@
             "name": "id",
             "required": true,
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Discord server on which the project holds the `read_inbound_submissions` scope.",
+            "in": "query",
+            "name": "serverId",
+            "required": true,
+            "schema": {
+              "example": "123456789012345678",
               "type": "string"
             }
           },
@@ -9366,6 +9381,9 @@
           },
           "401": {
             "description": "Missing or invalid API key."
+          },
+          "403": {
+            "description": "The project lacks the `read_inbound_submissions` scope or read access on `serverId`."
           },
           "404": {
             "description": "No such webhook for this project."

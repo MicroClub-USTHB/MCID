@@ -1,8 +1,16 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsDate, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class ListProjectSubmissionsDto {
+  @ApiProperty({
+    description:
+      'Discord server on which the project holds the `read_inbound_submissions` scope.',
+    example: '123456789012345678',
+  })
+  @IsString()
+  serverId: string;
+
   @ApiPropertyOptional({
     description: 'Opaque `nextCursor` of the previous page.',
   })
