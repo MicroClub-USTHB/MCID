@@ -105,6 +105,13 @@ export interface ListSubmissionsFilters {
   dateTo?: Date;
 }
 
+/**
+ * `received_at` is the start time of the inserting transaction, so a row can
+ * commit after a later one was already served. The keyset read therefore only
+ * returns rows older than this window, which any submit transaction outlasts.
+ */
+export const SUBMISSION_READ_LAG_SECONDS = 10;
+
 export interface SubmissionCursor {
   /** `received_at` as Postgres prints it, so microseconds survive the round trip. */
   r: string;
@@ -627,6 +634,7 @@ export class InboundWebhooksRepository {
     const t = inboundWebhookSubmissions;
     const conditions: (SQL | undefined)[] = [
       eq(t.webhookId, webhookId),
+      sql`${t.receivedAt} <= now() - make_interval(secs => ${SUBMISSION_READ_LAG_SECONDS})`,
       f.dateFrom ? gte(t.receivedAt, f.dateFrom) : undefined,
       f.dateTo ? lte(t.receivedAt, f.dateTo) : undefined,
       f.cursor
