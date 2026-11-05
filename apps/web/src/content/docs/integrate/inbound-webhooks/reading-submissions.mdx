@@ -14,7 +14,7 @@ Each webhook has a list of **reader roles**, set by an admin when the webhook is
 - When the webhook is created without naming roles, the default reader roles from the admin settings apply. A webhook always has at least one reader.
 - The member's roles are read fresh on every request. The list of reader roles is cached for 5 minutes, and an admin changing it clears that cache.
 
-Your project's API key cannot read submissions. Reading needs a member's session token, sent as `Authorization: Bearer <token>`. Any valid session of the member works: the admin panel's session, or one your project received from the [login flow](/docs/integrate/sso). Because of that, a project backend can show a member the submissions they may read, on their behalf, using the token they signed in with.
+The routes below need a member's session token. Your project's API key reads its own webhook through a separate cursor endpoint, see [Pull new submissions with a project key](#pull-new-submissions-with-a-project-key). The member routes take a session token, sent as `Authorization: Bearer <token>`. Any valid session of the member works: the admin panel's session, or one your project received from the [login flow](/docs/integrate/sso). Because of that, a project backend can show a member the submissions they may read, on their behalf, using the token they signed in with.
 
 ## List the webhooks a member may read
 
@@ -98,6 +98,30 @@ The detail adds where the request came from:
 }
 ```
 
+## Pull new submissions with a project key
+
+A project backend that imports registrations on a schedule uses its API key, not a member session:
+
+```bash
+curl -s "$MCID_URL/project/inbound-webhooks/$WEBHOOK_ID/submissions?limit=100&cursor=$CURSOR" \
+  -H "X-API-Key: $MCID_API_KEY"
+```
+
+```json
+{
+  "items": [
+    { "id": "7c82bc9e-59b6-48f8-bcad-169938392cb0", "payload": { "name": "Sara B." }, "receivedAt": "2026-10-05T19:02:19.515Z", "origin": null }
+  ],
+  "nextCursor": "eyJyIjoiMjAyNi0xMC0wNSAxOTowMjoxOS41MTU0MjErMDAiLCJpIjoiN2M4MmJjOWUtLi4uIn0"
+}
+```
+
+- Oldest submissions come first, and each item has the same fields as the member list.
+- `nextCursor` is opaque. Store it and send it back as `cursor`. It is `null` on the last page. Keep the old cursor when a pull fails and retry.
+- The cursor is built from `receivedAt` and the submission id, so submissions that arrive between two pages are neither skipped nor repeated.
+- `limit` (default 50, at most 200), `dateFrom` and `dateTo` work as above. A malformed `cursor` is a 400.
+- The webhook must belong to the key's project, otherwise the answer is 404. The project rate limit applies, and every read is recorded in the audit log.
+
 ## What an error means
 
 | Status | `message`                    | Meaning                                                                     |
@@ -115,4 +139,4 @@ Admins and readers use the admin panel to browse submissions, with the same role
 
 For the exact fields of each endpoint, see [Inbound webhooks (Read)](/docs/api-reference/admin/inbound-webhooks-read).
 
-Source: `apps/api/src/modules/inbound-webhooks/inbound-webhook-read.controller.ts`, `apps/api/src/modules/inbound-webhooks/guards/inbound-webhook-read.guard.ts`, `apps/api/src/modules/inbound-webhooks/dto/list-submissions.dto.ts`, `apps/api/src/modules/inbound-webhooks/inbound-webhooks.repository.ts`.
+Source: `apps/api/src/modules/inbound-webhooks/inbound-webhook-read.controller.ts`, `apps/api/src/modules/inbound-webhooks/inbound-webhook-project.controller.ts`, `apps/api/src/modules/inbound-webhooks/guards/inbound-webhook-read.guard.ts`, `apps/api/src/modules/inbound-webhooks/dto/list-submissions.dto.ts`, `apps/api/src/modules/inbound-webhooks/inbound-webhooks.repository.ts`.

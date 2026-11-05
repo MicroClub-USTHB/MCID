@@ -1778,6 +1778,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/project/inbound-webhooks/{id}/submissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a webhook's submissions after a cursor
+         * @description Oldest first, keyset-paged on (receivedAt, id), so rows arriving between pages are neither skipped nor repeated. Every read is audited.
+         */
+        get: operations["InboundWebhookProjectController_listSubmissions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{projectId}/webhooks": {
         parameters: {
             query?: never;
@@ -3243,6 +3263,27 @@ export interface components {
             scopes?: ("read_members" | "check_permissions")[];
             /** @example 123456789012345678 */
             serverId: string;
+        };
+        ProjectSubmissionDto: {
+            /** @example 0b6f5c1e-7d2a-4c8e-9f1a-3e5b7c9d1f20 */
+            id: string;
+            /** @example event-platform */
+            origin: string | null;
+            /**
+             * @example {
+             *       "name": "Sara B."
+             *     }
+             */
+            payload: {
+                [key: string]: unknown;
+            };
+            /** @example 2026-11-20T09:58:00.000Z */
+            receivedAt: string;
+        };
+        ProjectSubmissionPageDto: {
+            items: components["schemas"]["ProjectSubmissionDto"][];
+            /** @description Pass as `cursor` for the next page. Null at the end. */
+            nextCursor: string | null;
         };
         RateLimitSettingsDto: {
             globalLimit: components["schemas"]["SettingValueDto"];
@@ -8343,6 +8384,63 @@ export interface operations {
             };
             /** @description Missing or invalid API key. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project rate limit. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    InboundWebhookProjectController_listSubmissions: {
+        parameters: {
+            query?: {
+                /** @description Opaque `nextCursor` of the previous page. */
+                cursor?: string;
+                limit?: number;
+                /** @description ISO 8601 - submissions received at or after it. */
+                dateFrom?: string;
+                /** @description ISO 8601 - submissions received at or before it. */
+                dateTo?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectSubmissionPageDto"];
+                };
+            };
+            /** @description Malformed cursor or query. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or invalid API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such webhook for this project. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
