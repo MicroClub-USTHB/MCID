@@ -90,6 +90,21 @@ This is the cheapest way to show or gate several things on one page: one call, t
 
 Calling these endpoints needs a valid key. Read [API keys and server access](/docs/integrate/api-keys) for a caveat about which servers a key may ask about.
 
+## Event Platform permissions
+
+The Event Platform checks six permissions through the endpoints above. A migration adds them to the permission catalog, so an admin can attach them to roles like any other permission.
+
+| Permission                | What it is for                     |
+| ------------------------- | ---------------------------------- |
+| `EVENTS.CREATE`           | Create events                      |
+| `EVENTS.RESPONSES.READ`   | Read responses submitted to events |
+| `EVENTS.EMAIL.SEND`       | Send emails to event participants  |
+| `EVENTS.REVIEW`           | Review event submissions           |
+| `EVENTS.CHECKIN`          | Check participants in at events    |
+| `EVENTS.TEMPLATES.MANAGE` | Manage event templates             |
+
+The name is not case sensitive, so a check for `events.review` finds `EVENTS.REVIEW`.
+
 ## Role inheritance across servers
 
 Micro Club has one main server and others, such as a club's own. Inheritance lets a role earned on the main server count on the others.
@@ -127,4 +142,4 @@ MCID caches each member's resolved permissions per server for 5 minutes. An admi
 
 A project can limit its login to certain roles. When an admin picks roles for the project, a member must hold at least one of them to sign in, and anyone else is sent back with `insufficient_roles` ([Login with Micro Club](/docs/integrate/sso) lists the errors). A project with no roles accepts every member of the server.
 
-Source: `apps/api/src/modules/permissions/permissions.service.ts`, `apps/api/src/modules/permissions/permissions.repository.ts`, `apps/api/src/modules/permissions/permission-cache.service.ts`, `apps/api/src/modules/inbound-webhooks/inbound-webhooks.repository.ts`, `apps/api/src/modules/auth/auth.service.ts`.
+Source: `apps/api/src/modules/permissions/permissions.service.ts`, `apps/api/src/modules/permissions/permissions.repository.ts`, `apps/api/src/modules/permissions/permission-cache.service.ts`, `apps/api/src/modules/inbound-webhooks/inbound-webhooks.repository.ts`, `apps/api/src/modules/auth/auth.service.ts`, `apps/api/src/database/migrations/0011_event_permissions.sql`.
