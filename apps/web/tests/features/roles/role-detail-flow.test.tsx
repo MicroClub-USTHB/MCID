@@ -182,6 +182,24 @@ describe('Role detail — bulk permission editing', () => {
     expect(screen.getByRole('checkbox', { name: 'Add SEND_MESSAGES' })).toBeInTheDocument();
   }, 15000);
 
+  it('lists the API catalog, so an EVENTS.* permission can be assigned by its id', async () => {
+    server.use(
+      http.get('*/api/permissions/catalog', () =>
+        HttpResponse.json([
+          { id: 2, key: 'KICK_MEMBERS', description: 'Allows kicking members' },
+          { id: 104, key: 'EVENTS.CHECKIN', description: 'Check participants in at events' },
+        ])
+      )
+    );
+    const user = userEvent.setup();
+    render(<RoleDetailView roleId={DEV_ROLE} serverId={SERVER_ID} />, { wrapper });
+
+    await user.click(await screen.findByRole('checkbox', { name: 'Add EVENTS.CHECKIN' }));
+    await user.click(await screen.findByRole('button', { name: /Apply 1 change/ }));
+
+    await waitFor(() => expect(assignCalls).toEqual([{ permissionIds: [104] }]));
+  }, 15000);
+
   it('locks the matrix for the protected executive role', async () => {
     render(<RoleDetailView roleId={EXEC_ROLE} serverId={SERVER_ID} />, { wrapper });
 

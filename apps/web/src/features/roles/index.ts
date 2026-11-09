@@ -9,6 +9,7 @@ export * from './api/mutations';
 export * from './api/mappers';
 export {
   fetchRoleStats,
+  fetchPermissionCatalog,
   fetchRolePermissions,
   addPermissionsToRole,
   removePermissionFromRole,

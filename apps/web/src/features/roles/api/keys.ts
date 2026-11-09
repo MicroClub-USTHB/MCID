@@ -2,6 +2,7 @@ import type { ImpactPreviewPayload, ListInheritanceRulesParams } from '@/feature
 
 export const roleKeys = {
   all: ['roles'] as const,
+  catalog: ['roles', 'catalog'] as const,
   stats: (serverId: string) => [...roleKeys.all, 'stats', serverId] as const,
   permissions: (serverId: string, roleId: string) =>
     [...roleKeys.all, 'permissions', serverId, roleId] as const,

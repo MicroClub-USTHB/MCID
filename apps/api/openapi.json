@@ -8997,6 +8997,43 @@
         ]
       }
     },
+    "/api/permissions/catalog": {
+      "get": {
+        "description": "Returns every permission an admin can assign to a role: the Discord permissions and the ones MCID adds, such as EVENTS.*.",
+        "operationId": "PermissionsController_listCatalog",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PermissionItemDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Permission catalog returned."
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "403": {
+            "description": "roles:read access required."
+          }
+        },
+        "security": [
+          {
+            "session-token": []
+          }
+        ],
+        "summary": "List the permission catalog",
+        "tags": [
+          "Permissions"
+        ]
+      }
+    },
     "/api/permissions/check": {
       "post": {
         "description": "Resolves whether a Discord member holds a specific permission in a given server. Permissions are derived from their roles and any configured inheritance rules. Requires the `check_permissions` scope for the server in the request body.",
