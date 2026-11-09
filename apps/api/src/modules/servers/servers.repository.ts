@@ -233,7 +233,9 @@ export class ServersRepository {
   /**
    * Resolves a Discord role's permission bitfield against the permissions table
    * and upserts the matching rows into role_permissions.
-   * This replaces the full set for the given role so stale entries are removed.
+   * This replaces the role's Discord-derived set so stale entries are removed.
+   * Permissions with no Discord bit (bitfield 0, such as EVENTS.*) are assigned
+   * by admins, so the sync leaves them alone.
    */
   async syncRolePermissions(
     roleId: string,
@@ -250,12 +252,22 @@ export class ServersRepository {
         (p) => p.bitfield !== null && (permissionsBits & p.bitfield) !== 0n,
       )
       .map((p) => p.id);
+    const discordPermIds = allPermissions
+      .filter((p) => p.bitfield !== null && p.bitfield !== 0n)
+      .map((p) => p.id);
 
     await this.db.transaction(async (tx) => {
-      // Remove all existing permission links for this role
-      await tx
-        .delete(rolePermissions)
-        .where(eq(rolePermissions.roleId, roleId));
+      // Remove the role's Discord-derived permission links
+      if (discordPermIds.length > 0) {
+        await tx
+          .delete(rolePermissions)
+          .where(
+            and(
+              eq(rolePermissions.roleId, roleId),
+              inArray(rolePermissions.permissionId, discordPermIds),
+            ),
+          );
+      }
 
       // Insert fresh set (skip insert if no permissions matched)
       if (matchingPermIds.length > 0) {
