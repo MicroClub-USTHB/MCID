@@ -3120,6 +3120,21 @@
         },
         "type": "object"
       },
+      "UpdateProjectInboundWebhookDto": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "schema": {
+            "description": "Either `steps` or flat `fields`, not both; re-validated on update.",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
       "UpdateRateLimitSettingsDto": {
         "additionalProperties": false,
         "properties": {
@@ -9331,6 +9346,100 @@
           }
         ],
         "summary": "List the project's own inbound webhooks",
+        "tags": [
+          "Inbound Webhooks (Project)"
+        ]
+      }
+    },
+    "/api/project/inbound-webhooks/{id}": {
+      "patch": {
+        "description": "Same schema rules as the admin update. Audited with the project id.",
+        "operationId": "InboundWebhookProjectController_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProjectInboundWebhookDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The updated webhook."
+          },
+          "400": {
+            "description": "Unknown or malformed field."
+          },
+          "401": {
+            "description": "Missing or invalid API key."
+          },
+          "404": {
+            "description": "No such webhook for this project."
+          },
+          "422": {
+            "description": "The schema is invalid."
+          },
+          "429": {
+            "description": "Project rate limit."
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ],
+        "summary": "Update a webhook's name or schema",
+        "tags": [
+          "Inbound Webhooks (Project)"
+        ]
+      }
+    },
+    "/api/project/inbound-webhooks/{id}/rotate-secret": {
+      "post": {
+        "description": "The new secret is returned once and the old one stops verifying. Audited with the project id.",
+        "operationId": "InboundWebhookProjectController_rotateSecret",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The new secret, shown once."
+          },
+          "401": {
+            "description": "Missing or invalid API key."
+          },
+          "404": {
+            "description": "No such webhook for this project."
+          },
+          "429": {
+            "description": "Project rate limit."
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ],
+        "summary": "Rotate the signing secret",
         "tags": [
           "Inbound Webhooks (Project)"
         ]
