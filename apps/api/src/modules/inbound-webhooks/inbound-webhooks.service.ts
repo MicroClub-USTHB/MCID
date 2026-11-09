@@ -242,6 +242,7 @@ export class InboundWebhooksService {
     id: string,
     dto: UpdateInboundWebhookDto,
     actor: string | null,
+    via?: { projectId: string },
   ): Promise<InboundWebhookRow> {
     await this.findById(id);
 
@@ -268,9 +269,48 @@ export class InboundWebhooksService {
       action: 'webhook.updated',
       entityId: id,
       actorId: actor,
-      details: { fields: Object.keys(patch) },
+      details: { fields: Object.keys(patch), ...via },
     });
     return updated;
+  }
+
+  /**
+   * Project-key update: name and schema only. A webhook of another project is
+   * a 404, and a schema that fails validation is a 422 (the admin route says 400).
+   */
+  async updateForProject(
+    projectId: string,
+    id: string,
+    dto: Pick<UpdateInboundWebhookDto, 'name' | 'schema'>,
+  ): Promise<InboundWebhookRow> {
+    await this.findOwned(projectId, id);
+    if (dto.schema !== undefined) {
+      const result = validateSchema(dto.schema);
+      if (!result.ok) {
+        throw new UnprocessableEntityException({
+          statusCode: 422,
+          error: 'InvalidSchema',
+          errors: result.errors,
+        });
+      }
+    }
+    return this.update(id, { name: dto.name, schema: dto.schema }, null, {
+      projectId,
+    });
+  }
+
+  async rotateSecretForProject(projectId: string, id: string): Promise<string> {
+    await this.findOwned(projectId, id);
+    return this.rotateSecret(id, null, { projectId });
+  }
+
+  private async findOwned(projectId: string, id: string) {
+    const webhook = await this.repository.findById(id);
+    // 404, never confirm that another project's webhook exists
+    if (!webhook || webhook.projectId !== projectId) {
+      throw new NotFoundException('Inbound webhook not found');
+    }
+    return webhook;
   }
 
   async getAllowedRoles(id: string) {
@@ -317,7 +357,11 @@ export class InboundWebhooksService {
     return roleIds;
   }
 
-  async rotateSecret(id: string, actor: string | null): Promise<string> {
+  async rotateSecret(
+    id: string,
+    actor: string | null,
+    via?: { projectId: string },
+  ): Promise<string> {
     await this.findById(id);
     const signingSecret = generateSigningSecret();
     await this.repository.updateSecret(
@@ -328,6 +372,7 @@ export class InboundWebhooksService {
       action: 'secret.rotated',
       entityId: id,
       actorId: actor,
+      details: via,
     });
     return signingSecret;
   }

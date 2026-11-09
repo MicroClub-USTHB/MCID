@@ -1,8 +1,13 @@
 import {
+  Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
+  Post,
   Query,
   Req,
   UseGuards,
@@ -18,6 +23,7 @@ import {
   ApiTags,
   ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
+  ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
@@ -33,6 +39,7 @@ import {
   ProjectSubmissionPageDto,
   ProjectInboundWebhookListDto,
 } from './dto/project-inbound-webhook-response.dto';
+import { UpdateProjectInboundWebhookDto } from './dto/update-project-inbound-webhook.dto';
 import { InboundWebhooksService } from './inbound-webhooks.service';
 
 /**
@@ -82,6 +89,50 @@ export class InboundWebhookProjectController {
       })),
       total,
     };
+  }
+
+  @Patch(':id')
+  @ApiOperation({
+    summary: "Update a webhook's name or schema",
+    description:
+      'Same schema rules as the admin update. Audited with the project id.',
+  })
+  @ApiParam({ name: 'id' })
+  @ApiOkResponse({ description: 'The updated webhook.' })
+  @ApiBadRequestResponse({ description: 'Unknown or malformed field.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid API key.' })
+  @ApiNotFoundResponse({ description: 'No such webhook for this project.' })
+  @ApiUnprocessableEntityResponse({ description: 'The schema is invalid.' })
+  @ApiTooManyRequestsResponse({ description: 'Project rate limit.' })
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateProjectInboundWebhookDto,
+    @Req() req: Request & { project?: { id: string } },
+  ) {
+    return this.service.updateForProject(req.project!.id, id, dto);
+  }
+
+  @Post(':id/rotate-secret')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Rotate the signing secret',
+    description:
+      'The new secret is returned once and the old one stops verifying. Audited with the project id.',
+  })
+  @ApiParam({ name: 'id' })
+  @ApiOkResponse({ description: 'The new secret, shown once.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid API key.' })
+  @ApiNotFoundResponse({ description: 'No such webhook for this project.' })
+  @ApiTooManyRequestsResponse({ description: 'Project rate limit.' })
+  async rotateSecret(
+    @Param('id') id: string,
+    @Req() req: Request & { project?: { id: string } },
+  ) {
+    const secret = await this.service.rotateSecretForProject(
+      req.project!.id,
+      id,
+    );
+    return { secret };
   }
 
   @Get(':id/submissions')
