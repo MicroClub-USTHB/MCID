@@ -1798,6 +1798,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/project/inbound-webhooks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update a webhook's name or schema
+         * @description Same schema rules as the admin update. Audited with the project id.
+         */
+        patch: operations["InboundWebhookProjectController_update"];
+        trace?: never;
+    };
+    "/api/project/inbound-webhooks/{id}/rotate-secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rotate the signing secret
+         * @description The new secret is returned once and the old one stops verifying. Audited with the project id.
+         */
+        post: operations["InboundWebhookProjectController_rotateSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/project/inbound-webhooks/{id}/submissions": {
         parameters: {
             query?: never;
@@ -3292,6 +3332,13 @@ export interface components {
             /** @example hackathon-2026 */
             slug: string;
         };
+        ProjectRotatedSecretDto: {
+            /**
+             * @description The new signing secret, returned once
+             * @example whsec_3f9a...
+             */
+            secret: string;
+        };
         ProjectServerAccessDto: {
             /**
              * @description Scopes to grant for this server. If omitted, all available scopes are granted.
@@ -3793,6 +3840,11 @@ export interface components {
              * @example https://discord.com/api/webhooks/000/token
              */
             webhookUrl?: string;
+        };
+        UpdateProjectInboundWebhookDto: {
+            name?: string;
+            /** @description Either `steps` or flat `fields`, not both; re-validated on update. */
+            schema?: Record<string, never>;
         };
         UpdateRateLimitSettingsDto: {
             maxWebhooksPerProject?: number;
@@ -8458,6 +8510,110 @@ export interface operations {
             };
             /** @description Missing or invalid API key. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project rate limit. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    InboundWebhookProjectController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProjectInboundWebhookDto"];
+            };
+        };
+        responses: {
+            /** @description The updated webhook, in the list projection. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectInboundWebhookSummaryDto"];
+                };
+            };
+            /** @description Unknown or malformed field. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or invalid API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such webhook for this project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The schema is invalid. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project rate limit. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    InboundWebhookProjectController_rotateSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The new secret, shown once. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectRotatedSecretDto"];
+                };
+            };
+            /** @description Missing or invalid API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such webhook for this project. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
