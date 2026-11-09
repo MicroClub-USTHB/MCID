@@ -1674,6 +1674,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/permissions/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the permission catalog
+         * @description Returns every permission an admin can assign to a role: the Discord permissions and the ones MCID adds, such as EVENTS.*.
+         */
+        get: operations["PermissionsController_listCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/permissions/check": {
         parameters: {
             query?: never;
@@ -8145,6 +8165,40 @@ export interface operations {
                 content?: never;
             };
             /** @description System Admin access required, or role is protected from modification. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PermissionsController_listCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Permission catalog returned. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PermissionItemDto"][];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description roles:read access required. */
             403: {
                 headers: {
                     [name: string]: unknown;
