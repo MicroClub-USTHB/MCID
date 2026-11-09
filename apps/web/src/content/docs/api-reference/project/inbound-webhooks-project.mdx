@@ -51,7 +51,7 @@ Same schema rules as the admin update. Audited with the project id.
 
 | Status | Description | Body |
 | --- | --- | --- |
-| `200` | The updated webhook. |  |
+| `200` | The updated webhook, in the list projection. | `ProjectInboundWebhookSummaryDto` |
 | `400` | Unknown or malformed field. |  |
 | `401` | Missing or invalid API key. |  |
 | `404` | No such webhook for this project. |  |
@@ -78,7 +78,7 @@ The new secret is returned once and the old one stops verifying. Audited with th
 
 | Status | Description | Body |
 | --- | --- | --- |
-| `200` | The new secret, shown once. |  |
+| `200` | The new secret, shown once. | `ProjectRotatedSecretDto` |
 | `401` | Missing or invalid API key. |  |
 | `404` | No such webhook for this project. |  |
 | `429` | Project rate limit. |  |
@@ -165,6 +165,12 @@ Same fields as a list item. Every read is audited. Requires the `read_inbound_su
 | `name` | `string` | yes |  |
 | `schema` | `object` | yes | The webhook FormSchema |
 | `slug` | `string` | yes |  |
+
+### ProjectRotatedSecretDto schema
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `secret` | `string` | yes | The new signing secret, returned once |
 
 ### ProjectSubmissionDto schema
 

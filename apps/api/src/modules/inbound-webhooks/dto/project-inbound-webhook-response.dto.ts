@@ -36,6 +36,14 @@ export class ProjectInboundWebhookListDto {
   total: number;
 }
 
+export class ProjectRotatedSecretDto {
+  @ApiProperty({
+    description: 'The new signing secret, returned once',
+    example: 'whsec_3f9a...',
+  })
+  secret: string;
+}
+
 export class ProjectSubmissionDto {
   @ApiProperty({ example: '0b6f5c1e-7d2a-4c8e-9f1a-3e5b7c9d1f20' })
   id: string;
