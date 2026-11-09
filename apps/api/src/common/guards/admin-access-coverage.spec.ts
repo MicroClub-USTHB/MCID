@@ -36,6 +36,7 @@ const EXPECTED: Record<string, string> = {
   'GET /admin/servers/:serverId/channels/:channelId/messages': 'messages:read',
   // roles
   'GET /permissions/inheritance-rules': 'roles:read',
+  'GET /permissions/catalog': 'roles:read',
   'POST /permissions/inheritance-rules': 'roles:write',
   'GET /permissions/admin/servers/:serverId/roles/:roleId/permissions':
     'roles:read',

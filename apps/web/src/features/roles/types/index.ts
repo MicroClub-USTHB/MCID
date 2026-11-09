@@ -5,7 +5,11 @@ export interface PermissionCatalogEntry {
   description: string;
 }
 
-/** All 49 Discord permissions seeded in the backend database (IDs 1–49). */
+/**
+ * All 49 Discord permissions seeded in the backend database (IDs 1–49). The role
+ * screen shows `GET /permissions/catalog` instead, which also lists the
+ * permissions MCID adds (EVENTS.*); this list is the fallback while it loads.
+ */
 export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
   { id: 1, key: 'CREATE_INSTANT_INVITE', description: 'Allows creation of instant invites' },
   { id: 2, key: 'KICK_MEMBERS', description: 'Allows kicking members' },

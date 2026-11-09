@@ -718,6 +718,17 @@ export class PermissionsRepository {
     return row?.minLevel ?? null;
   }
 
+  async listCatalog() {
+    return this.db
+      .select({
+        id: permissions.id,
+        key: permissions.key,
+        description: permissions.description,
+      })
+      .from(permissions)
+      .orderBy(permissions.id);
+  }
+
   async findExistingPermissionIds(permissionIds: number[]): Promise<number[]> {
     if (!permissionIds.length) return [];
 
