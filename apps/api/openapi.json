@@ -2008,6 +2008,20 @@
         ],
         "type": "object"
       },
+      "ProjectRotatedSecretDto": {
+        "additionalProperties": false,
+        "properties": {
+          "secret": {
+            "description": "The new signing secret, returned once",
+            "example": "whsec_3f9a...",
+            "type": "string"
+          }
+        },
+        "required": [
+          "secret"
+        ],
+        "type": "object"
+      },
       "ProjectServerAccessDto": {
         "additionalProperties": false,
         "properties": {
@@ -9377,7 +9391,14 @@
         },
         "responses": {
           "200": {
-            "description": "The updated webhook."
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectInboundWebhookSummaryDto"
+                }
+              }
+            },
+            "description": "The updated webhook, in the list projection."
           },
           "400": {
             "description": "Unknown or malformed field."
@@ -9422,6 +9443,13 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectRotatedSecretDto"
+                }
+              }
+            },
             "description": "The new secret, shown once."
           },
           "401": {

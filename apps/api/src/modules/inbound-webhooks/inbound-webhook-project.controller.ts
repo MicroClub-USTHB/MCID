@@ -35,12 +35,25 @@ import { ListProjectInboundWebhooksDto } from './dto/list-project-inbound-webhoo
 import { ProjectServerQueryDto } from './dto/project-server-query.dto';
 import { ListProjectSubmissionsDto } from './dto/list-project-submissions.dto';
 import {
+  ProjectInboundWebhookSummaryDto,
+  ProjectRotatedSecretDto,
   ProjectSubmissionDto,
   ProjectSubmissionPageDto,
   ProjectInboundWebhookListDto,
 } from './dto/project-inbound-webhook-response.dto';
 import { UpdateProjectInboundWebhookDto } from './dto/update-project-inbound-webhook.dto';
+import { InboundWebhookRow } from './inbound-webhooks.repository';
 import { InboundWebhooksService } from './inbound-webhooks.service';
+
+/** The only webhook fields a project sees: no secret, settings or counters. */
+const toSummary = (w: InboundWebhookRow): ProjectInboundWebhookSummaryDto => ({
+  id: w.id,
+  name: w.name,
+  slug: w.slug,
+  active: w.isActive,
+  schema: w.schema as unknown as Record<string, unknown>,
+  createdAt: w.createdAt.toISOString(),
+});
 
 /**
  * Read-only listing of the calling project's own webhooks, so a backend can
@@ -78,17 +91,7 @@ export class InboundWebhookProjectController {
       query.limit ?? 50,
       query.offset ?? 0,
     );
-    return {
-      items: rows.map((w) => ({
-        id: w.id,
-        name: w.name,
-        slug: w.slug,
-        active: w.isActive,
-        schema: w.schema as unknown as Record<string, unknown>,
-        createdAt: w.createdAt.toISOString(),
-      })),
-      total,
-    };
+    return { items: rows.map(toSummary), total };
   }
 
   @Patch(':id')
@@ -98,18 +101,23 @@ export class InboundWebhookProjectController {
       'Same schema rules as the admin update. Audited with the project id.',
   })
   @ApiParam({ name: 'id' })
-  @ApiOkResponse({ description: 'The updated webhook.' })
+  @ApiOkResponse({
+    description: 'The updated webhook, in the list projection.',
+    type: ProjectInboundWebhookSummaryDto,
+  })
   @ApiBadRequestResponse({ description: 'Unknown or malformed field.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid API key.' })
   @ApiNotFoundResponse({ description: 'No such webhook for this project.' })
   @ApiUnprocessableEntityResponse({ description: 'The schema is invalid.' })
   @ApiTooManyRequestsResponse({ description: 'Project rate limit.' })
-  update(
+  async update(
     @Param('id') id: string,
     @Body() dto: UpdateProjectInboundWebhookDto,
     @Req() req: Request & { project?: { id: string } },
-  ) {
-    return this.service.updateForProject(req.project!.id, id, dto);
+  ): Promise<ProjectInboundWebhookSummaryDto> {
+    return toSummary(
+      await this.service.updateForProject(req.project!.id, id, dto),
+    );
   }
 
   @Post(':id/rotate-secret')
@@ -120,14 +128,17 @@ export class InboundWebhookProjectController {
       'The new secret is returned once and the old one stops verifying. Audited with the project id.',
   })
   @ApiParam({ name: 'id' })
-  @ApiOkResponse({ description: 'The new secret, shown once.' })
+  @ApiOkResponse({
+    description: 'The new secret, shown once.',
+    type: ProjectRotatedSecretDto,
+  })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid API key.' })
   @ApiNotFoundResponse({ description: 'No such webhook for this project.' })
   @ApiTooManyRequestsResponse({ description: 'Project rate limit.' })
   async rotateSecret(
     @Param('id') id: string,
     @Req() req: Request & { project?: { id: string } },
-  ) {
+  ): Promise<ProjectRotatedSecretDto> {
     const secret = await this.service.rotateSecretForProject(
       req.project!.id,
       id,
