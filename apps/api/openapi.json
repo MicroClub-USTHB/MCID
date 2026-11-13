@@ -838,6 +838,89 @@
         ],
         "type": "object"
       },
+      "CreateProjectInboundWebhookDto": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptedOrigins": {
+            "description": "Origins permitted to call this webhook. Empty = no check.",
+            "example": [
+              "https://app.microclub.dz"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "allowRoleInheritance": {
+            "default": false,
+            "description": "When true, a member can also read this webhook's submissions through role inheritance: a role they hold on the main server that is the source of an enabled inheritance rule covering the server of a granted role counts as that granted role, matched by role name. Off by default: data access should be explicit.",
+            "type": "boolean"
+          },
+          "allowedRoleIds": {
+            "description": "Discord role IDs permitted to READ submissions. When omitted, the configured default reader roles are used (MC Executive unless changed in the inbound webhook settings); when given, exactly these roles are used. At least one role must result.",
+            "example": [
+              "1234567890123456789"
+            ],
+            "items": {
+              "pattern": "/^\\d{17,20}$/",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "example": "Recruitment 2026",
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "rejectUnknownFields": {
+            "default": true,
+            "type": "boolean"
+          },
+          "requireSignature": {
+            "default": true,
+            "type": "boolean"
+          },
+          "schema": {
+            "description": "The shape of what callers send. Either `steps` (a multi-step form; the payload is keyed by step) or `fields` (a flat payload, for an event or any non-form data), not both. Validated by the Layer-1 schema validator.",
+            "example": {
+              "steps": [
+                {
+                  "fields": [
+                    {
+                      "key": "firstname",
+                      "maxLength": 80,
+                      "required": true,
+                      "type": "string"
+                    },
+                    {
+                      "key": "name",
+                      "maxLength": 80,
+                      "required": true,
+                      "type": "string"
+                    }
+                  ],
+                  "key": "identity"
+                }
+              ],
+              "version": 1
+            },
+            "type": "object"
+          },
+          "slug": {
+            "description": "URL-safe identifier, unique within the project.",
+            "example": "recruitment-2026",
+            "pattern": "/^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$/",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "slug",
+          "schema"
+        ],
+        "type": "object"
+      },
       "CreateServerDto": {
         "additionalProperties": false,
         "properties": {
@@ -921,6 +1004,30 @@
         },
         "required": [
           "name"
+        ],
+        "type": "object"
+      },
+      "CreatedProjectInboundWebhookDto": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "example": "0b6f5c1e-7d2a-4c8e-9f1a-3e5b7c9d1f20",
+            "type": "string"
+          },
+          "secret": {
+            "description": "The signing secret. Shown once; no later read returns it.",
+            "example": "whsec_9f2c…",
+            "type": "string"
+          },
+          "slug": {
+            "example": "hackathon-2026",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "secret"
         ],
         "type": "object"
       },
@@ -9360,6 +9467,57 @@
           }
         ],
         "summary": "List the project's own inbound webhooks",
+        "tags": [
+          "Inbound Webhooks (Project)"
+        ]
+      },
+      "post": {
+        "description": "The project comes from the API key; a `projectId` in the body is rejected. Same schema rules as the admin create, and `allowedRoleIds` must belong to the project's servers (omit it for the default reader roles). The signing secret is returned once.",
+        "operationId": "InboundWebhookProjectController_create",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectInboundWebhookDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedProjectInboundWebhookDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "description": "Invalid input or reader roles."
+          },
+          "401": {
+            "description": "Missing or invalid API key."
+          },
+          "409": {
+            "description": "Slug already used in this project."
+          },
+          "422": {
+            "description": "Invalid schema; `errors` lists every problem."
+          },
+          "429": {
+            "description": "Project rate limit."
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ],
+        "summary": "Create an inbound webhook for the project",
         "tags": [
           "Inbound Webhooks (Project)"
         ]

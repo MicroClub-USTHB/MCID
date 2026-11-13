@@ -28,6 +28,9 @@ const row = {
 describe('InboundWebhookProjectController', () => {
   let app: INestApplication;
   const service = {
+    createForProject: jest
+      .fn()
+      .mockResolvedValue({ id: 'iw_01', slug: 'h', secret: 'whsec_x' }),
     listForProject: jest.fn().mockResolvedValue({ rows: [row], total: 1 }),
     getSubmissionForProject: jest.fn().mockResolvedValue({ id: 's1' }),
     listSubmissionsForProject: jest
@@ -107,6 +110,24 @@ describe('InboundWebhookProjectController', () => {
     await request(app.getHttpServer())
       .get('/project/inbound-webhooks?limit=500')
       .set('x-api-key', 'k')
+      .expect(400);
+  });
+
+  it('creates for the key project and returns the secret', async () => {
+    const payload = { name: 'H', slug: 'hackathon', schema: { version: 1 } };
+    await request(app.getHttpServer())
+      .post('/project/inbound-webhooks')
+      .set('x-api-key', 'k')
+      .send(payload)
+      .expect(201, { id: 'iw_01', slug: 'h', secret: 'whsec_x' });
+    expect(service.createForProject).toHaveBeenCalledWith('proj-1', payload);
+  });
+
+  it('rejects a projectId in the body', async () => {
+    await request(app.getHttpServer())
+      .post('/project/inbound-webhooks')
+      .set('x-api-key', 'k')
+      .send({ name: 'H', slug: 'hackathon', schema: {}, projectId: 'other' })
       .expect(400);
   });
 
