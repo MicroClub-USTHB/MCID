@@ -37,6 +37,7 @@ import { ProjectThrottlerGuard } from '../channels/guards/project-throttler.guar
 import {
   CreatedProjectInboundWebhookDto,
   CreateProjectInboundWebhookDto,
+  ProjectCreateQueryDto,
 } from './dto/create-project-inbound-webhook.dto';
 import { ListProjectInboundWebhooksDto } from './dto/list-project-inbound-webhooks.dto';
 import { ProjectServerQueryDto } from './dto/project-server-query.dto';
@@ -154,21 +155,30 @@ export class InboundWebhookProjectController {
   }
 
   @Post()
+  @RequireScope('manage_inbound_webhooks')
   @ApiOperation({
     summary: 'Create an inbound webhook for the project',
     description:
-      "The project comes from the API key; a `projectId` in the body is rejected. Same schema rules as the admin create, and `allowedRoleIds` must belong to the project's servers (omit it for the default reader roles). The signing secret is returned once.",
+      "The project comes from the API key; a `projectId` in the body is rejected. Same schema rules as the admin create, and `allowedRoleIds` must belong to the project's servers (omit it for the default reader roles). The signing secret is returned once. Requires the `manage_inbound_webhooks` scope on the `serverId` given in the query, and a project holds at most `INBOUND_WEBHOOK_MAX_PER_PROJECT` webhooks (100 by default).",
   })
   @ApiCreatedResponse({ type: CreatedProjectInboundWebhookDto })
   @ApiBadRequestResponse({ description: 'Invalid input or reader roles.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid API key.' })
-  @ApiConflictResponse({ description: 'Slug already used in this project.' })
+  @ApiForbiddenResponse({
+    description:
+      'The project lacks the `manage_inbound_webhooks` scope or access on `serverId`.',
+  })
+  @ApiConflictResponse({
+    description:
+      'Slug already used in this project, or the project reached its webhook limit.',
+  })
   @ApiUnprocessableEntityResponse({
     description: 'Invalid schema; `errors` lists every problem.',
   })
   @ApiTooManyRequestsResponse({ description: 'Project rate limit.' })
   create(
     @Body() dto: CreateProjectInboundWebhookDto,
+    @Query() _query: ProjectCreateQueryDto,
     @Req() req: Request & { project?: { id: string } },
   ): Promise<CreatedProjectInboundWebhookDto> {
     return this.service.createForProject(req.project!.id, dto);

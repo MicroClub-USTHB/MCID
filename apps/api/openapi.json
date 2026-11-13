@@ -2142,7 +2142,8 @@
               "enum": [
                 "read_members",
                 "check_permissions",
-                "read_inbound_submissions"
+                "read_inbound_submissions",
+                "manage_inbound_webhooks"
               ],
               "type": "string"
             },
@@ -2625,7 +2626,8 @@
               "enum": [
                 "read_members",
                 "check_permissions",
-                "read_inbound_submissions"
+                "read_inbound_submissions",
+                "manage_inbound_webhooks"
               ],
               "type": "string"
             },
@@ -5656,7 +5658,8 @@
               "enum": [
                 "read_members",
                 "check_permissions",
-                "read_inbound_submissions"
+                "read_inbound_submissions",
+                "manage_inbound_webhooks"
               ],
               "type": "string"
             }
@@ -5745,7 +5748,8 @@
               "enum": [
                 "read_members",
                 "check_permissions",
-                "read_inbound_submissions"
+                "read_inbound_submissions",
+                "manage_inbound_webhooks"
               ],
               "type": "string"
             }
@@ -6221,7 +6225,8 @@
               "enum": [
                 "read_members",
                 "check_permissions",
-                "read_inbound_submissions"
+                "read_inbound_submissions",
+                "manage_inbound_webhooks"
               ],
               "type": "string"
             }
@@ -9472,9 +9477,20 @@
         ]
       },
       "post": {
-        "description": "The project comes from the API key; a `projectId` in the body is rejected. Same schema rules as the admin create, and `allowedRoleIds` must belong to the project's servers (omit it for the default reader roles). The signing secret is returned once.",
+        "description": "The project comes from the API key; a `projectId` in the body is rejected. Same schema rules as the admin create, and `allowedRoleIds` must belong to the project's servers (omit it for the default reader roles). The signing secret is returned once. Requires the `manage_inbound_webhooks` scope on the `serverId` given in the query, and a project holds at most `INBOUND_WEBHOOK_MAX_PER_PROJECT` webhooks (100 by default).",
         "operationId": "InboundWebhookProjectController_create",
-        "parameters": [],
+        "parameters": [
+          {
+            "description": "Discord server on which the project holds the `manage_inbound_webhooks` scope.",
+            "in": "query",
+            "name": "serverId",
+            "required": true,
+            "schema": {
+              "example": "123456789012345678",
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -9502,8 +9518,11 @@
           "401": {
             "description": "Missing or invalid API key."
           },
+          "403": {
+            "description": "The project lacks the `manage_inbound_webhooks` scope or access on `serverId`."
+          },
           "409": {
-            "description": "Slug already used in this project."
+            "description": "Slug already used in this project, or the project reached its webhook limit."
           },
           "422": {
             "description": "Invalid schema; `errors` lists every problem."

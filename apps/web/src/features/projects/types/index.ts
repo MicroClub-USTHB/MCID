@@ -6,6 +6,7 @@ export const PROJECT_SCOPES = [
   'read_members',
   'check_permissions',
   'read_inbound_submissions',
+  'manage_inbound_webhooks',
 ] as const;
 export type ProjectScope = (typeof PROJECT_SCOPES)[number];
 

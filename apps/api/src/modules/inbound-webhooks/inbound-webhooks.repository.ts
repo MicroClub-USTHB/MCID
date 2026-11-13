@@ -217,6 +217,14 @@ export class InboundWebhooksRepository {
     return { rows: rows as InboundWebhookRow[], total };
   }
 
+  async countByProject(projectId: string): Promise<number> {
+    const [{ total }] = await this.db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(inboundWebhooks)
+      .where(eq(inboundWebhooks.projectId, projectId));
+    return total;
+  }
+
   async listAll(): Promise<InboundWebhookRow[]> {
     const rows = await this.db
       .select(PUBLIC_COLUMNS)

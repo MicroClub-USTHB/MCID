@@ -224,8 +224,8 @@ export class InboundWebhooksService {
 
   /**
    * Create for the project that owns the API key. Same checks as the admin
-   * create, but an invalid schema is a 422 and only the id, slug and secret
-   * come back.
+   * create plus a per-project cap, but an invalid schema is a 422 and only
+   * the id, slug and secret come back.
    */
   async createForProject(
     projectId: string,
@@ -237,6 +237,18 @@ export class InboundWebhooksService {
         statusCode: 422,
         error: 'InvalidSchema',
         errors: check.errors,
+      });
+    }
+    const max = this.configService.get<number>(
+      'INBOUND_WEBHOOK_MAX_PER_PROJECT',
+      100,
+    );
+    // ponytail: count-then-insert, two concurrent creates can pass one over the cap; lock the project row if that matters
+    if ((await this.repository.countByProject(projectId)) >= max) {
+      throw new ConflictException({
+        statusCode: 409,
+        error: 'WebhookLimitReached',
+        message: `This project already has the maximum of ${max} inbound webhooks`,
       });
     }
     const prepared = await this.prepare(dto, null, false, projectId, false);
