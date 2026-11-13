@@ -109,6 +109,10 @@ import redisConfig from './redis.config';
             }),
         }),
         MAX_WEBHOOKS_PER_PROJECT: Joi.number().integer().min(1).default(10),
+        INBOUND_WEBHOOK_MAX_PER_PROJECT: Joi.number()
+          .integer()
+          .min(1)
+          .default(100),
         REDIS_HOST: Joi.string().default('localhost'),
         REDIS_PORT: Joi.number().port().default(6379),
         REDIS_PASSWORD: Joi.string().allow('').default(''),
