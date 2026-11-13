@@ -1791,7 +1791,11 @@ export interface paths {
          */
         get: operations["InboundWebhookProjectController_list"];
         put?: never;
-        post?: never;
+        /**
+         * Create an inbound webhook for the project
+         * @description The project comes from the API key; a `projectId` in the body is rejected. Same schema rules as the admin create, and `allowedRoleIds` must belong to the project's servers (omit it for the default reader roles). The signing secret is returned once. Requires the `manage_inbound_webhooks` scope on the `serverId` given in the query, and a project holds at most `INBOUND_WEBHOOK_MAX_PER_PROJECT` webhooks (100 by default).
+         */
+        post: operations["InboundWebhookProjectController_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2693,6 +2697,64 @@ export interface components {
              */
             webhookUrl?: string;
         };
+        CreateProjectInboundWebhookDto: {
+            /**
+             * @description Origins permitted to call this webhook. Empty = no check.
+             * @example [
+             *       "https://app.microclub.dz"
+             *     ]
+             */
+            acceptedOrigins?: string[];
+            /**
+             * @description When true, a member can also read this webhook's submissions through role inheritance: a role they hold on the main server that is the source of an enabled inheritance rule covering the server of a granted role counts as that granted role, matched by role name. Off by default: data access should be explicit.
+             * @default false
+             */
+            allowRoleInheritance: boolean;
+            /**
+             * @description Discord role IDs permitted to READ submissions. When omitted, the configured default reader roles are used (MC Executive unless changed in the inbound webhook settings); when given, exactly these roles are used. At least one role must result.
+             * @example [
+             *       "1234567890123456789"
+             *     ]
+             */
+            allowedRoleIds?: string[];
+            /** @example Recruitment 2026 */
+            name: string;
+            /** @default true */
+            rejectUnknownFields: boolean;
+            /** @default true */
+            requireSignature: boolean;
+            /**
+             * @description The shape of what callers send. Either `steps` (a multi-step form; the payload is keyed by step) or `fields` (a flat payload, for an event or any non-form data), not both. Validated by the Layer-1 schema validator.
+             * @example {
+             *       "steps": [
+             *         {
+             *           "fields": [
+             *             {
+             *               "key": "firstname",
+             *               "maxLength": 80,
+             *               "required": true,
+             *               "type": "string"
+             *             },
+             *             {
+             *               "key": "name",
+             *               "maxLength": 80,
+             *               "required": true,
+             *               "type": "string"
+             *             }
+             *           ],
+             *           "key": "identity"
+             *         }
+             *       ],
+             *       "version": 1
+             *     }
+             */
+            schema: Record<string, never>;
+            /**
+             * @description URL-safe identifier, unique within the project.
+             * @example recruitment-2026
+             */
+            slug: string;
+        };
         CreateServerDto: {
             /**
              * @default deny_all
@@ -2742,6 +2804,17 @@ export interface components {
              * @example Deploy notifications
              */
             name: string;
+        };
+        CreatedProjectInboundWebhookDto: {
+            /** @example 0b6f5c1e-7d2a-4c8e-9f1a-3e5b7c9d1f20 */
+            id: string;
+            /**
+             * @description The signing secret. Shown once; no later read returns it.
+             * @example whsec_9f2c…
+             */
+            secret: string;
+            /** @example hackathon-2026 */
+            slug: string;
         };
         CrossServerListItemDto: {
             /** @description Avatar hash */
@@ -3347,7 +3420,7 @@ export interface components {
              *       "check_permissions"
              *     ]
              */
-            scopes?: ("read_members" | "check_permissions" | "read_inbound_submissions")[];
+            scopes?: ("read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks")[];
             /** @example 123456789012345678 */
             serverId: string;
         };
@@ -3591,7 +3664,7 @@ export interface components {
              *       "check_permissions"
              *     ]
              */
-            scopes?: ("read_members" | "check_permissions" | "read_inbound_submissions")[];
+            scopes?: ("read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks")[];
         };
         SettingValueDto: {
             /** @description Whether PATCH /api/admin/settings accepts it */
@@ -5424,7 +5497,7 @@ export interface operations {
                 /** @description Filter by server ID. */
                 serverId?: string;
                 /** @description Filter by scope. */
-                scope?: "read_members" | "check_permissions" | "read_inbound_submissions";
+                scope?: "read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks";
                 /** @description Filter by project name (partial, case-insensitive). */
                 projectName?: string;
             };
@@ -5470,7 +5543,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Filter projects by required scope. */
-                scope?: "read_members" | "check_permissions" | "read_inbound_submissions";
+                scope?: "read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks";
                 /** @description Filter by project active status. */
                 isActive?: boolean;
             };
@@ -5937,7 +6010,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Filter servers by required scope. */
-                scope?: "read_members" | "check_permissions" | "read_inbound_submissions";
+                scope?: "read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks";
             };
             header?: never;
             path: {
@@ -8510,6 +8583,74 @@ export interface operations {
             };
             /** @description Missing or invalid API key. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project rate limit. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    InboundWebhookProjectController_create: {
+        parameters: {
+            query: {
+                /** @description Discord server on which the project holds the `manage_inbound_webhooks` scope. */
+                serverId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProjectInboundWebhookDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedProjectInboundWebhookDto"];
+                };
+            };
+            /** @description Invalid input or reader roles. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or invalid API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The project lacks the `manage_inbound_webhooks` scope or access on `serverId`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Slug already used in this project, or the project reached its webhook limit. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid schema; `errors` lists every problem. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

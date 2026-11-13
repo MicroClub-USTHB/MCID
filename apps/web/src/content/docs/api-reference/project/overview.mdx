@@ -9,7 +9,7 @@ These endpoints are for the backends and browsers of Micro Club projects. A back
 
 The endpoints the admin dashboard uses are in the [Admin API](/docs/api-reference/admin/overview).
 
-39 endpoints in 8 groups.
+40 endpoints in 8 groups.
 
 ## Authentication
 
@@ -58,6 +58,7 @@ The endpoints the admin dashboard uses are in the [Admin API](/docs/api-referenc
 | Method | Path | Summary |
 | --- | --- | --- |
 | `GET` | `/api/project/inbound-webhooks` | [List the project's own inbound webhooks](/docs/api-reference/project/inbound-webhooks-project#list-the-projects-own-inbound-webhooks) |
+| `POST` | `/api/project/inbound-webhooks` | [Create an inbound webhook for the project](/docs/api-reference/project/inbound-webhooks-project#create-an-inbound-webhook-for-the-project) |
 | `PATCH` | `/api/project/inbound-webhooks/{id}` | [Update a webhook's name or schema](/docs/api-reference/project/inbound-webhooks-project#update-a-webhooks-name-or-schema) |
 | `POST` | `/api/project/inbound-webhooks/{id}/rotate-secret` | [Rotate the signing secret](/docs/api-reference/project/inbound-webhooks-project#rotate-the-signing-secret) |
 | `GET` | `/api/project/inbound-webhooks/{id}/submissions` | [List a webhook's submissions after a cursor](/docs/api-reference/project/inbound-webhooks-project#list-a-webhooks-submissions-after-a-cursor) |
