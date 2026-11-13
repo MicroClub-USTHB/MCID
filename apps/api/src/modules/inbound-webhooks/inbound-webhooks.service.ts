@@ -222,6 +222,28 @@ export class InboundWebhooksService {
     return this.persist(dto.projectId, prepared);
   }
 
+  /**
+   * Create for the project that owns the API key. Same checks as the admin
+   * create, but an invalid schema is a 422 and only the id, slug and secret
+   * come back.
+   */
+  async createForProject(
+    projectId: string,
+    dto: Omit<CreateInboundWebhookDto, 'projectId'>,
+  ) {
+    const check = validateSchema(dto.schema);
+    if (!check.ok) {
+      throw new UnprocessableEntityException({
+        statusCode: 422,
+        error: 'InvalidSchema',
+        errors: check.errors,
+      });
+    }
+    const prepared = await this.prepare(dto, null, false, projectId, false);
+    const { webhook, signingSecret } = await this.persist(projectId, prepared);
+    return { id: webhook.id, slug: webhook.slug, secret: signingSecret };
+  }
+
   async findById(id: string): Promise<InboundWebhookRow> {
     const webhook = await this.repository.findById(id);
     if (!webhook) throw new NotFoundException('Inbound webhook not found');

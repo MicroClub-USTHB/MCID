@@ -14,6 +14,9 @@ import {
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
+  ApiConflictResponse,
+  ApiCreatedResponse,
+  ApiUnprocessableEntityResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -31,6 +34,10 @@ import { RequireScope } from '../../common/decorators/require-scope.decorator';
 import { ApiKeyGuard } from '../../common/guards/api-key.guard';
 import { SkipGlobalThrottle } from '../../common/guards/app-throttler.guard';
 import { ProjectThrottlerGuard } from '../channels/guards/project-throttler.guard';
+import {
+  CreatedProjectInboundWebhookDto,
+  CreateProjectInboundWebhookDto,
+} from './dto/create-project-inbound-webhook.dto';
 import { ListProjectInboundWebhooksDto } from './dto/list-project-inbound-webhooks.dto';
 import { ProjectServerQueryDto } from './dto/project-server-query.dto';
 import { ListProjectSubmissionsDto } from './dto/list-project-submissions.dto';
@@ -144,6 +151,27 @@ export class InboundWebhookProjectController {
       id,
     );
     return { secret };
+  }
+
+  @Post()
+  @ApiOperation({
+    summary: 'Create an inbound webhook for the project',
+    description:
+      "The project comes from the API key; a `projectId` in the body is rejected. Same schema rules as the admin create, and `allowedRoleIds` must belong to the project's servers (omit it for the default reader roles). The signing secret is returned once.",
+  })
+  @ApiCreatedResponse({ type: CreatedProjectInboundWebhookDto })
+  @ApiBadRequestResponse({ description: 'Invalid input or reader roles.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid API key.' })
+  @ApiConflictResponse({ description: 'Slug already used in this project.' })
+  @ApiUnprocessableEntityResponse({
+    description: 'Invalid schema; `errors` lists every problem.',
+  })
+  @ApiTooManyRequestsResponse({ description: 'Project rate limit.' })
+  create(
+    @Body() dto: CreateProjectInboundWebhookDto,
+    @Req() req: Request & { project?: { id: string } },
+  ): Promise<CreatedProjectInboundWebhookDto> {
+    return this.service.createForProject(req.project!.id, dto);
   }
 
   @Get(':id/submissions')
