@@ -21,6 +21,7 @@ describe('InboundWebhooksService.createForProject', () => {
   beforeEach(() => {
     repository = {
       findBySlug: jest.fn().mockResolvedValue(null),
+      countByProject: jest.fn().mockResolvedValue(0),
       getSettings: jest.fn().mockResolvedValue(null),
       findExistingRoles: jest.fn((ids: string[]) =>
         Promise.resolve(
@@ -48,7 +49,9 @@ describe('InboundWebhooksService.createForProject', () => {
         get: (name: string, fallback?: unknown) =>
           name === 'app.inboundWebhookEncryptionKey'
             ? 'ab'.repeat(32)
-            : fallback,
+            : name === 'INBOUND_WEBHOOK_MAX_PER_PROJECT'
+              ? 3
+              : fallback,
       } as never,
       {} as never,
     );
@@ -98,5 +101,19 @@ describe('InboundWebhooksService.createForProject', () => {
     await expect(
       service.createForProject('proj-1', body({ allowedRoleIds: [ROLE] })),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  it('answers 409 once the project holds the maximum number of webhooks', async () => {
+    repository.countByProject.mockResolvedValue(3);
+    const err = await service
+      .createForProject('proj-1', body())
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(ConflictException);
+    expect((err as ConflictException).getResponse()).toMatchObject({
+      error: 'WebhookLimitReached',
+    });
+    expect(repository.countByProject).toHaveBeenCalledWith('proj-1');
+    expect(repository.create).not.toHaveBeenCalled();
   });
 });

@@ -91,7 +91,12 @@ describe('ServerAccessMatrix', () => {
 
     expect(onChange).toHaveBeenCalledWith('srv_1', {
       operations: { READ: true, SEND_MESSAGES: false, MANAGE_WEBHOOKS: false },
-      scopes: ['read_members', 'check_permissions', 'read_inbound_submissions'],
+      scopes: [
+        'read_members',
+        'check_permissions',
+        'read_inbound_submissions',
+        'manage_inbound_webhooks',
+      ],
     });
   });
 

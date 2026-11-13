@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsString } from 'class-validator';
 import { OmitType } from '@nestjs/swagger';
 import { CreateInboundWebhookDto } from './create-inbound-webhook.dto';
 
@@ -20,4 +21,14 @@ export class CreatedProjectInboundWebhookDto {
     example: 'whsec_9f2c…',
   })
   secret: string;
+}
+
+export class ProjectCreateQueryDto {
+  @ApiProperty({
+    description:
+      'Discord server on which the project holds the `manage_inbound_webhooks` scope.',
+    example: '123456789012345678',
+  })
+  @IsString()
+  serverId: string;
 }

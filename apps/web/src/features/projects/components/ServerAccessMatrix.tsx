@@ -15,6 +15,7 @@ const PROJECT_SCOPES: readonly ProjectScope[] = [
   'read_members',
   'check_permissions',
   'read_inbound_submissions',
+  'manage_inbound_webhooks',
 ];
 const PROJECT_OPERATIONS: readonly ProjectOperation[] = [
   'READ',
@@ -32,6 +33,7 @@ const SCOPE_LABELS: Record<ProjectScope, string> = {
   read_members: 'Read members',
   check_permissions: 'Check permissions',
   read_inbound_submissions: 'Read inbound submissions',
+  manage_inbound_webhooks: 'Manage inbound webhooks',
 };
 
 export interface ServerAccessChange {

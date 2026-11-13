@@ -12,6 +12,7 @@ import { ApiKeyGuard } from '../../common/guards/api-key.guard';
 import { ProjectThrottlerGuard } from '../channels/guards/project-throttler.guard';
 import { InboundWebhookProjectController } from './inbound-webhook-project.controller';
 import { InboundWebhooksService } from './inbound-webhooks.service';
+import { SCOPE_KEY } from '../../common/decorators/require-scope.decorator';
 
 const row = {
   id: 'iw_01',
@@ -116,16 +117,30 @@ describe('InboundWebhookProjectController', () => {
   it('creates for the key project and returns the secret', async () => {
     const payload = { name: 'H', slug: 'hackathon', schema: { version: 1 } };
     await request(app.getHttpServer())
-      .post('/project/inbound-webhooks')
+      .post('/project/inbound-webhooks?serverId=123456789012345678')
       .set('x-api-key', 'k')
       .send(payload)
       .expect(201, { id: 'iw_01', slug: 'h', secret: 'whsec_x' });
     expect(service.createForProject).toHaveBeenCalledWith('proj-1', payload);
   });
 
-  it('rejects a projectId in the body', async () => {
+  it('requires the manage_inbound_webhooks scope and a serverId', async () => {
+    expect(
+      Reflect.getMetadata(
+        SCOPE_KEY,
+        InboundWebhookProjectController.prototype.create,
+      ),
+    ).toBe('manage_inbound_webhooks');
     await request(app.getHttpServer())
       .post('/project/inbound-webhooks')
+      .set('x-api-key', 'k')
+      .send({ name: 'H', slug: 'hackathon', schema: {} })
+      .expect(400);
+  });
+
+  it('rejects a projectId in the body', async () => {
+    await request(app.getHttpServer())
+      .post('/project/inbound-webhooks?serverId=123456789012345678')
       .set('x-api-key', 'k')
       .send({ name: 'H', slug: 'hackathon', schema: {}, projectId: 'other' })
       .expect(400);
