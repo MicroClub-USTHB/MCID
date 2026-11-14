@@ -50,6 +50,7 @@ describe('buildOpenApiDocument', () => {
       'Monitoring',
       'Permissions',
       'Projects',
+      'Roles',
       'Servers',
       'Statistics',
       'Sync',
