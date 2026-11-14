@@ -2138,6 +2138,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{serverId}/members/{discordId}/roles/{roleId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Grant a project-created role to a member
+         * @description Grants a role to a member of the server. Only roles previously created by the calling project can be granted; attempts to grant executive, root, or unowned roles will return 403 Forbidden and record an audit log.
+         */
+        put: operations["ProjectRolesController_grantRole"];
+        post?: never;
+        /**
+         * Remove a project-created role from a member
+         * @description Removes a role from a member of the server. Only roles previously created by the calling project can be removed; attempts to remove executive, root, or unowned roles will return 403 Forbidden and record an audit log.
+         */
+        delete: operations["ProjectRolesController_removeRole"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{serverId}/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a Discord role for an event or project
+         * @description Creates a new Discord role with no permissions by default (0n bitfield) and records project ownership. The role can subsequently be granted and removed by the same project using the member role endpoints.
+         */
+        post: operations["ProjectRolesController_createRole"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/webhooks/{webhookId}": {
         parameters: {
             query?: never;
@@ -2754,6 +2798,24 @@ export interface components {
              * @example recruitment-2026
              */
             slug: string;
+        };
+        CreateProjectRoleDto: {
+            /**
+             * @description RGB color as integer (0 to 16777215)
+             * @example 3447003
+             */
+            color?: number;
+            /**
+             * @description Whether the role can be mentioned by anyone
+             * @default false
+             * @example false
+             */
+            mentionable: boolean;
+            /**
+             * @description Name of the Discord role to create
+             * @example Event Participant
+             */
+            name: string;
         };
         CreateServerDto: {
             /**
@@ -3404,6 +3466,43 @@ export interface components {
             };
             /** @example hackathon-2026 */
             slug: string;
+        };
+        ProjectRoleResponseDto: {
+            /**
+             * @description Role color as integer
+             * @example 3447003
+             */
+            color: number | null;
+            /**
+             * @description Timestamp when the role was created in MCID
+             * @example 2026-11-14T00:00:00.000Z
+             */
+            createdAt: string;
+            /**
+             * @description Discord snowflake ID of the created role
+             * @example 123456789012345678
+             */
+            id: string;
+            /**
+             * @description Whether the role is mentionable
+             * @example false
+             */
+            mentionable: boolean;
+            /**
+             * @description Name of the role
+             * @example Event Participant
+             */
+            name: string;
+            /**
+             * @description Role position in the hierarchy
+             * @example 1
+             */
+            position: number;
+            /**
+             * @description Discord server ID
+             * @example 987654321098765432
+             */
+            serverId: string;
         };
         ProjectRotatedSecretDto: {
             /**
@@ -9790,6 +9889,153 @@ export interface operations {
             };
             /** @description Project does not have access to this server. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProjectRolesController_grantRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Discord server ID */
+                serverId: string;
+                /** @description Discord member ID */
+                discordId: string;
+                /** @description Discord role ID to grant */
+                roleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Role granted successfully (or already held) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or invalid API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project lacks manage_roles scope, role was not created by this project, or role is protected */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Server, member, or role not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProjectRolesController_removeRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Discord server ID */
+                serverId: string;
+                /** @description Discord member ID */
+                discordId: string;
+                /** @description Discord role ID to remove */
+                roleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Role removed successfully (or not held) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or invalid API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project lacks manage_roles scope, role was not created by this project, or role is protected */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Server, member, or role not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProjectRolesController_createRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Discord server ID */
+                serverId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProjectRoleDto"];
+            };
+        };
+        responses: {
+            /** @description Role created successfully */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectRoleResponseDto"];
+                };
+            };
+            /** @description Invalid input payload */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or invalid API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project lacks manage_roles scope on this server */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Server not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
