@@ -26,7 +26,11 @@ export const SYNC_CHANGE_ACTIONS = [
 ] as const;
 export type SyncChangeAction = (typeof SYNC_CHANGE_ACTIONS)[number];
 
-export const PROJECT_SCOPES = ['read_members', 'check_permissions'] as const;
+export const PROJECT_SCOPES = [
+  'read_members',
+  'check_permissions',
+  'manage_roles',
+] as const;
 export type ProjectScope = (typeof PROJECT_SCOPES)[number];
 
 export const PROJECT_OPERATIONS = ['READ', 'SEND_MESSAGES', 'MANAGE_WEBHOOKS'] as const;
