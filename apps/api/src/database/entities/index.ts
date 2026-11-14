@@ -40,6 +40,7 @@ export * from './inbound-webhook-settings.entity';
 export * from './app-settings.entity';
 export * from './admin-role-access.entity';
 export * from './admin-member-access.entity';
+export * from './project-created-role.entity';
 
 export function transaction(_arg0: (tx: unknown) => Promise<unknown>) {
   throw new Error('Function not implemented.');

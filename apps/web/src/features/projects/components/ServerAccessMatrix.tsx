@@ -34,6 +34,7 @@ const SCOPE_LABELS: Record<ProjectScope, string> = {
   check_permissions: 'Check permissions',
   read_inbound_submissions: 'Read inbound submissions',
   manage_inbound_webhooks: 'Manage inbound webhooks',
+  manage_roles: 'Manage roles',
 };
 
 export interface ServerAccessChange {
