@@ -921,6 +921,34 @@
         ],
         "type": "object"
       },
+      "CreateProjectRoleDto": {
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "description": "RGB color as integer (0 to 16777215)",
+            "example": 3447003,
+            "maximum": 16777215,
+            "minimum": 0,
+            "type": "number"
+          },
+          "mentionable": {
+            "default": false,
+            "description": "Whether the role can be mentioned by anyone",
+            "example": false,
+            "type": "boolean"
+          },
+          "name": {
+            "description": "Name of the Discord role to create",
+            "example": "Event Participant",
+            "maxLength": 100,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
       "CreateServerDto": {
         "additionalProperties": false,
         "properties": {
@@ -2111,6 +2139,57 @@
           "slug",
           "active",
           "schema",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "ProjectRoleResponseDto": {
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "description": "Role color as integer",
+            "example": 3447003,
+            "nullable": true,
+            "type": "number"
+          },
+          "createdAt": {
+            "description": "Timestamp when the role was created in MCID",
+            "example": "2026-11-14T00:00:00.000Z",
+            "type": "string"
+          },
+          "id": {
+            "description": "Discord snowflake ID of the created role",
+            "example": "123456789012345678",
+            "type": "string"
+          },
+          "mentionable": {
+            "description": "Whether the role is mentionable",
+            "example": false,
+            "type": "boolean"
+          },
+          "name": {
+            "description": "Name of the role",
+            "example": "Event Participant",
+            "type": "string"
+          },
+          "position": {
+            "description": "Role position in the hierarchy",
+            "example": 1,
+            "type": "number"
+          },
+          "serverId": {
+            "description": "Discord server ID",
+            "example": "987654321098765432",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "serverId",
+          "name",
+          "color",
+          "mentionable",
+          "position",
           "createdAt"
         ],
         "type": "object"
@@ -10964,6 +11043,187 @@
         "summary": "Get all effective permissions of a member in a server",
         "tags": [
           "Members"
+        ]
+      }
+    },
+    "/api/servers/{serverId}/members/{discordId}/roles/{roleId}": {
+      "delete": {
+        "description": "Removes a role from a member of the server. Only roles previously created by the calling project can be removed; attempts to remove executive, root, or unowned roles will return 403 Forbidden and record an audit log.",
+        "operationId": "ProjectRolesController_removeRole",
+        "parameters": [
+          {
+            "description": "Discord server ID",
+            "in": "path",
+            "name": "serverId",
+            "required": true,
+            "schema": {
+              "example": "987654321098765432",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Discord member ID",
+            "in": "path",
+            "name": "discordId",
+            "required": true,
+            "schema": {
+              "example": "123456789012345678",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Discord role ID to remove",
+            "in": "path",
+            "name": "roleId",
+            "required": true,
+            "schema": {
+              "example": "555666777888999000",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Role removed successfully (or not held)"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "description": "Project lacks manage_roles scope, role was not created by this project, or role is protected"
+          },
+          "404": {
+            "description": "Server, member, or role not found"
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ],
+        "summary": "Remove a project-created role from a member",
+        "tags": [
+          "Roles"
+        ]
+      },
+      "put": {
+        "description": "Grants a role to a member of the server. Only roles previously created by the calling project can be granted; attempts to grant executive, root, or unowned roles will return 403 Forbidden and record an audit log.",
+        "operationId": "ProjectRolesController_grantRole",
+        "parameters": [
+          {
+            "description": "Discord server ID",
+            "in": "path",
+            "name": "serverId",
+            "required": true,
+            "schema": {
+              "example": "987654321098765432",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Discord member ID",
+            "in": "path",
+            "name": "discordId",
+            "required": true,
+            "schema": {
+              "example": "123456789012345678",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Discord role ID to grant",
+            "in": "path",
+            "name": "roleId",
+            "required": true,
+            "schema": {
+              "example": "555666777888999000",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Role granted successfully (or already held)"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "description": "Project lacks manage_roles scope, role was not created by this project, or role is protected"
+          },
+          "404": {
+            "description": "Server, member, or role not found"
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ],
+        "summary": "Grant a project-created role to a member",
+        "tags": [
+          "Roles"
+        ]
+      }
+    },
+    "/api/servers/{serverId}/roles": {
+      "post": {
+        "description": "Creates a new Discord role with no permissions by default (0n bitfield) and records project ownership. The role can subsequently be granted and removed by the same project using the member role endpoints.",
+        "operationId": "ProjectRolesController_createRole",
+        "parameters": [
+          {
+            "description": "Discord server ID",
+            "in": "path",
+            "name": "serverId",
+            "required": true,
+            "schema": {
+              "example": "987654321098765432",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectRoleDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectRoleResponseDto"
+                }
+              }
+            },
+            "description": "Role created successfully"
+          },
+          "400": {
+            "description": "Invalid input payload"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "description": "Project lacks manage_roles scope on this server"
+          },
+          "404": {
+            "description": "Server not found"
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ],
+        "summary": "Create a Discord role for an event or project",
+        "tags": [
+          "Roles"
         ]
       }
     },
