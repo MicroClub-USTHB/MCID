@@ -1,8 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../database/database.module';
 import * as schema from '../../database/entities';
+
+export type Executor = Pick<NodePgDatabase<typeof schema>, 'select' | 'insert'>;
 
 @Injectable()
 export class ProjectRolesRepository {
@@ -11,12 +13,62 @@ export class ProjectRolesRepository {
     private readonly db: NodePgDatabase<typeof schema>,
   ) {}
 
-  async recordCreatedRole(params: {
-    projectId: string;
-    roleId: string;
-    serverId: string;
-  }): Promise<typeof schema.projectCreatedRoles.$inferSelect> {
-    const [row] = await this.db
+  /**
+   * Runs `fn` in a transaction holding a lock on one project, server and role
+   * name, across every API process, so a retry waits for the first call and
+   * finds its role. `fn` must use the transaction it is given: the lock holds
+   * a pooled connection while Discord answers.
+   */
+  async withCreateLock<T>(
+    projectId: string,
+    serverId: string,
+    name: string,
+    fn: (tx: Executor) => Promise<T>,
+  ): Promise<T> {
+    const key = `project-role:${projectId}:${serverId}:${name}`;
+    return this.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`,
+      );
+      return fn(tx);
+    });
+  }
+
+  /** The role this project already created on this server under `name`. */
+  async findOwnedRoleByName(
+    projectId: string,
+    serverId: string,
+    name: string,
+    executor: Executor = this.db,
+  ): Promise<typeof schema.roles.$inferSelect | null> {
+    const [row] = await executor
+      .select({ role: schema.roles })
+      .from(schema.projectCreatedRoles)
+      .innerJoin(
+        schema.roles,
+        eq(schema.roles.id, schema.projectCreatedRoles.roleId),
+      )
+      .where(
+        and(
+          eq(schema.projectCreatedRoles.projectId, projectId),
+          eq(schema.projectCreatedRoles.serverId, serverId),
+          eq(schema.roles.name, name),
+        ),
+      )
+      .limit(1);
+
+    return row?.role ?? null;
+  }
+
+  async recordCreatedRole(
+    params: {
+      projectId: string;
+      roleId: string;
+      serverId: string;
+    },
+    executor: Executor = this.db,
+  ): Promise<typeof schema.projectCreatedRoles.$inferSelect> {
+    const [row] = await executor
       .insert(schema.projectCreatedRoles)
       .values({
         projectId: params.projectId,

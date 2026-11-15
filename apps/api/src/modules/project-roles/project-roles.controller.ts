@@ -53,7 +53,9 @@ export class ProjectRolesController {
     description:
       'Creates a new Discord role with no permissions by default (0n bitfield) ' +
       'and records project ownership. The role can subsequently be granted and removed ' +
-      'by the same project using the member role endpoints.',
+      'by the same project using the member role endpoints. A call with a name the ' +
+      'project already created on this server returns that role unchanged instead of ' +
+      'creating a second one, so a retry is safe.',
   })
   @ApiParam({
     name: 'serverId',
@@ -61,7 +63,8 @@ export class ProjectRolesController {
     example: '987654321098765432',
   })
   @ApiCreatedResponse({
-    description: 'Role created successfully',
+    description:
+      'Role created, or the role this project already created under that name',
     type: ProjectRoleResponseDto,
   })
   @ApiBadRequestResponse({ description: 'Invalid input payload' })

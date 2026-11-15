@@ -7,11 +7,12 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { Guild } from 'discord.js';
 import { AuditService } from '../audit/audit.service';
 import { DiscordService } from '../discord/discord.service';
 import { PermissionCacheService } from '../permissions/permission-cache.service';
 import { ServersRepository } from '../servers/servers.repository';
-import { ProjectRolesRepository } from './project-roles.repository';
+import { Executor, ProjectRolesRepository } from './project-roles.repository';
 import { CreateProjectRoleDto } from './dto/create-project-role.dto';
 import { ProjectRoleResponseDto } from './dto/project-role-response.dto';
 import * as schema from '../../database/entities';
@@ -39,55 +40,49 @@ export class ProjectRolesService {
       throw new NotFoundException(`Server ${serverId} not found`);
     }
 
-    // Explicitly create role with 0 permissions
-    const createdRole = await guild.roles.create({
-      name: dto.name,
-      color: dto.color,
-      mentionable: dto.mentionable ?? false,
-      permissions: 0n,
-      reason: `Created by project ${projectId}`,
-    });
-
-    // Derive hierarchy level consistent with RoleSyncService
-    const positions = [...guild.roles.cache.values()].map((r) => r.position);
-    const maxPosition = positions.length
-      ? Math.max(...positions)
-      : createdRole.position;
-    const hierarchyLevel = maxPosition - createdRole.position + 1;
-
-    // Upsert role in local database
-    const savedRole = await this.serversRepository.upsertRole({
-      id: createdRole.id,
-      serverId,
-      name: createdRole.name,
-      color: createdRole.color,
-      hoist: createdRole.hoist,
-      position: createdRole.position,
-      managed: createdRole.managed,
-      mentionable: createdRole.mentionable,
-      permissionsBits: 0n,
-      hierarchyLevel,
-    });
-
-    // Record ownership
-    await this.projectRolesRepository.recordCreatedRole({
-      projectId,
-      roleId: createdRole.id,
-      serverId,
-    });
-
-    this.auditService.logAction({
-      actionType: 'role',
-      action: 'project_role_created',
-      entityType: 'role',
-      entityId: createdRole.id,
-      details: {
+    // A retry (or a second call) with the same name returns the role the
+    // project already created instead of a second Discord role.
+    const { savedRole, created } =
+      await this.projectRolesRepository.withCreateLock(
         projectId,
         serverId,
-        roleName: createdRole.name,
-      },
-      severity: 'info',
-    });
+        dto.name,
+        async (tx) => {
+          const existing =
+            await this.projectRolesRepository.findOwnedRoleByName(
+              projectId,
+              serverId,
+              dto.name,
+              tx,
+            );
+          if (existing) return { savedRole: existing, created: false };
+          return {
+            savedRole: await this.createOnDiscord(
+              projectId,
+              serverId,
+              guild,
+              dto,
+              tx,
+            ),
+            created: true,
+          };
+        },
+      );
+
+    if (created) {
+      this.auditService.logAction({
+        actionType: 'role',
+        action: 'project_role_created',
+        entityType: 'role',
+        entityId: savedRole.id,
+        details: {
+          projectId,
+          serverId,
+          roleName: savedRole.name,
+        },
+        severity: 'info',
+      });
+    }
 
     return {
       id: savedRole.id,
@@ -98,6 +93,65 @@ export class ProjectRolesService {
       position: savedRole.position ?? 0,
       createdAt: savedRole.createdAt.toISOString(),
     };
+  }
+
+  /**
+   * Creates the role with no permissions and records it in `tx`. A role the
+   * project cannot see in MCID could never be granted or removed, so when
+   * recording fails the Discord role is deleted again.
+   */
+  private async createOnDiscord(
+    projectId: string,
+    serverId: string,
+    guild: Guild,
+    dto: CreateProjectRoleDto,
+    tx: Executor,
+  ): Promise<typeof schema.roles.$inferSelect> {
+    const createdRole = await guild.roles.create({
+      name: dto.name,
+      color: dto.color,
+      mentionable: dto.mentionable ?? false,
+      permissions: 0n,
+      reason: `Created by project ${projectId}`,
+    });
+
+    try {
+      // Derive hierarchy level consistent with RoleSyncService
+      const positions = [...guild.roles.cache.values()].map((r) => r.position);
+      const maxPosition = positions.length
+        ? Math.max(...positions)
+        : createdRole.position;
+
+      const savedRole = await this.serversRepository.upsertRole(
+        {
+          id: createdRole.id,
+          serverId,
+          name: createdRole.name,
+          color: createdRole.color,
+          hoist: createdRole.hoist,
+          position: createdRole.position,
+          managed: createdRole.managed,
+          mentionable: createdRole.mentionable,
+          permissionsBits: 0n,
+          hierarchyLevel: maxPosition - createdRole.position + 1,
+        },
+        tx,
+      );
+      await this.projectRolesRepository.recordCreatedRole(
+        { projectId, roleId: createdRole.id, serverId },
+        tx,
+      );
+      return savedRole;
+    } catch (error) {
+      await createdRole
+        .delete('MCID could not record the role')
+        .catch((deleteError: unknown) =>
+          this.logger.error(
+            `Role ${createdRole.id} was created on Discord but could not be recorded or deleted: ${String(deleteError)}`,
+          ),
+        );
+      throw error;
+    }
   }
 
   async grantRoleToMember(

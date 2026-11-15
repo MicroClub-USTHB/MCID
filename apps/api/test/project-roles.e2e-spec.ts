@@ -39,6 +39,7 @@ describeIf(
     let getGuildByIdSpy: jest.SpyInstance;
     let addRoleSpy: jest.SpyInstance;
     let removeRoleSpy: jest.SpyInstance;
+    let rolesCreate: jest.Mock;
 
     beforeAll(async () => {
       enableNock();
@@ -82,6 +83,23 @@ describeIf(
         scopes: ['read_members'],
       });
 
+      // Each Discord role gets a new ID; the delay widens the window in
+      // which two concurrent calls could both create one.
+      let created = 0;
+      rolesCreate = jest.fn().mockImplementation(async (opts) => {
+        created += 1;
+        await new Promise((r) => setTimeout(r, 50));
+        return {
+          id: `77700000000000000${created}`,
+          name: opts.name,
+          color: opts.color ?? 0,
+          hoist: false,
+          position: 10,
+          managed: false,
+          mentionable: opts.mentionable ?? false,
+        };
+      });
+
       // Spy Discord methods
       getGuildByIdSpy = jest
         .spyOn(DiscordService.prototype, 'getGuildById')
@@ -94,17 +112,7 @@ describeIf(
                 ['bot-role', { position: 50 }],
                 [execRoleId, { position: 100 }],
               ]),
-              create: jest.fn().mockImplementation((opts) =>
-                Promise.resolve({
-                  id: '777000000000000001',
-                  name: opts.name,
-                  color: opts.color ?? 0,
-                  hoist: false,
-                  position: 10,
-                  managed: false,
-                  mentionable: opts.mentionable ?? false,
-                }),
-              ),
+              create: rolesCreate,
             },
             members: {
               me: {
@@ -195,6 +203,52 @@ describeIf(
           );
         expect(ownership).toBeDefined();
         expect(ownership.serverId).toBe(serverId);
+      });
+
+      it('returns the same role on a retry instead of creating a second one', async () => {
+        const create = () =>
+          request(app.getHttpServer())
+            .post(`/api/servers/${serverId}/roles`)
+            .set('X-API-Key', projectWithScope.apiKey)
+            .send({ name: 'Hackathon Staff' })
+            .expect(201);
+
+        const first = await create();
+        const retry = await create();
+
+        expect(retry.body).toEqual(first.body);
+        expect(rolesCreate).toHaveBeenCalledTimes(1);
+      });
+
+      it('creates one Discord role when two calls with the same name race', async () => {
+        const create = () =>
+          request(app.getHttpServer())
+            .post(`/api/servers/${serverId}/roles`)
+            .set('X-API-Key', projectWithScope.apiKey)
+            .send({ name: 'Hackathon Staff' })
+            .expect(201);
+
+        const [a, b] = await Promise.all([create(), create()]);
+
+        expect(a.body.id).toBe(b.body.id);
+        expect(rolesCreate).toHaveBeenCalledTimes(1);
+        const owned = await db
+          .select()
+          .from(projectCreatedRoles)
+          .where(eq(projectCreatedRoles.projectId, projectWithScope.id));
+        expect(owned).toHaveLength(1);
+      });
+
+      it('creates a second role for a different name', async () => {
+        for (const name of ['Hackathon Staff', 'Hackathon Jury']) {
+          await request(app.getHttpServer())
+            .post(`/api/servers/${serverId}/roles`)
+            .set('X-API-Key', projectWithScope.apiKey)
+            .send({ name })
+            .expect(201);
+        }
+
+        expect(rolesCreate).toHaveBeenCalledTimes(2);
       });
     });
 

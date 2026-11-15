@@ -204,8 +204,9 @@ export class ServersRepository {
     roleData: Omit<typeof roles.$inferInsert, 'permissionsBits'> & {
       permissionsBits?: bigint;
     },
+    executor: Pick<databaseModule.DrizzleDB, 'insert'> = this.db,
   ): Promise<typeof roles.$inferSelect> {
-    const [row] = await this.db
+    const [row] = await executor
       .insert(roles)
       .values({
         ...roleData,

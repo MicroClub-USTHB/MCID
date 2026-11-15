@@ -16,6 +16,8 @@ import { ProjectRolesService } from './project-roles.service';
 describe('ProjectRolesService', () => {
   let service: ProjectRolesService;
   let projectRolesRepository: {
+    withCreateLock: jest.Mock;
+    findOwnedRoleByName: jest.Mock;
     recordCreatedRole: jest.Mock;
     isRoleCreatedByProject: jest.Mock;
     findRoleById: jest.Mock;
@@ -46,9 +48,15 @@ describe('ProjectRolesService', () => {
   const DISCORD_ID = '123456789012345678';
   const ROLE_ID = 'role-111';
   const EXEC_ROLE_ID = 'role-executive';
+  const TX = { tx: true };
 
   beforeEach(async () => {
     projectRolesRepository = {
+      withCreateLock: jest.fn(
+        (_p: string, _s: string, _n: string, fn: (tx: unknown) => unknown) =>
+          fn(TX),
+      ),
+      findOwnedRoleByName: jest.fn().mockResolvedValue(null),
       recordCreatedRole: jest.fn(),
       isRoleCreatedByProject: jest.fn(),
       findRoleById: jest.fn(),
@@ -160,13 +168,19 @@ describe('ProjectRolesService', () => {
           serverId: SERVER_ID,
           permissionsBits: 0n,
         }),
+        TX,
       );
 
-      expect(projectRolesRepository.recordCreatedRole).toHaveBeenCalledWith({
-        projectId: PROJECT_ID,
-        roleId: 'new-role-id',
-        serverId: SERVER_ID,
-      });
+      expect(projectRolesRepository.withCreateLock).toHaveBeenCalledWith(
+        PROJECT_ID,
+        SERVER_ID,
+        'Event Staff',
+        expect.any(Function),
+      );
+      expect(projectRolesRepository.recordCreatedRole).toHaveBeenCalledWith(
+        { projectId: PROJECT_ID, roleId: 'new-role-id', serverId: SERVER_ID },
+        TX,
+      );
 
       expect(auditService.logAction).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -178,6 +192,81 @@ describe('ProjectRolesService', () => {
 
       expect(result.id).toBe('new-role-id');
       expect(result.name).toBe('Event Staff');
+    });
+
+    it('returns the role the project already created under that name, without a second Discord role', async () => {
+      const create = jest.fn();
+      discordService.getGuildById.mockResolvedValue({
+        roles: { cache: new Map(), create },
+      });
+      projectRolesRepository.findOwnedRoleByName.mockResolvedValue({
+        id: 'existing-role-id',
+        serverId: SERVER_ID,
+        name: 'Event Staff',
+        color: 0,
+        mentionable: false,
+        position: 3,
+        createdAt: new Date('2026-11-14T00:00:00Z'),
+      });
+
+      const result = await service.createRole(PROJECT_ID, SERVER_ID, {
+        name: 'Event Staff',
+      });
+
+      expect(result.id).toBe('existing-role-id');
+      expect(projectRolesRepository.findOwnedRoleByName).toHaveBeenCalledWith(
+        PROJECT_ID,
+        SERVER_ID,
+        'Event Staff',
+        TX,
+      );
+      expect(create).not.toHaveBeenCalled();
+      expect(auditService.logAction).not.toHaveBeenCalled();
+    });
+
+    it('deletes the Discord role again when it cannot be recorded', async () => {
+      const remove = jest.fn().mockResolvedValue(undefined);
+      discordService.getGuildById.mockResolvedValue({
+        roles: {
+          cache: new Map(),
+          create: jest.fn().mockResolvedValue({
+            id: 'new-role-id',
+            name: 'Event Staff',
+            position: 1,
+            delete: remove,
+          }),
+        },
+      });
+      serversRepository.upsertRole.mockResolvedValue({ id: 'new-role-id' });
+      const failure = new Error('db down');
+      projectRolesRepository.recordCreatedRole.mockRejectedValue(failure);
+
+      await expect(
+        service.createRole(PROJECT_ID, SERVER_ID, { name: 'Event Staff' }),
+      ).rejects.toBe(failure);
+
+      expect(remove).toHaveBeenCalled();
+      expect(auditService.logAction).not.toHaveBeenCalled();
+    });
+
+    it('still reports the recording error when the Discord delete also fails', async () => {
+      discordService.getGuildById.mockResolvedValue({
+        roles: {
+          cache: new Map(),
+          create: jest.fn().mockResolvedValue({
+            id: 'new-role-id',
+            name: 'Event Staff',
+            position: 1,
+            delete: jest.fn().mockRejectedValue(new Error('discord down')),
+          }),
+        },
+      });
+      const failure = new Error('db down');
+      serversRepository.upsertRole.mockRejectedValue(failure);
+
+      await expect(
+        service.createRole(PROJECT_ID, SERVER_ID, { name: 'Event Staff' }),
+      ).rejects.toBe(failure);
     });
   });
 
