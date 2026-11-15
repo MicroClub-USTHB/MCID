@@ -67,7 +67,7 @@ Removes a role from a member of the server. Only roles previously created by the
 
 <Endpoint method="POST" path="/api/servers/{serverId}/roles" />
 
-Creates a new Discord role with no permissions by default (0n bitfield) and records project ownership. The role can subsequently be granted and removed by the same project using the member role endpoints.
+Creates a new Discord role with no permissions by default (0n bitfield) and records project ownership. The role can subsequently be granted and removed by the same project using the member role endpoints. A call with a name the project already created on this server returns that role unchanged instead of creating a second one, so a retry is safe.
 
 **Authentication:** Project API key (`X-API-Key` header)
 
@@ -83,7 +83,7 @@ Creates a new Discord role with no permissions by default (0n bitfield) and reco
 
 | Status | Description | Body |
 | --- | --- | --- |
-| `201` | Role created successfully | `ProjectRoleResponseDto` |
+| `201` | Role created, or the role this project already created under that name | `ProjectRoleResponseDto` |
 | `400` | Invalid input payload |  |
 | `401` | Missing or invalid API key |  |
 | `403` | Project lacks manage_roles scope on this server |  |

@@ -2173,7 +2173,7 @@ export interface paths {
         put?: never;
         /**
          * Create a Discord role for an event or project
-         * @description Creates a new Discord role with no permissions by default (0n bitfield) and records project ownership. The role can subsequently be granted and removed by the same project using the member role endpoints.
+         * @description Creates a new Discord role with no permissions by default (0n bitfield) and records project ownership. The role can subsequently be granted and removed by the same project using the member role endpoints. A call with a name the project already created on this server returns that role unchanged instead of creating a second one, so a retry is safe.
          */
         post: operations["ProjectRolesController_createRole"];
         delete?: never;
@@ -10032,7 +10032,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Role created successfully */
+            /** @description Role created, or the role this project already created under that name */
             201: {
                 headers: {
                     [name: string]: unknown;
