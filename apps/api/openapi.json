@@ -2222,7 +2222,8 @@
                 "read_members",
                 "check_permissions",
                 "read_inbound_submissions",
-                "manage_inbound_webhooks"
+                "manage_inbound_webhooks",
+                "manage_roles"
               ],
               "type": "string"
             },
@@ -2706,7 +2707,8 @@
                 "read_members",
                 "check_permissions",
                 "read_inbound_submissions",
-                "manage_inbound_webhooks"
+                "manage_inbound_webhooks",
+                "manage_roles"
               ],
               "type": "string"
             },
@@ -5738,7 +5740,8 @@
                 "read_members",
                 "check_permissions",
                 "read_inbound_submissions",
-                "manage_inbound_webhooks"
+                "manage_inbound_webhooks",
+                "manage_roles"
               ],
               "type": "string"
             }
@@ -5828,7 +5831,8 @@
                 "read_members",
                 "check_permissions",
                 "read_inbound_submissions",
-                "manage_inbound_webhooks"
+                "manage_inbound_webhooks",
+                "manage_roles"
               ],
               "type": "string"
             }
@@ -6305,7 +6309,8 @@
                 "read_members",
                 "check_permissions",
                 "read_inbound_submissions",
-                "manage_inbound_webhooks"
+                "manage_inbound_webhooks",
+                "manage_roles"
               ],
               "type": "string"
             }
@@ -11094,6 +11099,12 @@
           },
           "404": {
             "description": "Server, member, or role not found"
+          },
+          "502": {
+            "description": "Discord rejected the role change"
+          },
+          "503": {
+            "description": "Discord is unavailable"
           }
         },
         "security": [
@@ -11153,6 +11164,12 @@
           },
           "404": {
             "description": "Server, member, or role not found"
+          },
+          "502": {
+            "description": "Discord rejected the role change"
+          },
+          "503": {
+            "description": "Discord is unavailable"
           }
         },
         "security": [

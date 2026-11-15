@@ -29,6 +29,8 @@ Grants a role to a member of the server. Only roles previously created by the ca
 | `401` | Missing or invalid API key |  |
 | `403` | Project lacks manage_roles scope, role was not created by this project, or role is protected |  |
 | `404` | Server, member, or role not found |  |
+| `502` | Discord rejected the role change |  |
+| `503` | Discord is unavailable |  |
 
 <SwaggerLink tag="Roles" operationId="ProjectRolesController_grantRole" />
 
@@ -56,6 +58,8 @@ Removes a role from a member of the server. Only roles previously created by the
 | `401` | Missing or invalid API key |  |
 | `403` | Project lacks manage_roles scope, role was not created by this project, or role is protected |  |
 | `404` | Server, member, or role not found |  |
+| `502` | Discord rejected the role change |  |
+| `503` | Discord is unavailable |  |
 
 <SwaggerLink tag="Roles" operationId="ProjectRolesController_removeRole" />
 

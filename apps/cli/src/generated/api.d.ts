@@ -3519,7 +3519,7 @@ export interface components {
              *       "check_permissions"
              *     ]
              */
-            scopes?: ("read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks")[];
+            scopes?: ("read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks" | "manage_roles")[];
             /** @example 123456789012345678 */
             serverId: string;
         };
@@ -3763,7 +3763,7 @@ export interface components {
              *       "check_permissions"
              *     ]
              */
-            scopes?: ("read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks")[];
+            scopes?: ("read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks" | "manage_roles")[];
         };
         SettingValueDto: {
             /** @description Whether PATCH /api/admin/settings accepts it */
@@ -5596,7 +5596,7 @@ export interface operations {
                 /** @description Filter by server ID. */
                 serverId?: string;
                 /** @description Filter by scope. */
-                scope?: "read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks";
+                scope?: "read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks" | "manage_roles";
                 /** @description Filter by project name (partial, case-insensitive). */
                 projectName?: string;
             };
@@ -5642,7 +5642,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Filter projects by required scope. */
-                scope?: "read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks";
+                scope?: "read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks" | "manage_roles";
                 /** @description Filter by project active status. */
                 isActive?: boolean;
             };
@@ -6109,7 +6109,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Filter servers by required scope. */
-                scope?: "read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks";
+                scope?: "read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks" | "manage_roles";
             };
             header?: never;
             path: {
@@ -9940,6 +9940,20 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Discord rejected the role change */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Discord is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     ProjectRolesController_removeRole: {
@@ -9981,6 +9995,20 @@ export interface operations {
             };
             /** @description Server, member, or role not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Discord rejected the role change */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Discord is unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
