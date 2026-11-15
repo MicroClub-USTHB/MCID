@@ -19,6 +19,7 @@ export enum ProjectScope {
   CHECK_PERMISSIONS = 'check_permissions',
   READ_INBOUND_SUBMISSIONS = 'read_inbound_submissions',
   MANAGE_INBOUND_WEBHOOKS = 'manage_inbound_webhooks',
+  MANAGE_ROLES = 'manage_roles',
 }
 
 export class ProjectServerAccessDto {

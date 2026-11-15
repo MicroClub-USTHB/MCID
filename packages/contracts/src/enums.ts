@@ -29,6 +29,8 @@ export type SyncChangeAction = (typeof SYNC_CHANGE_ACTIONS)[number];
 export const PROJECT_SCOPES = [
   'read_members',
   'check_permissions',
+  'read_inbound_submissions',
+  'manage_inbound_webhooks',
   'manage_roles',
 ] as const;
 export type ProjectScope = (typeof PROJECT_SCOPES)[number];

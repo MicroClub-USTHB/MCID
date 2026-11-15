@@ -498,6 +498,21 @@ describeIf('/api/admin/projects (e2e)', () => {
       });
     });
 
+    it('grants the manage_roles scope', async () => {
+      const create = await request(app.getHttpServer())
+        .post(BASE)
+        .set('Authorization', auth())
+        .send({ name: 'Role Manager Project' });
+
+      const res = await request(app.getHttpServer())
+        .put(`${BASE}/${create.body.project.id}/servers/${adminCtx.serverId}`)
+        .set('Authorization', auth())
+        .send({ scopes: ['manage_roles'] })
+        .expect(200);
+
+      expect(res.body.scopes).toEqual(['manage_roles']);
+    });
+
     it('returns 404 for unknown project', async () => {
       await request(app.getHttpServer())
         .put(

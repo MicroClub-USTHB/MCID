@@ -69,6 +69,7 @@ A valid key proves who you are. It grants nothing on its own. An admin gives a p
 | `check_permissions` | The permission endpoints under `/api/permissions`: `POST /check`, `POST /check-batch` and `GET /{serverId}/{discordId}`. |
 | `manage_inbound_webhooks` | `POST /api/project/inbound-webhooks`, with the server named in the `serverId` query parameter. |
 | `read_inbound_submissions` | `GET /api/project/inbound-webhooks/{id}/submissions`, with the server named in the `serverId` query parameter. |
+| `manage_roles` | `POST /api/servers/{serverId}/roles`, and `PUT` and `DELETE /api/servers/{serverId}/members/{discordId}/roles/{roleId}`. A project grants or removes only the roles it created, never a root role or one at or above the bot's highest role; a refused attempt answers 403 and is audited. |
 
 When an admin grants access without choosing scopes, the project gets all of them.
 
