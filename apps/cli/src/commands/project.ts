@@ -26,7 +26,12 @@ import {
 import { addListPaging, pageRows, type ListPaging } from '../lib/help.js';
 import { promptConfirm, promptInput } from '../lib/prompts.js';
 import { resolveProject, resolveServer } from '../lib/resolver.js';
-import { PROJECT_OPERATIONS, PROJECT_SCOPES } from '@mcid/contracts';
+import {
+  DEFAULT_PROJECT_SCOPES,
+  OPT_IN_PROJECT_SCOPES,
+  PROJECT_OPERATIONS,
+  PROJECT_SCOPES,
+} from '@mcid/contracts';
 import { colors } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
 
@@ -176,7 +181,7 @@ export function registerProjectCommand(program: Command): void {
     .option('--server <servers...>', 'Grant the project access to these servers')
     .option(
       '--scope <scopes...>',
-      `Scopes for --server grants (${PROJECT_SCOPES.join(', ')}; default: all)`,
+      `Scopes for --server grants (${PROJECT_SCOPES.join(', ')}; default: all but ${OPT_IN_PROJECT_SCOPES.join(', ')})`,
     )
     .option('--env-out <path>', 'Write the .env block to a file')
     .option('--force', 'Overwrite existing MCID_API_KEY in env file')
@@ -202,7 +207,7 @@ export function registerProjectCommand(program: Command): void {
           let name = options.name;
           let redirectUris = options.redirectUri;
           let serverArgs = options.server;
-          const scopes = options.scope ?? [...PROJECT_SCOPES];
+          const scopes = options.scope ?? [...DEFAULT_PROJECT_SCOPES];
           for (const scope of scopes) {
             if (!(PROJECT_SCOPES as readonly string[]).includes(scope)) {
               throw new CliError(

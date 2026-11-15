@@ -2,7 +2,6 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { PROJECT_SCOPES } from '@mcid/contracts';
 import { configPath } from '../config.js';
 import { cleanupCliTest, json, runCli } from '../test-support/cli-harness.js';
 import { baseRoutes, MAIN_SERVER_ID, PROJECT_ID, projectRecord } from '../test-support/fixtures.js';
@@ -126,7 +125,15 @@ describe('project create', () => {
     expect(result.exitCode).toBe(0);
     const grant = result.requests.find((r) => r.method === 'PUT');
     expect(grant?.path).toBe(`/admin/projects/${projectRecord.id}/servers/${MAIN_SERVER_ID}`);
-    expect(grant?.body).toEqual({ scopes: [...PROJECT_SCOPES] });
+    // manage_roles is opt-in: a grant without --scope leaves it out.
+    expect(grant?.body).toEqual({
+      scopes: [
+        'read_members',
+        'check_permissions',
+        'read_inbound_submissions',
+        'manage_inbound_webhooks',
+      ],
+    });
   });
 
   it('resolves the servers before creating anything', async () => {

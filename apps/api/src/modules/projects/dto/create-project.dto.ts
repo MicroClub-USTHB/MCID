@@ -13,6 +13,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { OPT_IN_PROJECT_SCOPES } from '@mcid/contracts';
 
 export enum ProjectScope {
   READ_MEMBERS = 'read_members',
@@ -22,6 +23,11 @@ export enum ProjectScope {
   MANAGE_ROLES = 'manage_roles',
 }
 
+/** What a grant gets when it names no scopes: every scope except the opt-in ones. */
+export const DEFAULT_PROJECT_SCOPES = Object.values(ProjectScope).filter(
+  (scope) => !(OPT_IN_PROJECT_SCOPES as readonly string[]).includes(scope),
+);
+
 export class ProjectServerAccessDto {
   @ApiProperty({ example: '123456789012345678' })
   @IsString()
@@ -29,7 +35,7 @@ export class ProjectServerAccessDto {
 
   @ApiPropertyOptional({
     description:
-      'Scopes to grant for this server. If omitted, all available scopes are granted.',
+      'Scopes to grant for this server. If omitted, every scope except the opt-in manage_roles is granted.',
     example: ['read_members', 'check_permissions'],
     enum: ProjectScope,
     isArray: true,
@@ -123,7 +129,7 @@ export class CreateProjectDto {
 
   @ApiPropertyOptional({
     description:
-      'Server access configurations. If omitted, the project is automatically granted all available scopes to all servers where is_main = true.',
+      'Server access configurations. If omitted, the project is automatically granted every scope except the opt-in manage_roles on all servers where is_main = true.',
     type: [ProjectServerAccessDto],
   })
   @IsArray()
