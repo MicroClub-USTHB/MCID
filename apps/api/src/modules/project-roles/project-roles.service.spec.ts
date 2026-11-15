@@ -73,8 +73,8 @@ describe('ProjectRolesService', () => {
     configService = {
       get: jest.fn((key: string) => {
         if (key === 'discord.executiveRoleId') return EXEC_ROLE_ID;
-        if (key === 'discord.devLeadsRoleId') return 'role-dev-lead';
-        if (key === 'discord.itLeadsRoleId') return 'role-it-lead';
+        if (key === 'discord.devLeadRoleId') return 'role-dev-lead';
+        if (key === 'discord.itLeadRoleId') return 'role-it-lead';
         return null;
       }),
     };

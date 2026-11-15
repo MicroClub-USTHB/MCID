@@ -254,10 +254,10 @@ export class ProjectRolesService {
       'discord.executiveRoleId',
     );
     const devLeadsRoleId = this.configService.get<string>(
-      'discord.devLeadsRoleId',
+      'discord.devLeadRoleId',
     );
     const itLeadsRoleId = this.configService.get<string>(
-      'discord.itLeadsRoleId',
+      'discord.itLeadRoleId',
     );
 
     if (
