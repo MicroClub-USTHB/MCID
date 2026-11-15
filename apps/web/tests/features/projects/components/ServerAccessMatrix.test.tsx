@@ -74,7 +74,7 @@ describe('ServerAccessMatrix', () => {
     );
   });
 
-  it('grants a server with default READ + all scopes when toggled on', async () => {
+  it('grants a server with default READ + every scope but the opt-in manage_roles when toggled on', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const onChange = vi.fn();
 
@@ -116,6 +116,27 @@ describe('ServerAccessMatrix', () => {
     await userEvent.click(screen.getByRole('switch', { name: 'Revoke access for Main' }));
 
     expect(onChange).toHaveBeenCalledWith('srv_1', { revoke: true });
+  });
+
+  it('lets the admin opt in to manage_roles', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const onChange = vi.fn();
+
+    render(
+      <ServerAccessMatrix
+        projectId="proj_1"
+        servers={servers}
+        accessMap={accessMap(grantedEntry)}
+        onChange={onChange}
+      />
+    );
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Manage roles on Main' }));
+
+    expect(onChange).toHaveBeenCalledWith('srv_1', {
+      operations: grantedOps,
+      scopes: ['read_members', 'manage_roles'],
+    });
   });
 
   it('emits a scope change alongside the current operations', async () => {

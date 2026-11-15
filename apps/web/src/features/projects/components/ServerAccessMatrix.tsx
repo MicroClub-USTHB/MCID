@@ -1,5 +1,6 @@
 'use client';
 
+import { DEFAULT_PROJECT_SCOPES } from '@mcid/contracts';
 import type { ServerListItemDto } from '@/features/servers/types';
 import type {
   AccessMatrixEntry,
@@ -16,6 +17,7 @@ const PROJECT_SCOPES: readonly ProjectScope[] = [
   'check_permissions',
   'read_inbound_submissions',
   'manage_inbound_webhooks',
+  'manage_roles',
 ];
 const PROJECT_OPERATIONS: readonly ProjectOperation[] = [
   'READ',
@@ -139,7 +141,8 @@ function ServerAccessMatrix({
               } else {
                 onChange(server.id, {
                   operations: { ...DEFAULT_OPERATIONS },
-                  scopes: [...PROJECT_SCOPES],
+                  // Opt-in scopes such as manage_roles stay unticked.
+                  scopes: [...DEFAULT_PROJECT_SCOPES],
                 });
               }
             }
