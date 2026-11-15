@@ -1,8 +1,10 @@
 import {
+  BadGatewayException,
   ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AuditService } from '../audit/audit.service';
@@ -119,21 +121,7 @@ export class ProjectRolesService {
       role,
     );
 
-    const success = await this.discordService.addRoleToMember(
-      serverId,
-      discordId,
-      roleId,
-    );
-
-    if (!success) {
-      const member = await this.discordService.getGuildMember(
-        serverId,
-        discordId,
-      );
-      if (!member) {
-        throw new NotFoundException('Member not found on server');
-      }
-    }
+    await this.writeDiscordRole('addRoleToMember', serverId, discordId, roleId);
 
     await this.projectRolesRepository.assignRoleToMember(discordId, roleId);
     await this.permissionCache.invalidateMember(discordId);
@@ -169,21 +157,12 @@ export class ProjectRolesService {
       role,
     );
 
-    const success = await this.discordService.removeRoleFromMember(
+    await this.writeDiscordRole(
+      'removeRoleFromMember',
       serverId,
       discordId,
       roleId,
     );
-
-    if (!success) {
-      const member = await this.discordService.getGuildMember(
-        serverId,
-        discordId,
-      );
-      if (!member) {
-        throw new NotFoundException('Member not found on server');
-      }
-    }
 
     await this.projectRolesRepository.removeRoleFromMember(discordId, roleId);
     await this.permissionCache.invalidateMember(discordId);
@@ -234,19 +213,40 @@ export class ProjectRolesService {
       );
     }
 
-    // Bot hierarchy check
+    // Bot hierarchy check, on the live position; fail closed without Discord.
     const guild = await this.discordService.getGuildById(serverId);
-    if (guild) {
-      const botMember =
-        guild.members.me ?? (await guild.members.fetchMe().catch(() => null));
-      if (botMember && botMember.roles.highest) {
-        if ((role.position ?? 0) >= botMember.roles.highest.position) {
-          throw new ForbiddenException(
-            'Cannot grant or remove a role positioned higher than or equal to the bot highest role',
-          );
-        }
-      }
+    const botMember =
+      guild &&
+      (guild.members.me ?? (await guild.members.fetchMe().catch(() => null)));
+    if (!guild || !botMember) {
+      throw new ServiceUnavailableException('Discord is unavailable');
     }
+    const position =
+      guild.roles.cache.get(role.id)?.position ?? role.position ?? 0;
+    if (position >= botMember.roles.highest.position) {
+      throw new ForbiddenException(
+        'Cannot grant or remove a role positioned higher than or equal to the bot highest role',
+      );
+    }
+  }
+
+  /** Discord first: a rejected write is reported, never recorded as done. */
+  private async writeDiscordRole(
+    op: 'addRoleToMember' | 'removeRoleFromMember',
+    serverId: string,
+    discordId: string,
+    roleId: string,
+  ): Promise<void> {
+    if (await this.discordService[op](serverId, discordId, roleId)) return;
+
+    const member = await this.discordService.getGuildMember(
+      serverId,
+      discordId,
+    );
+    if (!member) {
+      throw new NotFoundException('Member not found on server');
+    }
+    throw new BadGatewayException('Discord rejected the role change');
   }
 
   private isProtectedRole(role: typeof schema.roles.$inferSelect): boolean {

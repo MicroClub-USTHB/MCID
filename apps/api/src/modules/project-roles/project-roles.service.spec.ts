@@ -1,4 +1,9 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  ForbiddenException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuditService } from '../audit/audit.service';
@@ -244,6 +249,7 @@ describe('ProjectRolesService', () => {
       projectRolesRepository.isRoleCreatedByProject.mockResolvedValue(true);
 
       discordService.getGuildById.mockResolvedValue({
+        roles: { cache: new Map() },
         members: {
           me: {
             roles: {
@@ -268,6 +274,7 @@ describe('ProjectRolesService', () => {
       projectRolesRepository.isRoleCreatedByProject.mockResolvedValue(true);
 
       discordService.getGuildById.mockResolvedValue({
+        roles: { cache: new Map() },
         members: {
           me: {
             roles: {
@@ -302,6 +309,77 @@ describe('ProjectRolesService', () => {
           severity: 'info',
         }),
       );
+    });
+  });
+
+  describe('grantRoleToMember guards', () => {
+    const ownedRole = (id = ROLE_ID, position = 5) => {
+      projectRolesRepository.findRoleById.mockResolvedValue({
+        id,
+        serverId: SERVER_ID,
+        isGlobal: false,
+        position,
+      });
+      projectRolesRepository.isRoleCreatedByProject.mockResolvedValue(true);
+    };
+    const guild = (botTop: number, live: Record<string, number> = {}) =>
+      discordService.getGuildById.mockResolvedValue({
+        roles: {
+          cache: new Map(
+            Object.entries(live).map(([id, position]) => [id, { position }]),
+          ),
+        },
+        members: { me: { roles: { highest: { position: botTop } } } },
+      });
+
+    it.each(['role-dev-lead', 'role-it-lead'])(
+      'refuses the root role %s even when the project owns it',
+      async (roleId) => {
+        ownedRole(roleId);
+        await expect(
+          service.grantRoleToMember(PROJECT_ID, SERVER_ID, DISCORD_ID, roleId),
+        ).rejects.toThrow(ForbiddenException);
+        expect(discordService.addRoleToMember).not.toHaveBeenCalled();
+      },
+    );
+
+    it('uses the live Discord position over the stored one', async () => {
+      ownedRole(ROLE_ID, 1);
+      guild(10, { [ROLE_ID]: 10 });
+      await expect(
+        service.grantRoleToMember(PROJECT_ID, SERVER_ID, DISCORD_ID, ROLE_ID),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('answers 503 and writes nothing when Discord is unavailable', async () => {
+      ownedRole();
+      discordService.getGuildById.mockResolvedValue(null);
+      await expect(
+        service.grantRoleToMember(PROJECT_ID, SERVER_ID, DISCORD_ID, ROLE_ID),
+      ).rejects.toThrow(ServiceUnavailableException);
+      expect(discordService.addRoleToMember).not.toHaveBeenCalled();
+    });
+
+    it('answers 502 and records nothing when Discord rejects the change', async () => {
+      ownedRole();
+      guild(10);
+      discordService.addRoleToMember.mockResolvedValue(false);
+      discordService.getGuildMember.mockResolvedValue({ id: DISCORD_ID });
+      await expect(
+        service.grantRoleToMember(PROJECT_ID, SERVER_ID, DISCORD_ID, ROLE_ID),
+      ).rejects.toThrow(BadGatewayException);
+      expect(projectRolesRepository.assignRoleToMember).not.toHaveBeenCalled();
+    });
+
+    it('answers 404 when the member is not on the server', async () => {
+      ownedRole();
+      guild(10);
+      discordService.addRoleToMember.mockResolvedValue(false);
+      discordService.getGuildMember.mockResolvedValue(null);
+      await expect(
+        service.grantRoleToMember(PROJECT_ID, SERVER_ID, DISCORD_ID, ROLE_ID),
+      ).rejects.toThrow(NotFoundException);
+      expect(projectRolesRepository.assignRoleToMember).not.toHaveBeenCalled();
     });
   });
 
@@ -343,6 +421,7 @@ describe('ProjectRolesService', () => {
       projectRolesRepository.isRoleCreatedByProject.mockResolvedValue(true);
 
       discordService.getGuildById.mockResolvedValue({
+        roles: { cache: new Map() },
         members: {
           me: {
             roles: {

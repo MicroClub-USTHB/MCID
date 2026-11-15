@@ -13,6 +13,7 @@ import {
   ValidationPipe,
 } from '@nestjs/common';
 import {
+  ApiBadGatewayResponse,
   ApiBadRequestResponse,
   ApiCreatedResponse,
   ApiForbiddenResponse,
@@ -21,6 +22,7 @@ import {
   ApiOperation,
   ApiParam,
   ApiSecurity,
+  ApiServiceUnavailableResponse,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -111,6 +113,8 @@ export class ProjectRolesController {
       'Project lacks manage_roles scope, role was not created by this project, or role is protected',
   })
   @ApiNotFoundResponse({ description: 'Server, member, or role not found' })
+  @ApiBadGatewayResponse({ description: 'Discord rejected the role change' })
+  @ApiServiceUnavailableResponse({ description: 'Discord is unavailable' })
   async grantRole(
     @Param('serverId') serverId: string,
     @Param('discordId') discordId: string,
@@ -160,6 +164,8 @@ export class ProjectRolesController {
       'Project lacks manage_roles scope, role was not created by this project, or role is protected',
   })
   @ApiNotFoundResponse({ description: 'Server, member, or role not found' })
+  @ApiBadGatewayResponse({ description: 'Discord rejected the role change' })
+  @ApiServiceUnavailableResponse({ description: 'Discord is unavailable' })
   async removeRole(
     @Param('serverId') serverId: string,
     @Param('discordId') discordId: string,

@@ -62,7 +62,18 @@ export class ProjectRolesRepository {
     return role ?? null;
   }
 
+  /**
+   * Records the grant locally. A member the sync has not stored yet is skipped
+   * (the foreign key would fail); the gateway sync records it when it arrives.
+   */
   async assignRoleToMember(discordId: string, roleId: string): Promise<void> {
+    const [member] = await this.db
+      .select({ id: schema.members.id })
+      .from(schema.members)
+      .where(eq(schema.members.id, discordId))
+      .limit(1);
+    if (!member) return;
+
     await this.db
       .insert(schema.serverMemberRoles)
       .values({

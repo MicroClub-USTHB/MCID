@@ -84,6 +84,10 @@ describe('ProjectRolesRepository', () => {
       onConflictDoNothing: onConflictDoNothingMock,
     });
     mockDb.insert.mockReturnValue({ values: valuesMock });
+    const limitMock = jest.fn().mockResolvedValue([{ id: 'discord-1' }]);
+    mockDb.select.mockReturnValue({
+      from: () => ({ where: () => ({ limit: limitMock }) }),
+    });
 
     await repository.assignRoleToMember('discord-1', 'role-1');
 
@@ -92,6 +96,16 @@ describe('ProjectRolesRepository', () => {
       memberId: 'discord-1',
       roleId: 'role-1',
     });
+  });
+
+  it('assignRoleToMember skips a member the sync has not stored yet', async () => {
+    mockDb.select.mockReturnValue({
+      from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
+    });
+
+    await repository.assignRoleToMember('discord-1', 'role-1');
+
+    expect(mockDb.insert).not.toHaveBeenCalled();
   });
 
   it('removeRoleFromMember deletes from serverMemberRoles', async () => {
