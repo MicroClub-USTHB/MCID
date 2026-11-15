@@ -2732,7 +2732,7 @@ export interface components {
             isInternal?: boolean;
             /** @example Micro Club Website */
             name: string;
-            /** @description Server access configurations. If omitted, the project is automatically granted all available scopes to all servers where is_main = true. */
+            /** @description Server access configurations. If omitted, the project is automatically granted every scope except the opt-in manage_roles on all servers where is_main = true. */
             serverAccess?: components["schemas"]["ProjectServerAccessDto"][];
             /**
              * Format: uri
@@ -3513,7 +3513,7 @@ export interface components {
         };
         ProjectServerAccessDto: {
             /**
-             * @description Scopes to grant for this server. If omitted, all available scopes are granted.
+             * @description Scopes to grant for this server. If omitted, every scope except the opt-in manage_roles is granted.
              * @example [
              *       "read_members",
              *       "check_permissions"
@@ -3757,7 +3757,7 @@ export interface components {
         SetProjectServerAccessDto: {
             operations?: components["schemas"]["AccessOperationsDto"];
             /**
-             * @description Scopes granted to this project for this server. If omitted, defaults to all available scopes.
+             * @description Scopes granted to this project for this server. If omitted, keeps the current scopes, or for a new grant every scope except the opt-in manage_roles.
              * @example [
              *       "read_members",
              *       "check_permissions"
