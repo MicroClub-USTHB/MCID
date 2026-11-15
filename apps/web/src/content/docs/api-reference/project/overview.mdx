@@ -9,7 +9,7 @@ These endpoints are for the backends and browsers of Micro Club projects. A back
 
 The endpoints the admin dashboard uses are in the [Admin API](/docs/api-reference/admin/overview).
 
-40 endpoints in 8 groups.
+43 endpoints in 9 groups.
 
 ## Authentication
 
@@ -79,6 +79,14 @@ The endpoints the admin dashboard uses are in the [Admin API](/docs/api-referenc
 | `POST` | `/api/permissions/check` | [Check a single permission](/docs/api-reference/project/permissions#check-a-single-permission) |
 | `POST` | `/api/permissions/check-batch` | [Check multiple permissions (batch)](/docs/api-reference/project/permissions#check-multiple-permissions-batch) |
 | `GET` | `/api/permissions/{serverId}/{discordId}` | [Get full resolved permissions for a member](/docs/api-reference/project/permissions#get-full-resolved-permissions-for-a-member) |
+
+## Roles
+
+| Method | Path | Summary |
+| --- | --- | --- |
+| `PUT` | `/api/servers/{serverId}/members/{discordId}/roles/{roleId}` | [Grant a project-created role to a member](/docs/api-reference/project/roles#grant-a-project-created-role-to-a-member) |
+| `DELETE` | `/api/servers/{serverId}/members/{discordId}/roles/{roleId}` | [Remove a project-created role from a member](/docs/api-reference/project/roles#remove-a-project-created-role-from-a-member) |
+| `POST` | `/api/servers/{serverId}/roles` | [Create a Discord role for an event or project](/docs/api-reference/project/roles#create-a-discord-role-for-an-event-or-project) |
 
 ## Webhooks
 

@@ -69,8 +69,9 @@ A valid key proves who you are. It grants nothing on its own. An admin gives a p
 | `check_permissions` | The permission endpoints under `/api/permissions`: `POST /check`, `POST /check-batch` and `GET /{serverId}/{discordId}`. |
 | `manage_inbound_webhooks` | `POST /api/project/inbound-webhooks`, with the server named in the `serverId` query parameter. |
 | `read_inbound_submissions` | `GET /api/project/inbound-webhooks/{id}/submissions`, with the server named in the `serverId` query parameter. |
+| `manage_roles` | `POST /api/servers/{serverId}/roles`, and `PUT` and `DELETE /api/servers/{serverId}/members/{discordId}/roles/{roleId}`. A project grants or removes only the roles it created, never a root role or one at or above the bot's highest role; a refused attempt answers 403 and is audited. Creating a role under a name the project already used on that server returns that role, so a retry never creates a second one. |
 
-When an admin grants access without choosing scopes, the project gets all of them.
+When an admin grants access without choosing scopes, the project gets all of them except `manage_roles`, which is opt-in: an admin has to choose it explicitly.
 
 MCID enforces access when the request names a server in its path, in its query string or, for `POST /api/permissions/check` and `POST /api/permissions/check-batch`, in its JSON body. It checks, in order, that the server exists and is active, that the project may perform the operation the endpoint needs, and that the project holds the scope the endpoint needs. A server ID must be 17 to 20 digits.
 

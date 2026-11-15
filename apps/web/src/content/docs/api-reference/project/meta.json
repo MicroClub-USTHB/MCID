@@ -10,6 +10,7 @@
     "inbound-webhooks-project",
     "members",
     "permissions",
+    "roles",
     "webhooks"
   ]
 }

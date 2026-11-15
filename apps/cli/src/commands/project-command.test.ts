@@ -125,7 +125,15 @@ describe('project create', () => {
     expect(result.exitCode).toBe(0);
     const grant = result.requests.find((r) => r.method === 'PUT');
     expect(grant?.path).toBe(`/admin/projects/${projectRecord.id}/servers/${MAIN_SERVER_ID}`);
-    expect(grant?.body).toEqual({ scopes: ['read_members', 'check_permissions'] });
+    // manage_roles is opt-in: a grant without --scope leaves it out.
+    expect(grant?.body).toEqual({
+      scopes: [
+        'read_members',
+        'check_permissions',
+        'read_inbound_submissions',
+        'manage_inbound_webhooks',
+      ],
+    });
   });
 
   it('resolves the servers before creating anything', async () => {

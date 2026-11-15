@@ -498,6 +498,57 @@ describeIf('/api/admin/projects (e2e)', () => {
       });
     });
 
+    it('grants the manage_roles scope', async () => {
+      const create = await request(app.getHttpServer())
+        .post(BASE)
+        .set('Authorization', auth())
+        .send({ name: 'Role Manager Project' });
+
+      const res = await request(app.getHttpServer())
+        .put(`${BASE}/${create.body.project.id}/servers/${adminCtx.serverId}`)
+        .set('Authorization', auth())
+        .send({ scopes: ['manage_roles'] })
+        .expect(200);
+
+      expect(res.body.scopes).toEqual(['manage_roles']);
+    });
+
+    it('leaves the opt-in manage_roles out of every default grant', async () => {
+      // A project created without serverAccess gets the main server by default.
+      const create = await request(app.getHttpServer())
+        .post(BASE)
+        .set('Authorization', auth())
+        .send({ name: 'Default Scopes Project' })
+        .expect(201);
+      const projectId = create.body.project.id;
+
+      const access = await request(app.getHttpServer())
+        .get(`${BASE}/${projectId}/servers`)
+        .set('Authorization', auth())
+        .expect(200);
+      const main = access.body.find(
+        (a: any) => a.serverId === adminCtx.serverId,
+      );
+      expect(main.scopes).toEqual([
+        'read_members',
+        'check_permissions',
+        'read_inbound_submissions',
+        'manage_inbound_webhooks',
+      ]);
+
+      // A new grant that names no scopes gets the same defaults.
+      await request(app.getHttpServer())
+        .delete(`${BASE}/${projectId}/servers/${adminCtx.serverId}`)
+        .set('Authorization', auth())
+        .expect((r) => expect(r.status).toBeLessThan(300));
+      const regrant = await request(app.getHttpServer())
+        .put(`${BASE}/${projectId}/servers/${adminCtx.serverId}`)
+        .set('Authorization', auth())
+        .send({})
+        .expect(200);
+      expect(regrant.body.scopes).not.toContain('manage_roles');
+    });
+
     it('returns 404 for unknown project', async () => {
       await request(app.getHttpServer())
         .put(
