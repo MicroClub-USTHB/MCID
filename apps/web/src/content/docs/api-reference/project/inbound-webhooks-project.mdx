@@ -65,7 +65,7 @@ The project comes from the API key; a `projectId` in the body is rejected. Same 
 
 <Endpoint method="PATCH" path="/api/project/inbound-webhooks/{id}" />
 
-Same schema rules as the admin update. Audited with the project id.
+Same schema rules as the admin update. Audited with the project id. Requires the `manage_inbound_webhooks` scope on the `serverId` given in the query.
 
 **Authentication:** Project API key (`X-API-Key` header)
 
@@ -74,6 +74,7 @@ Same schema rules as the admin update. Audited with the project id.
 | Name | In | Type | Required | Description |
 | --- | --- | --- | --- | --- |
 | `id` | path | `string` | yes |  |
+| `serverId` | query | `string` | yes | Discord server on which the project holds the `manage_inbound_webhooks` scope. |
 
 **Request body** (JSON, required): [UpdateProjectInboundWebhookDto schema](#updateprojectinboundwebhookdto-schema).
 
@@ -82,8 +83,9 @@ Same schema rules as the admin update. Audited with the project id.
 | Status | Description | Body |
 | --- | --- | --- |
 | `200` | The updated webhook, in the list projection. | `ProjectInboundWebhookSummaryDto` |
-| `400` | Unknown or malformed field. |  |
+| `400` | Unknown or malformed field, or no `serverId`. |  |
 | `401` | Missing or invalid API key. |  |
+| `403` | The project lacks the `manage_inbound_webhooks` scope or access on `serverId`. |  |
 | `404` | No such webhook for this project. |  |
 | `422` | The schema is invalid. |  |
 | `429` | Project rate limit. |  |
@@ -94,7 +96,7 @@ Same schema rules as the admin update. Audited with the project id.
 
 <Endpoint method="POST" path="/api/project/inbound-webhooks/{id}/rotate-secret" />
 
-The new secret is returned once and the old one stops verifying. Audited with the project id.
+The new secret is returned once and the old one stops verifying. Audited with the project id. Requires the `manage_inbound_webhooks` scope on the `serverId` given in the query.
 
 **Authentication:** Project API key (`X-API-Key` header)
 
@@ -103,13 +105,16 @@ The new secret is returned once and the old one stops verifying. Audited with th
 | Name | In | Type | Required | Description |
 | --- | --- | --- | --- | --- |
 | `id` | path | `string` | yes |  |
+| `serverId` | query | `string` | yes | Discord server on which the project holds the `manage_inbound_webhooks` scope. |
 
 **Responses**
 
 | Status | Description | Body |
 | --- | --- | --- |
 | `200` | The new secret, shown once. | `ProjectRotatedSecretDto` |
+| `400` | No `serverId`. |  |
 | `401` | Missing or invalid API key. |  |
+| `403` | The project lacks the `manage_inbound_webhooks` scope or access on `serverId`. |  |
 | `404` | No such webhook for this project. |  |
 | `429` | Project rate limit. |  |
 

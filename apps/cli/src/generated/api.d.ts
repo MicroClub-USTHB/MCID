@@ -1817,7 +1817,7 @@ export interface paths {
         head?: never;
         /**
          * Update a webhook's name or schema
-         * @description Same schema rules as the admin update. Audited with the project id.
+         * @description Same schema rules as the admin update. Audited with the project id. Requires the `manage_inbound_webhooks` scope on the `serverId` given in the query.
          */
         patch: operations["InboundWebhookProjectController_update"];
         trace?: never;
@@ -1833,7 +1833,7 @@ export interface paths {
         put?: never;
         /**
          * Rotate the signing secret
-         * @description The new secret is returned once and the old one stops verifying. Audited with the project id.
+         * @description The new secret is returned once and the old one stops verifying. Audited with the project id. Requires the `manage_inbound_webhooks` scope on the `serverId` given in the query.
          */
         post: operations["InboundWebhookProjectController_rotateSecret"];
         delete?: never;
@@ -8766,7 +8766,10 @@ export interface operations {
     };
     InboundWebhookProjectController_update: {
         parameters: {
-            query?: never;
+            query: {
+                /** @description Discord server on which the project holds the `manage_inbound_webhooks` scope. */
+                serverId: string;
+            };
             header?: never;
             path: {
                 id: string;
@@ -8788,7 +8791,7 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectInboundWebhookSummaryDto"];
                 };
             };
-            /** @description Unknown or malformed field. */
+            /** @description Unknown or malformed field, or no `serverId`. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8797,6 +8800,13 @@ export interface operations {
             };
             /** @description Missing or invalid API key. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The project lacks the `manage_inbound_webhooks` scope or access on `serverId`. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8827,7 +8837,10 @@ export interface operations {
     };
     InboundWebhookProjectController_rotateSecret: {
         parameters: {
-            query?: never;
+            query: {
+                /** @description Discord server on which the project holds the `manage_inbound_webhooks` scope. */
+                serverId: string;
+            };
             header?: never;
             path: {
                 id: string;
@@ -8845,8 +8858,22 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectRotatedSecretDto"];
                 };
             };
+            /** @description No `serverId`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Missing or invalid API key. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The project lacks the `manage_inbound_webhooks` scope or access on `serverId`. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
