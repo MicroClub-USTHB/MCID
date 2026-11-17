@@ -21,6 +21,8 @@ export enum ProjectScope {
   READ_INBOUND_SUBMISSIONS = 'read_inbound_submissions',
   MANAGE_INBOUND_WEBHOOKS = 'manage_inbound_webhooks',
   MANAGE_ROLES = 'manage_roles',
+  MANAGE_CHANNELS = 'manage_channels',
+  MANAGE_EVENTS = 'manage_events',
 }
 
 /** What a grant gets when it names no scopes: every scope except the opt-in ones. */
@@ -35,7 +37,7 @@ export class ProjectServerAccessDto {
 
   @ApiPropertyOptional({
     description:
-      'Scopes to grant for this server. If omitted, every scope except the opt-in manage_roles is granted.',
+      'Scopes to grant for this server. If omitted, every scope except opt-in scopes (manage_roles, manage_channels, manage_events) is granted.',
     example: ['read_members', 'check_permissions'],
     enum: ProjectScope,
     isArray: true,
