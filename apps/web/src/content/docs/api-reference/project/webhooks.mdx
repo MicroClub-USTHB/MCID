@@ -50,6 +50,7 @@ Creates a Discord webhook in the channel and stores it for the project. The webh
 | --- | --- | --- | --- | --- |
 | `serverId` | path | `string` | yes | Discord server ID |
 | `channelId` | path | `string` | yes | Discord channel ID |
+| `Idempotency-Key` | header | `string` | no | Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response. |
 
 **Request body** (JSON, required): [CreateWebhookDto schema](#createwebhookdto-schema).
 
@@ -62,7 +63,7 @@ Creates a Discord webhook in the channel and stores it for the project. The webh
 | `401` | Missing or invalid API key. |  |
 | `403` | Project does not have MANAGE_WEBHOOKS operation on this server. |  |
 | `404` | Channel does not exist or bot lacks access. |  |
-| `409` | Project webhook limit reached. |  |
+| `409` | Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. |  |
 | `502` | Discord API error. |  |
 
 <SwaggerLink tag="Webhooks" operationId="WebhooksController_createWebhook" />
@@ -157,6 +158,7 @@ Sends a message through a stored Discord webhook. The webhook must belong to the
 | Name | In | Type | Required | Description |
 | --- | --- | --- | --- | --- |
 | `webhookId` | path | `string` | yes | Webhook ID |
+| `Idempotency-Key` | header | `string` | no | Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response. |
 
 **Request body** (JSON, required): [ExecuteWebhookDto schema](#executewebhookdto-schema).
 
@@ -168,6 +170,7 @@ Sends a message through a stored Discord webhook. The webhook must belong to the
 | `400` | Message content and embeds are both empty or invalid. |  |
 | `401` | Missing or invalid API key. |  |
 | `404` | Webhook not found for this project. |  |
+| `409` | Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. |  |
 | `429` | Execution limit exceeded for this project. |  |
 | `502` | Discord rejected every attempt. |  |
 
