@@ -15,6 +15,8 @@ const SCOPE_LABELS: Record<ProjectScope, string> = {
   read_inbound_submissions: 'Read inbound submissions',
   manage_inbound_webhooks: 'Manage inbound webhooks',
   manage_roles: 'Manage roles',
+  manage_channels: 'Manage channels',
+  manage_events: 'Manage events',
 };
 
 const SCOPE_HINTS: Record<ProjectScope, string> = {
@@ -23,6 +25,8 @@ const SCOPE_HINTS: Record<ProjectScope, string> = {
   read_inbound_submissions: "Pull the project's inbound webhook submissions",
   manage_inbound_webhooks: 'Create inbound webhooks for the project',
   manage_roles: 'Create roles and grant or remove them for members',
+  manage_channels: 'Create and configure Discord channels for the project',
+  manage_events: 'Create and manage scheduled Discord events',
 };
 
 function ScopeSelector({ selected, onChange, disabled = false }: ScopeSelectorProps) {
