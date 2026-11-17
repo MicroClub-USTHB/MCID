@@ -35,10 +35,16 @@ describeIf('project inbound webhook update and rotation (e2e)', () => {
   let db: TestDb;
   let mine: ProjectFixture;
   let other: ProjectFixture;
+  let unscoped: ProjectFixture;
   let webhookId: string;
+  let serverId: string;
 
   const http = () => request(app.getHttpServer());
-  const url = (id = webhookId) => `/api/project/inbound-webhooks/${id}`;
+  const query = (sid: string) => (sid ? `?serverId=${sid}` : '');
+  const url = (id = webhookId, sid = serverId) =>
+    `/api/project/inbound-webhooks/${id}${query(sid)}`;
+  const rotateUrl = (id = webhookId, sid = serverId) =>
+    `/api/project/inbound-webhooks/${id}/rotate-secret${query(sid)}`;
   const openDraft = (secret: string) =>
     http()
       .post(`/api/inbound-webhooks/${webhookId}/drafts`)
@@ -58,8 +64,16 @@ describeIf('project inbound webhook update and rotation (e2e)', () => {
   beforeEach(async () => {
     await clearAllTables(db);
     const admin = await seedAdminContext(db);
-    mine = await seedTestProject(db, admin.serverId, { name: 'Mine' });
-    other = await seedTestProject(db, admin.serverId, { name: 'Other' });
+    serverId = admin.serverId;
+    mine = await seedTestProject(db, serverId, {
+      name: 'Mine',
+      scopes: ['manage_inbound_webhooks'],
+    });
+    other = await seedTestProject(db, serverId, {
+      name: 'Other',
+      scopes: ['manage_inbound_webhooks'],
+    });
+    unscoped = await seedTestProject(db, serverId, { name: 'Unscoped' });
     const [row] = await db
       .insert(inboundWebhooks)
       .values({
@@ -138,7 +152,7 @@ describeIf('project inbound webhook update and rotation (e2e)', () => {
     await openDraft(OLD_SECRET).expect(201);
 
     const res = await http()
-      .post(`${url()}/rotate-secret`)
+      .post(rotateUrl())
       .set('X-API-Key', mine.apiKey)
       .expect(200);
 
@@ -154,15 +168,34 @@ describeIf('project inbound webhook update and rotation (e2e)', () => {
       .set('X-API-Key', other.apiKey)
       .send({ schema: SCHEMA })
       .expect(404);
-    await http()
-      .post(`${url()}/rotate-secret`)
-      .set('X-API-Key', other.apiKey)
-      .expect(404);
+    await http().post(rotateUrl()).set('X-API-Key', other.apiKey).expect(404);
     await openDraft(OLD_SECRET).expect(201);
   });
 
   it('answers 401 without a valid key', async () => {
     await http().patch(url()).send({ schema: SCHEMA }).expect(401);
-    await http().post(`${url()}/rotate-secret`).expect(401);
+    await http().post(rotateUrl()).expect(401);
+  });
+
+  it('answers 403 without the manage_inbound_webhooks scope, 400 without serverId', async () => {
+    await http()
+      .patch(url())
+      .set('X-API-Key', unscoped.apiKey)
+      .send({ schema: SCHEMA })
+      .expect(403);
+    await http()
+      .post(rotateUrl())
+      .set('X-API-Key', unscoped.apiKey)
+      .expect(403);
+    await http()
+      .patch(url(webhookId, ''))
+      .set('X-API-Key', mine.apiKey)
+      .send({ schema: SCHEMA })
+      .expect(400);
+    await http()
+      .post(rotateUrl(webhookId, ''))
+      .set('X-API-Key', mine.apiKey)
+      .expect(400);
+    await openDraft(OLD_SECRET).expect(201);
   });
 });

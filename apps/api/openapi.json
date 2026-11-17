@@ -9638,7 +9638,7 @@
     },
     "/api/project/inbound-webhooks/{id}": {
       "patch": {
-        "description": "Same schema rules as the admin update. Audited with the project id.",
+        "description": "Same schema rules as the admin update. Audited with the project id. Requires the `manage_inbound_webhooks` scope on the `serverId` given in the query.",
         "operationId": "InboundWebhookProjectController_update",
         "parameters": [
           {
@@ -9646,6 +9646,16 @@
             "name": "id",
             "required": true,
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Discord server on which the project holds the `manage_inbound_webhooks` scope.",
+            "in": "query",
+            "name": "serverId",
+            "required": true,
+            "schema": {
+              "example": "123456789012345678",
               "type": "string"
             }
           }
@@ -9672,10 +9682,13 @@
             "description": "The updated webhook, in the list projection."
           },
           "400": {
-            "description": "Unknown or malformed field."
+            "description": "Unknown or malformed field, or no `serverId`."
           },
           "401": {
             "description": "Missing or invalid API key."
+          },
+          "403": {
+            "description": "The project lacks the `manage_inbound_webhooks` scope or access on `serverId`."
           },
           "404": {
             "description": "No such webhook for this project."
@@ -9700,7 +9713,7 @@
     },
     "/api/project/inbound-webhooks/{id}/rotate-secret": {
       "post": {
-        "description": "The new secret is returned once and the old one stops verifying. Audited with the project id.",
+        "description": "The new secret is returned once and the old one stops verifying. Audited with the project id. Requires the `manage_inbound_webhooks` scope on the `serverId` given in the query.",
         "operationId": "InboundWebhookProjectController_rotateSecret",
         "parameters": [
           {
@@ -9708,6 +9721,16 @@
             "name": "id",
             "required": true,
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Discord server on which the project holds the `manage_inbound_webhooks` scope.",
+            "in": "query",
+            "name": "serverId",
+            "required": true,
+            "schema": {
+              "example": "123456789012345678",
               "type": "string"
             }
           }
@@ -9723,8 +9746,14 @@
             },
             "description": "The new secret, shown once."
           },
+          "400": {
+            "description": "No `serverId`."
+          },
           "401": {
             "description": "Missing or invalid API key."
+          },
+          "403": {
+            "description": "The project lacks the `manage_inbound_webhooks` scope or access on `serverId`."
           },
           "404": {
             "description": "No such webhook for this project."

@@ -33,6 +33,8 @@ describe('InboundWebhookProjectController', () => {
       .fn()
       .mockResolvedValue({ id: 'iw_01', slug: 'h', secret: 'whsec_x' }),
     listForProject: jest.fn().mockResolvedValue({ rows: [row], total: 1 }),
+    updateForProject: jest.fn().mockResolvedValue(row),
+    rotateSecretForProject: jest.fn().mockResolvedValue('whsec_new'),
     getSubmissionForProject: jest.fn().mockResolvedValue({ id: 's1' }),
     listSubmissionsForProject: jest
       .fn()
@@ -135,6 +137,53 @@ describe('InboundWebhookProjectController', () => {
       .post('/project/inbound-webhooks')
       .set('x-api-key', 'k')
       .send({ name: 'H', slug: 'hackathon', schema: {} })
+      .expect(400);
+  });
+
+  it('requires the manage_inbound_webhooks scope on update and rotate-secret', () => {
+    for (const handler of [
+      InboundWebhookProjectController.prototype.update,
+      InboundWebhookProjectController.prototype.rotateSecret,
+    ]) {
+      expect(Reflect.getMetadata(SCOPE_KEY, handler)).toBe(
+        'manage_inbound_webhooks',
+      );
+    }
+  });
+
+  it('updates for the key project with a serverId', async () => {
+    await request(app.getHttpServer())
+      .patch('/project/inbound-webhooks/iw_01?serverId=123456789012345678')
+      .set('x-api-key', 'k')
+      .send({ name: 'Renamed' })
+      .expect(200);
+    expect(service.updateForProject).toHaveBeenCalledWith('proj-1', 'iw_01', {
+      name: 'Renamed',
+    });
+  });
+
+  it('rotates the secret for the key project with a serverId', async () => {
+    await request(app.getHttpServer())
+      .post(
+        '/project/inbound-webhooks/iw_01/rotate-secret?serverId=123456789012345678',
+      )
+      .set('x-api-key', 'k')
+      .expect(200, { secret: 'whsec_new' });
+    expect(service.rotateSecretForProject).toHaveBeenCalledWith(
+      'proj-1',
+      'iw_01',
+    );
+  });
+
+  it('answers 400 on update and rotate-secret without a serverId', async () => {
+    await request(app.getHttpServer())
+      .patch('/project/inbound-webhooks/iw_01')
+      .set('x-api-key', 'k')
+      .send({ name: 'Renamed' })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/project/inbound-webhooks/iw_01/rotate-secret')
+      .set('x-api-key', 'k')
       .expect(400);
   });
 
