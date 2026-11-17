@@ -71,7 +71,7 @@ A valid key proves who you are. It grants nothing on its own. An admin gives a p
 | `read_inbound_submissions` | `GET /api/project/inbound-webhooks/{id}/submissions`, with the server named in the `serverId` query parameter. |
 | `manage_roles` | `POST /api/servers/{serverId}/roles`, and `PUT` and `DELETE /api/servers/{serverId}/members/{discordId}/roles/{roleId}`. A project grants or removes only the roles it created, never a root role or one at or above the bot's highest role; a refused attempt answers 403 and is audited. Creating a role under a name the project already used on that server returns that role, so a retry never creates a second one. |
 | `manage_channels` | Discord channel creation and management for event and project automation (opt-in). |
-| `manage_events` | Scheduled Discord event creation and management (opt-in). |
+| `manage_events` | `POST /api/servers/{serverId}/scheduled-events`, and `PATCH` and `DELETE /api/servers/{serverId}/scheduled-events/{eventId}`. A project creates scheduled events (external location or voice/stage channel) and can update or delete only the events it created; attempts to modify other events answer 404. |
 
 When an admin grants access without choosing scopes, the project gets all of them except the opt-in scopes (`manage_roles`, `manage_channels`, `manage_events`), which an admin has to choose explicitly.
 
