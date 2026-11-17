@@ -11,7 +11,7 @@ import {
 import { createHash } from 'crypto';
 import { Request, Response } from 'express';
 import { Observable, of } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { catchError, concatMap } from 'rxjs/operators';
 import { stableStringify } from '../../common/utils/stable-json.util';
 import * as schema from '../../database/entities';
 import { IdempotencyRepository } from './idempotency.repository';
@@ -56,7 +56,8 @@ export class IdempotencyInterceptor implements NestInterceptor {
     }
 
     const projectId = req.project?.id;
-    if (!projectId || !this.repository) {
+    const repository = this.repository;
+    if (!projectId || !repository) {
       // If the caller is not an authenticated project or repository is omitted, proceed
       return next.handle();
     }
@@ -69,7 +70,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
 
     const expiresAt = new Date(Date.now() + IDEMPOTENCY_TTL_MS);
 
-    const { reserved, row } = await this.repository.reserveKey({
+    const { reserved, row } = await repository.reserveKey({
       projectId,
       key,
       requestHash,
@@ -100,28 +101,29 @@ export class IdempotencyInterceptor implements NestInterceptor {
     }
 
     return next.handle().pipe(
-      tap({
-        next: (data) => {
-          this.repository
-            .completeKey({
-              id: row.id,
-              responseStatus: res.statusCode,
-              responseBody: data,
-            })
-            .catch((err: Error) => {
-              this.logger.warn(
-                `Failed to complete idempotency key ${key}: ${err.message}`,
-              );
-            });
-        },
-        error: () => {
-          // Release reservation on error so clients can correct and retry
-          this.repository.releaseKey(row.id).catch((err: Error) => {
-            this.logger.warn(
-              `Failed to release idempotency key ${key}: ${err.message}`,
-            );
+      concatMap(async (data) => {
+        try {
+          await repository.completeKey({
+            id: row.id,
+            responseStatus: res.statusCode,
+            responseBody: data,
           });
-        },
+        } catch (err: any) {
+          this.logger.warn(
+            `Failed to complete idempotency key ${key}: ${err.message}`,
+          );
+        }
+        return data;
+      }),
+      catchError(async (err) => {
+        try {
+          await repository.releaseKey(row.id);
+        } catch (releaseErr: any) {
+          this.logger.warn(
+            `Failed to release idempotency key ${key}: ${releaseErr.message}`,
+          );
+        }
+        throw err;
       }),
     );
   }
