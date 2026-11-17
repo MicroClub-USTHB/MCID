@@ -35,6 +35,7 @@ describe('treeSections', () => {
       '/docs/integrate/inbound-webhooks/signing-and-sending',
       '/docs/integrate/inbound-webhooks/reading-submissions',
       '/docs/integrate/inbound-webhooks/errors-and-limits',
+      '/docs/integrate/event-platform',
       '/docs/integrate/conventions',
     ]);
   });
