@@ -35,7 +35,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
   async intercept(
     context: ExecutionContext,
     next: CallHandler,
-  ): Promise<Observable<any>> {
+  ): Promise<Observable<unknown>> {
     const httpCtx = context.switchToHttp();
     const req = httpCtx.getRequest<RequestWithProject>();
     const res = httpCtx.getResponse<Response>();
@@ -45,9 +45,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
       return next.handle();
     }
 
-    const key = (
-      Array.isArray(rawHeader) ? rawHeader[0] : rawHeader
-    )?.trim();
+    const key = (Array.isArray(rawHeader) ? rawHeader[0] : rawHeader)?.trim();
 
     if (!key || key.length > MAX_KEY_LENGTH) {
       throw new BadRequestException(
@@ -101,27 +99,28 @@ export class IdempotencyInterceptor implements NestInterceptor {
     }
 
     return next.handle().pipe(
-      concatMap(async (data) => {
+      concatMap(async (data: unknown) => {
         try {
           await repository.completeKey({
             id: row.id,
             responseStatus: res.statusCode,
             responseBody: data,
           });
-        } catch (err: any) {
-          this.logger.warn(
-            `Failed to complete idempotency key ${key}: ${err.message}`,
-          );
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.logger.warn(`Failed to complete idempotency key ${key}: ${msg}`);
         }
         return data;
       }),
-      catchError(async (err) => {
+      catchError(async (err: unknown) => {
         try {
           await repository.releaseKey(row.id);
-        } catch (releaseErr: any) {
-          this.logger.warn(
-            `Failed to release idempotency key ${key}: ${releaseErr.message}`,
-          );
+        } catch (releaseErr: unknown) {
+          const msg =
+            releaseErr instanceof Error
+              ? releaseErr.message
+              : String(releaseErr);
+          this.logger.warn(`Failed to release idempotency key ${key}: ${msg}`);
         }
         throw err;
       }),

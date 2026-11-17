@@ -29,7 +29,12 @@ describe('IdempotencyRepository', () => {
   });
 
   it('should reserve a new key atomically', async () => {
-    const mockInserted = { id: 'id-1', projectId: 'p1', key: 'k1', status: 'in_progress' };
+    const mockInserted = {
+      id: 'id-1',
+      projectId: 'p1',
+      key: 'k1',
+      status: 'in_progress',
+    };
     const insertBuilder = {
       values: jest.fn().mockReturnThis(),
       onConflictDoNothing: jest.fn().mockReturnThis(),

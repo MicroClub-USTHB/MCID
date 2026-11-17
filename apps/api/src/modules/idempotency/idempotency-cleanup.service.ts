@@ -9,7 +9,9 @@ import { IdempotencyRepository } from './idempotency.repository';
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
 @Injectable()
-export class IdempotencyCleanupService implements OnModuleInit, OnModuleDestroy {
+export class IdempotencyCleanupService
+  implements OnModuleInit, OnModuleDestroy
+{
   private readonly logger = new Logger(IdempotencyCleanupService.name);
   private timer: ReturnType<typeof setInterval> | null = null;
 

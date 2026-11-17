@@ -79,9 +79,7 @@ describeIf('Project API Idempotency & Write Scopes (e2e)', () => {
         return Promise.resolve({
           id: serverId,
           roles: {
-            cache: new Map([
-              ['bot-role', { position: 50 }],
-            ]),
+            cache: new Map([['bot-role', { position: 50 }]]),
             create: rolesCreate,
           },
           members: {
@@ -287,11 +285,7 @@ describeIf('Project API Idempotency & Write Scopes (e2e)', () => {
           serverAccess: [
             {
               serverId,
-              scopes: [
-                'read_members',
-                'manage_channels',
-                'manage_events',
-              ],
+              scopes: ['read_members', 'manage_channels', 'manage_events'],
             },
           ],
         })
@@ -305,10 +299,16 @@ describeIf('Project API Idempotency & Write Scopes (e2e)', () => {
         .set('Authorization', `Bearer ${adminBearerToken}`)
         .expect(200);
 
-      const serverAccess = getRes.body.find((s: any) => s.serverId === serverId);
+      const serverAccess = getRes.body.find(
+        (s: any) => s.serverId === serverId,
+      );
       expect(serverAccess).toBeDefined();
       expect(serverAccess.scopes).toEqual(
-        expect.arrayContaining(['read_members', 'manage_channels', 'manage_events']),
+        expect.arrayContaining([
+          'read_members',
+          'manage_channels',
+          'manage_events',
+        ]),
       );
     });
   });

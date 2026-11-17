@@ -1,4 +1,9 @@
-import { BadRequestException, CallHandler, ConflictException, ExecutionContext } from '@nestjs/common';
+import {
+  BadRequestException,
+  CallHandler,
+  ConflictException,
+  ExecutionContext,
+} from '@nestjs/common';
 import { of, throwError, lastValueFrom } from 'rxjs';
 import { IdempotencyInterceptor } from './idempotency.interceptor';
 import { IdempotencyRepository } from './idempotency.repository';
@@ -19,7 +24,12 @@ describe('IdempotencyInterceptor', () => {
     revokedAt: null,
   };
 
-  const createMockContext = (headers: Record<string, string | string[] | undefined>, body = {}, url = '/api/servers/123/roles', method = 'POST') => {
+  const createMockContext = (
+    headers: Record<string, string | string[] | undefined>,
+    body = {},
+    url = '/api/servers/123/roles',
+    method = 'POST',
+  ) => {
     const mockRequest: any = {
       headers,
       body,
@@ -45,7 +55,9 @@ describe('IdempotencyInterceptor', () => {
     } as unknown as ExecutionContext & { mockRequest: any; mockResponse: any };
   };
 
-  const createMockCallHandler = (data: any = { id: 'role-1' }): CallHandler => ({
+  const createMockCallHandler = (
+    data: any = { id: 'role-1' },
+  ): CallHandler => ({
     handle: () => of(data),
   });
 
@@ -195,7 +207,9 @@ describe('IdempotencyInterceptor', () => {
     });
 
     await expect(interceptor.intercept(context, next)).rejects.toThrow(
-      new ConflictException('A request with this idempotency key is already in progress'),
+      new ConflictException(
+        'A request with this idempotency key is already in progress',
+      ),
     );
     expect(repository.completeKey).not.toHaveBeenCalled();
   });
@@ -225,7 +239,9 @@ describe('IdempotencyInterceptor', () => {
     });
 
     await expect(interceptor.intercept(context, next)).rejects.toThrow(
-      new ConflictException('Idempotency key reused with different request payload'),
+      new ConflictException(
+        'Idempotency key reused with different request payload',
+      ),
     );
   });
 
@@ -238,9 +254,9 @@ describe('IdempotencyInterceptor', () => {
 
     // First call to reserveKey to extract generated hash
     let capturedHash = '';
-    repository.reserveKey.mockImplementation(async (params) => {
+    repository.reserveKey.mockImplementation((params) => {
       capturedHash = params.requestHash;
-      return {
+      return Promise.resolve({
         reserved: false,
         row: {
           id: 'rec-replay',
@@ -255,7 +271,7 @@ describe('IdempotencyInterceptor', () => {
           createdAt: new Date(),
           updatedAt: new Date(),
         },
-      };
+      });
     });
 
     const result$ = await interceptor.intercept(context, next);

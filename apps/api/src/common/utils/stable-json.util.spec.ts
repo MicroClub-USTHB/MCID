@@ -14,9 +14,12 @@ describe('stableStringify', () => {
 
   it('should preserve array element order while stably serializing items', () => {
     expect(stableStringify([1, 2, 3])).toBe('[1,2,3]');
-    expect(stableStringify([{ b: 2, a: 1 }, { d: 4, c: 3 }])).toBe(
-      '[{"a":1,"b":2},{"c":3,"d":4}]',
-    );
+    expect(
+      stableStringify([
+        { b: 2, a: 1 },
+        { d: 4, c: 3 },
+      ]),
+    ).toBe('[{"a":1,"b":2},{"c":3,"d":4}]');
   });
 
   it('should serialize objects with deterministic sorted keys', () => {
