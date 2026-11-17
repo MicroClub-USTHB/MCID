@@ -28,6 +28,26 @@ export interface DiscordGuildRole {
   position: number;
 }
 
+export interface CreateDiscordScheduledEventOptions {
+  name: string;
+  scheduledStartTime: Date | string | number;
+  scheduledEndTime?: Date | string | number;
+  description?: string;
+  channelId?: string;
+  location?: string;
+  reason?: string;
+}
+
+export interface EditDiscordScheduledEventOptions {
+  name?: string;
+  scheduledStartTime?: Date | string | number;
+  scheduledEndTime?: Date | string | number;
+  description?: string;
+  channelId?: string;
+  location?: string;
+  reason?: string;
+}
+
 @Injectable()
 export class DiscordService {
   private readonly logger = new Logger(DiscordService.name);
@@ -498,6 +518,113 @@ export class DiscordService {
       }
       this.logger.debug(error instanceof Error ? error.message : String(error));
       return false;
+    }
+  }
+
+  async getScheduledEvent(
+    guildId: string,
+    eventId: string,
+  ): Promise<Discord.GuildScheduledEvent | null> {
+    try {
+      const guild = await this.getGuildById(guildId);
+      if (!guild) return null;
+      return await guild.scheduledEvents.fetch(eventId);
+    } catch (error: unknown) {
+      if (
+        error instanceof Discord.DiscordAPIError &&
+        error.code === Discord.RESTJSONErrorCodes.UnknownGuildScheduledEvent
+      ) {
+        return null;
+      }
+      this.logger.debug(error instanceof Error ? error.message : String(error));
+      return null;
+    }
+  }
+
+  async createScheduledEvent(
+    guildId: string,
+    options: CreateDiscordScheduledEventOptions,
+  ): Promise<Discord.GuildScheduledEvent | null> {
+    const guild = await this.getGuildById(guildId);
+    if (!guild) return null;
+
+    const entityType = options.channelId
+      ? Discord.GuildScheduledEventEntityType.Voice
+      : Discord.GuildScheduledEventEntityType.External;
+
+    const createOptions: Parameters<
+      Discord.GuildScheduledEventManager['create']
+    >[0] = {
+      name: options.name,
+      scheduledStartTime: new Date(options.scheduledStartTime),
+      scheduledEndTime: options.scheduledEndTime
+        ? new Date(options.scheduledEndTime)
+        : undefined,
+      privacyLevel: Discord.GuildScheduledEventPrivacyLevel.GuildOnly,
+      entityType,
+      description: options.description,
+      reason: options.reason,
+    };
+
+    if (options.channelId) {
+      createOptions.channel = options.channelId;
+    }
+    if (options.location) {
+      createOptions.entityMetadata = { location: options.location };
+    }
+
+    return await guild.scheduledEvents.create(createOptions);
+  }
+
+  async editScheduledEvent(
+    guildId: string,
+    eventId: string,
+    options: EditDiscordScheduledEventOptions,
+  ): Promise<Discord.GuildScheduledEvent | null> {
+    const guild = await this.getGuildById(guildId);
+    if (!guild) return null;
+
+    const editOptions: Parameters<
+      Discord.GuildScheduledEventManager['edit']
+    >[1] = {};
+    if (options.name !== undefined) editOptions.name = options.name;
+    if (options.description !== undefined)
+      editOptions.description = options.description;
+    if (options.scheduledStartTime !== undefined)
+      editOptions.scheduledStartTime = new Date(options.scheduledStartTime);
+    if (options.scheduledEndTime !== undefined)
+      editOptions.scheduledEndTime = new Date(options.scheduledEndTime);
+    if (options.channelId !== undefined) {
+      editOptions.channel = options.channelId;
+      editOptions.entityType = Discord.GuildScheduledEventEntityType.Voice;
+    }
+    if (options.location !== undefined) {
+      editOptions.entityMetadata = { location: options.location };
+      editOptions.entityType = Discord.GuildScheduledEventEntityType.External;
+    }
+    if (options.reason !== undefined) editOptions.reason = options.reason;
+
+    return await guild.scheduledEvents.edit(eventId, editOptions);
+  }
+
+  async deleteScheduledEvent(
+    guildId: string,
+    eventId: string,
+  ): Promise<boolean> {
+    try {
+      const guild = await this.getGuildById(guildId);
+      if (!guild) return false;
+      await guild.scheduledEvents.delete(eventId);
+      return true;
+    } catch (error: unknown) {
+      if (
+        error instanceof Discord.DiscordAPIError &&
+        error.code === Discord.RESTJSONErrorCodes.UnknownGuildScheduledEvent
+      ) {
+        return true;
+      }
+      this.logger.debug(error instanceof Error ? error.message : String(error));
+      throw error;
     }
   }
 
