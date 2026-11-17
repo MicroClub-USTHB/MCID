@@ -2182,6 +2182,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{serverId}/scheduled-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a Discord scheduled event
+         * @description Creates a scheduled event in the Discord server (external location or channel) and records project ownership. Retrying with the same Idempotency-Key header returns the cached response without creating a duplicate event on Discord.
+         */
+        post: operations["ProjectScheduledEventsController_createEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{serverId}/scheduled-events/{eventId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a Discord scheduled event
+         * @description Cancels and deletes a scheduled event from Discord and removes its MCID ownership record. Projects can only delete scheduled events they previously created; other events return 404.
+         */
+        delete: operations["ProjectScheduledEventsController_deleteEvent"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a Discord scheduled event
+         * @description Updates a scheduled event on Discord. Projects can only update scheduled events they previously created; attempts to update an event created by another project or created manually on Discord will return 404.
+         */
+        patch: operations["ProjectScheduledEventsController_updateEvent"];
+        trace?: never;
+    };
     "/api/webhooks/{webhookId}": {
         parameters: {
             query?: never;
@@ -2816,6 +2860,38 @@ export interface components {
              * @example Event Participant
              */
             name: string;
+        };
+        CreateScheduledEventDto: {
+            /**
+             * @description Discord Voice or Stage channel ID. Exactly one of location or channelId must be provided.
+             * @example 910000000000000010
+             */
+            channelId?: string;
+            /**
+             * @description Description of the scheduled event (up to 1000 characters)
+             * @example Annual Micro Club Hackathon
+             */
+            description?: string;
+            /**
+             * @description End time in ISO 8601 format (required for external events, must be after startsAt)
+             * @example 2026-12-06T09:00:00Z
+             */
+            endsAt?: string;
+            /**
+             * @description External location name (1 to 100 characters). Exactly one of location or channelId must be provided.
+             * @example USTHB
+             */
+            location?: string;
+            /**
+             * @description Name of the scheduled event (1 to 100 characters)
+             * @example Hackathon 2026
+             */
+            name: string;
+            /**
+             * @description Start time in ISO 8601 format
+             * @example 2026-12-05T09:00:00Z
+             */
+            startsAt: string;
         };
         CreateServerDto: {
             /**
@@ -3636,6 +3712,65 @@ export interface components {
              */
             rolePosition?: number | null;
         };
+        ScheduledEventResponseDto: {
+            /**
+             * @description Discord channel ID for voice/stage event
+             * @example 910000000000000010
+             */
+            channelId?: string | null;
+            /**
+             * @description Timestamp when this event was recorded in MCID
+             * @example 2026-11-17T18:00:00.000Z
+             */
+            createdAt: string;
+            /**
+             * @description Description of the scheduled event
+             * @example Annual Micro Club Hackathon
+             */
+            description?: string | null;
+            /**
+             * @description End time in ISO 8601 format
+             * @example 2026-12-06T09:00:00.000Z
+             */
+            endsAt?: string | null;
+            /**
+             * @description Entity type of the scheduled event
+             * @example EXTERNAL
+             * @enum {string}
+             */
+            entityType: "STAGE_INSTANCE" | "VOICE" | "EXTERNAL";
+            /**
+             * @description Discord scheduled event snowflake ID
+             * @example 920000000000000001
+             */
+            id: string;
+            /**
+             * @description External location name
+             * @example USTHB
+             */
+            location?: string | null;
+            /**
+             * @description Name of the scheduled event
+             * @example Hackathon 2026
+             */
+            name: string;
+            /**
+             * @description Discord server ID
+             * @example 987654321098765432
+             */
+            serverId: string;
+            /**
+             * @description Start time in ISO 8601 format
+             * @example 2026-12-05T09:00:00.000Z
+             */
+            startsAt: string;
+            /**
+             * @description Current status of the scheduled event
+             * @example SCHEDULED
+             * @enum {string}
+             */
+            status: "SCHEDULED" | "ACTIVE" | "COMPLETED" | "CANCELED";
+        };
         SecretSettingDto: {
             /**
              * @description Secrets are never editable here
@@ -4027,6 +4162,38 @@ export interface components {
              * @example https://events.microclub.net/auth/callback
              */
             redirectUri: string;
+        };
+        UpdateScheduledEventDto: {
+            /**
+             * @description Updated Discord Voice or Stage channel ID
+             * @example 910000000000000010
+             */
+            channelId?: string;
+            /**
+             * @description Updated description of the scheduled event (up to 1000 characters)
+             * @example Updated description
+             */
+            description?: string;
+            /**
+             * @description Updated end time in ISO 8601 format
+             * @example 2026-12-06T18:00:00Z
+             */
+            endsAt?: string;
+            /**
+             * @description Updated external location (1 to 100 characters)
+             * @example USTHB Cyber Espace
+             */
+            location?: string;
+            /**
+             * @description Updated name of the scheduled event (1 to 100 characters)
+             * @example Hackathon 2026 - Finale
+             */
+            name?: string;
+            /**
+             * @description Updated start time in ISO 8601 format
+             * @example 2026-12-05T10:00:00Z
+             */
+            startsAt?: string;
         };
         UpdateServerDto: {
             /**
@@ -10097,6 +10264,214 @@ export interface operations {
             };
             /** @description Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProjectScheduledEventsController_createEvent: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                /** @description Discord server ID */
+                serverId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateScheduledEventDto"];
+            };
+        };
+        responses: {
+            /** @description Scheduled event created successfully */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduledEventResponseDto"];
+                };
+            };
+            /** @description Invalid input payload, time range or entity parameters */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or invalid API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project lacks manage_events scope on this server */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Server or channel not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Discord rejected the request or bot lacks permissions */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProjectScheduledEventsController_deleteEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Discord server ID */
+                serverId: string;
+                /** @description Discord scheduled event ID */
+                eventId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scheduled event deleted successfully */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or invalid API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project lacks manage_events scope on this server */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Scheduled event not found or not owned by this project */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Discord rejected the request or bot lacks permissions */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProjectScheduledEventsController_updateEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Discord server ID */
+                serverId: string;
+                /** @description Discord scheduled event ID */
+                eventId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateScheduledEventDto"];
+            };
+        };
+        responses: {
+            /** @description Scheduled event updated successfully */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduledEventResponseDto"];
+                };
+            };
+            /** @description Invalid update parameters or time range */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or invalid API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project lacks manage_events scope on this server */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Scheduled event not found or not owned by this project */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Discord rejected the request or bot lacks permissions */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };
