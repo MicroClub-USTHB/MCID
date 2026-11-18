@@ -47,13 +47,32 @@ describe('IdempotencyRepository', () => {
       key: 'k1',
       requestHash: 'hash-1',
       expiresAt: new Date(),
+      staleBefore: new Date(),
     });
 
     expect(result.reserved).toBe(true);
     expect(result.row).toEqual(mockInserted);
   });
 
-  it('should return existing key if key already exists and is not expired', async () => {
+  const conflictingInsert = () => ({
+    values: jest.fn().mockReturnThis(),
+    onConflictDoNothing: jest.fn().mockReturnThis(),
+    returning: jest.fn().mockResolvedValue([]),
+  });
+  const updateReturning = (rows: unknown[]) => ({
+    set: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    returning: jest.fn().mockResolvedValue(rows),
+  });
+  const reserveParams = {
+    projectId: 'p1',
+    key: 'k1',
+    requestHash: 'hash-1',
+    expiresAt: new Date(Date.now() + 86_400_000),
+    staleBefore: new Date(Date.now() - 300_000),
+  };
+
+  it('returns the existing key when it can be neither inserted nor taken over', async () => {
     const existingRow = {
       id: 'id-1',
       projectId: 'p1',
@@ -61,32 +80,54 @@ describe('IdempotencyRepository', () => {
       status: 'in_progress',
       expiresAt: new Date(Date.now() + 100000),
     };
-
-    // First insert conflicts (returns empty array)
-    const insertBuilder = {
-      values: jest.fn().mockReturnThis(),
-      onConflictDoNothing: jest.fn().mockReturnThis(),
-      returning: jest.fn().mockResolvedValue([]),
-    };
-    mockDb.insert.mockReturnValue(insertBuilder);
-
-    // select returns existing
-    const selectBuilder = {
+    mockDb.insert.mockReturnValue(conflictingInsert());
+    mockDb.update.mockReturnValue(updateReturning([]));
+    mockDb.select.mockReturnValue({
       from: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       limit: jest.fn().mockResolvedValue([existingRow]),
-    };
-    mockDb.select.mockReturnValue(selectBuilder);
-
-    const result = await repository.reserveKey({
-      projectId: 'p1',
-      key: 'k1',
-      requestHash: 'hash-1',
-      expiresAt: new Date(),
     });
 
-    expect(result.reserved).toBe(false);
-    expect(result.row).toEqual(existingRow);
+    const result = await repository.reserveKey(reserveParams);
+
+    expect(result).toEqual({ reserved: false, row: existingRow });
+  });
+
+  it('takes over an expired or stale in_progress key with one conditional update', async () => {
+    const reclaimed = {
+      id: 'id-1',
+      status: 'in_progress',
+      requestHash: 'hash-1',
+    };
+    const update = updateReturning([reclaimed]);
+    mockDb.insert.mockReturnValue(conflictingInsert());
+    mockDb.update.mockReturnValue(update);
+
+    const result = await repository.reserveKey(reserveParams);
+
+    expect(result).toEqual({ reserved: true, row: reclaimed });
+    expect(update.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'in_progress',
+        requestHash: 'hash-1',
+        responseBody: null,
+      }),
+    );
+    expect(mockDb.select).not.toHaveBeenCalled();
+  });
+
+  it('answers 409 when the key vanished between the insert and the read', async () => {
+    mockDb.insert.mockReturnValue(conflictingInsert());
+    mockDb.update.mockReturnValue(updateReturning([]));
+    mockDb.select.mockReturnValue({
+      from: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockResolvedValue([]),
+    });
+
+    await expect(repository.reserveKey(reserveParams)).rejects.toThrow(
+      'already in progress',
+    );
   });
 
   it('should complete key with response status and body', async () => {

@@ -272,6 +272,54 @@ describeIf('Project API Idempotency & Write Scopes (e2e)', () => {
 
       expect(retryRes.body.name).toBe('Valid Role After Retry');
     });
+
+    it('takes over a key left in_progress by a request that died', async () => {
+      const idempotencyKey = 'stale-in-progress-key';
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+      await db.insert(projectIdempotencyKeys).values({
+        projectId: projectWithScope.id,
+        key: idempotencyKey,
+        requestHash: 'from-a-dead-request',
+        status: 'in_progress',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        createdAt: tenMinutesAgo,
+        updatedAt: tenMinutesAgo,
+      });
+
+      const res = await request(app.getHttpServer())
+        .post(`/api/servers/${serverId}/roles`)
+        .set('X-API-Key', projectWithScope.apiKey)
+        .set('Idempotency-Key', idempotencyKey)
+        .send({ name: 'Recovered Role' })
+        .expect(201);
+
+      expect(res.body.name).toBe('Recovered Role');
+      expect(rolesCreate).toHaveBeenCalledTimes(1);
+      const [savedKey] = await db
+        .select()
+        .from(projectIdempotencyKeys)
+        .where(eq(projectIdempotencyKeys.key, idempotencyKey));
+      expect(savedKey.status).toBe('completed');
+    });
+
+    it('still answers 409 for a recent in_progress key', async () => {
+      const idempotencyKey = 'fresh-in-progress-key';
+      await db.insert(projectIdempotencyKeys).values({
+        projectId: projectWithScope.id,
+        key: idempotencyKey,
+        requestHash: 'from-a-running-request',
+        status: 'in_progress',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      });
+
+      await request(app.getHttpServer())
+        .post(`/api/servers/${serverId}/roles`)
+        .set('X-API-Key', projectWithScope.apiKey)
+        .set('Idempotency-Key', idempotencyKey)
+        .send({ name: 'Must Not Run' })
+        .expect(409);
+      expect(rolesCreate).not.toHaveBeenCalled();
+    });
   });
 
   describe('Discord write scopes (manage_channels & manage_events)', () => {

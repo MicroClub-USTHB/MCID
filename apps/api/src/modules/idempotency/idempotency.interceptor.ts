@@ -21,6 +21,9 @@ export interface RequestWithProject extends Request {
 }
 
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+// An in_progress key older than this belongs to a request that died before
+// completing or releasing it. It must outlast the slowest Discord write.
+export const IDEMPOTENCY_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
 const MAX_KEY_LENGTH = 128;
 
 @Injectable()
@@ -73,6 +76,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
       key,
       requestHash,
       expiresAt,
+      staleBefore: new Date(Date.now() - IDEMPOTENCY_LOCK_TIMEOUT_MS),
     });
 
     if (!reserved) {

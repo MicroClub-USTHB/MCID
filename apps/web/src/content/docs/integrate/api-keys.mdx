@@ -100,7 +100,7 @@ Content-Type: application/json
 - A request without the header runs as usual. An empty header or one longer than 128 characters answers 400.
 - A repeat of the same request with the same key does not run again. It answers the stored status and body with the header `Idempotent-Replayed: true`.
 - The same key with a different method, path, query or body answers 409.
-- A request that arrives while the first one with its key is still running answers 409 and does not run.
+- A request that arrives while the first one with its key is still running answers 409 and does not run. A key that stays in progress for more than 5 minutes belongs to a request that died, so the next request with that key takes it over and runs.
 - When the first request fails with an error, MCID forgets the key, so the client can fix the request and retry with the same key.
 - Keys belong to one project, so two projects can use the same key. MCID keeps a key for 24 hours, and an hourly job deletes expired ones.
 
