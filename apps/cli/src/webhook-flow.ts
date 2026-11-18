@@ -18,6 +18,7 @@ import {
 } from './crypto-store.js';
 import { CliError, ExitCode } from './errors.js';
 import { type ListPaging, pageRows } from './lib/help.js';
+import { listOutputFormat, toCsv } from './lib/output.js';
 import {
   createInboundWebhook,
   deleteInboundWebhook,
@@ -108,17 +109,32 @@ export interface WebhookListOptions extends ListPaging {
   project?: string;
   json?: boolean;
   quiet?: boolean;
+  output?: string;
 }
 
 export async function webhookList(options: WebhookListOptions, deps: WebhookDeps): Promise<void> {
+  const format = listOutputFormat(options);
   const session = await loadSession(options.profile, deps);
   const webhooks = pageRows(await listInboundWebhooks(session, options.project), options);
-  if (options.quiet) {
+  if (format === 'quiet') {
     for (const w of webhooks) deps.out(w.id);
     return;
   }
-  if (options.json) {
+  if (format === 'json') {
     deps.out(JSON.stringify(webhooks, null, 2));
+    return;
+  }
+  if (format === 'csv') {
+    const rows = webhooks.map((w) => ({
+      id: w.id,
+      name: w.name,
+      slug: w.slug,
+      projectId: w.projectId,
+      isActive: w.isActive,
+      submissionCount: w.submissionCount,
+    }));
+    const csv = toCsv(rows);
+    if (csv) deps.out(csv.trimEnd());
     return;
   }
   if (webhooks.length === 0) {

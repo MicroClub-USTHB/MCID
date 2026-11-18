@@ -60,3 +60,38 @@ describe('role list', () => {
     expect(result.stdout).toContain('Mods');
   });
 });
+
+describe('role list pagination', () => {
+  it('returns the selected raw rows as JSON, retaining API fields', async () => {
+    const rows = [
+      { roleId: '1', roleName: 'First', extra: 'keep-first' },
+      { roleId: '2', roleName: 'Second', extra: 'keep-second' },
+      { roleId: '3', roleName: 'Third', extra: 'keep-third' },
+    ];
+    const result = await runCli(['role', 'list', '--json', '--limit', '1', '--page', '2'], {
+      routes: baseRoutes({ 'GET /admin/stats/roles': () => json({ roles: rows }) }),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual([rows[1]]);
+  });
+});
+
+describe('role permissions JSON', () => {
+  it('preserves permission keys and never returns unrelated secret fields', async () => {
+    const result = await runCli(['role', 'permissions', 'list', 'Mods', '--json'], {
+      routes: baseRoutes({
+        'GET /admin/stats/roles': () => json([{ roleId: ROLE_ID, roleName: 'Mods' }]),
+        [`GET /permissions/admin/servers/${MAIN_SERVER_ID}/roles/${ROLE_ID}/permissions`]: () =>
+          json({
+            permissions: [
+              { id: 1, key: 'READ_MEMBERS', description: 'Read members', secret: 'tiny' },
+            ],
+          }),
+      }),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual([
+      { id: 1, key: 'READ_MEMBERS', description: 'Read members' },
+    ]);
+  });
+});

@@ -11,13 +11,14 @@ import {
 import { ApiClient } from '../lib/client.js';
 import {
   formatAge,
+  listOutputFormat,
   printJson,
   printQuiet,
   printSuccess,
   printTable,
   toCsv,
 } from '../lib/output.js';
-import { type ListPaging, pageRows } from '../lib/help.js';
+import { type ListPaging } from '../lib/help.js';
 import { resolveServer } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
@@ -84,36 +85,39 @@ export function registerSyncCommand(program: Command): void {
           const spinChars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
           let spinIdx = 0;
 
-          process.stdout.write(`Syncing server "${colors.bold(resolved.name)}"...\n`);
+          if (!options.json)
+            process.stdout.write(`Syncing server "${colors.bold(resolved.name)}"...\n`);
 
           while (Date.now() - startTime < timeoutMs) {
-            const statusRes = normalizeSyncStatus(
-              await client.get(`/admin/sync/status?serverId=${encodeURIComponent(resolved.id)}`),
+            const rawStatus = await client.get(
+              `/admin/sync/status?serverId=${encodeURIComponent(resolved.id)}`,
             );
+            const statusRes = normalizeSyncStatus(rawStatus);
 
             const elapsedSec = Math.floor((Date.now() - startTime) / 1000);
             const spin = spinChars[spinIdx++ % spinChars.length] ?? '•';
 
-            if (process.stdout.isTTY) {
+            if (process.stdout.isTTY && !options.json) {
               process.stdout.write(
                 `\r  ${colors.cyan(spin)} [${elapsedSec}s] Status: ${statusRes.status} (members: ${statusRes.membersSynced}, roles: ${statusRes.rolesSynced})   `,
               );
             }
 
             if (statusRes.status === 'success') {
+              if (options.json) {
+                printJson(rawStatus);
+                return;
+              }
               if (process.stdout.isTTY) process.stdout.write('\r\x1b[2K');
               const deltas = await memberDeltas(client, syncLogId);
               printSuccess(
                 `Synced ${resolved.name} in ${elapsedSec}s: ${statusRes.membersSynced} members${deltas}, ${statusRes.rolesSynced} roles`,
               );
-              if (options.json) {
-                printJson(statusRes);
-              }
               return;
             }
 
             if (statusRes.status === 'failed') {
-              if (process.stdout.isTTY) process.stdout.write('\r\x1b[2K');
+              if (process.stdout.isTTY && !options.json) process.stdout.write('\r\x1b[2K');
               throw new CliError(
                 `Sync failed for "${resolved.name}"\n  hint: check error logs with \`mcid-cli sync logs --server ${resolved.id}\``,
                 ExitCode.Rejected,
@@ -123,7 +127,7 @@ export function registerSyncCommand(program: Command): void {
             await new Promise((r) => setTimeout(r, 1500));
           }
 
-          if (process.stdout.isTTY) process.stdout.write('\r\x1b[2K');
+          if (process.stdout.isTTY && !options.json) process.stdout.write('\r\x1b[2K');
           throw new CliError(
             `Sync timed out after ${options.timeout}s\n  hint: check status with \`mcid-cli sync status --server ${resolved.id}\``,
             ExitCode.Timeout,
@@ -254,6 +258,7 @@ export function registerSyncCommand(program: Command): void {
   syncCmd
     .command('logs')
     .description('View recent sync execution logs')
+    .option('-o, --output <format>', 'Output format (table|json|csv)', 'table')
     .option('--server <server>', 'Filter by server (defaults to main server)')
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as JSON')
@@ -268,22 +273,74 @@ export function registerSyncCommand(program: Command): void {
           profile?: string;
           json?: boolean;
           quiet?: boolean;
+          output?: string;
         } & ListPaging,
       ) => {
         try {
+          const format = listOutputFormat(options);
           const client = await getClient(options.profile);
           const resolved = await resolveServer(client, options.server);
-          const raw = await client.get(
-            `/admin/sync/logs?serverId=${encodeURIComponent(resolved.id)}`,
-          );
-          const logs = pageRows(normalizeSyncLogs(raw), options);
+          const limit = Number(options.limit ?? 30);
+          const page = Number(options.page ?? 1);
+          if (
+            !Number.isSafeInteger(limit) ||
+            limit < 1 ||
+            !Number.isSafeInteger(page) ||
+            page < 1
+          ) {
+            throw new CliError('--limit and --page must be positive whole numbers', ExitCode.Usage);
+          }
+          const start = options.all ? 0 : (page - 1) * limit;
+          if (!Number.isSafeInteger(start)) {
+            throw new CliError('Requested page is too large', ExitCode.Usage);
+          }
+          const rawLogs: Record<string, unknown>[] = [];
+          let total = 0;
+          for (;;) {
+            const remaining = options.all ? 100 : limit - rawLogs.length;
+            const chunkSize = Math.min(100, remaining);
+            const offset = start + rawLogs.length;
+            const response = await client.get<{ logs: Record<string, unknown>[]; total: number }>(
+              `/admin/sync/logs?serverId=${encodeURIComponent(resolved.id)}&limit=${chunkSize}&offset=${offset}`,
+            );
+            const chunk = unwrapArray<Record<string, unknown>>(response, ['logs']);
+            total = response.total;
+            rawLogs.push(...chunk);
+            if (
+              chunk.length === 0 ||
+              offset + chunk.length >= total ||
+              (!options.all && rawLogs.length >= limit)
+            )
+              break;
+          }
+          if (!options.all && start + rawLogs.length < total) {
+            process.stderr.write(
+              `Showing ${start + 1}-${start + rawLogs.length} of ${total}; use --page ${page + 1} or --all for more.\n`,
+            );
+          }
+          const logs = normalizeSyncLogs(rawLogs);
 
-          if (options.json) {
-            printJson(raw);
+          if (format === 'json') {
+            printJson(rawLogs);
             return;
           }
-          if (options.quiet) {
+          if (format === 'quiet') {
             printQuiet(logs.map((l) => String(l['id'])));
+            return;
+          }
+
+          if (format === 'csv') {
+            process.stdout.write(
+              toCsv(logs as unknown as Record<string, unknown>[], [
+                'id',
+                'status',
+                'serverId',
+                'syncType',
+                'startedAt',
+                'membersSynced',
+                'rolesSynced',
+              ]),
+            );
             return;
           }
 

@@ -29,12 +29,12 @@ Session tokens are masked unless you pass `--reveal`.
 
 ```bash
 mcid-cli dev token validate "$TOKEN"
-mcid-cli dev token refresh "$REFRESH_TOKEN" --token "$TOKEN"
+mcid-cli dev token refresh "$REFRESH_TOKEN" --token "$TOKEN" --reveal
 mcid-cli dev check @alice projects.read members.read --server "Micro Club"
 mcid-cli dev env --project portal --file .env
 ```
 
-`token refresh` prints the new pair in full, because the old one stops working as soon
+`token refresh` requires `--reveal` before calling the API, then prints the new pair in full, because the old one stops working as soon
 as the call returns. `dev check` prints allowed or denied per permission.
 
 Source: `apps/cli/src/commands/dev.ts`.

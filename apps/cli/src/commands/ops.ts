@@ -15,6 +15,7 @@ import { confirmAction, confirmDestructive } from '../lib/confirm.js';
 import {
   formatAge,
   formatDate,
+  listOutputFormat,
   printJson,
   printKeyValue,
   printQuiet,
@@ -777,6 +778,7 @@ export function registerOpsCommand(program: Command): void {
     .command('list')
     .alias('ls')
     .description('List Discord webhooks for a project')
+    .option('-o, --output <format>', 'Output format (table|json|csv)', 'table')
     .requiredOption('--project <project>', 'Project name or ID')
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as JSON')
@@ -791,9 +793,11 @@ export function registerOpsCommand(program: Command): void {
           profile?: string;
           json?: boolean;
           quiet?: boolean;
+          output?: string;
         } & ListPaging,
       ) => {
         try {
+          const format = listOutputFormat(options);
           const client = await getClient(options.profile);
           const resolved = await resolveProject(client, options.project);
           // The endpoint returns {webhooks, total, limit, offset}; page until done.
@@ -817,15 +821,19 @@ export function registerOpsCommand(program: Command): void {
 
           const webhooks = pageRows(allWebhooks, options);
 
-          if (options.quiet) {
+          if (format === 'quiet') {
             printQuiet(webhooks.map((w) => String(w['id'])));
             return;
           }
-          if (options.json) {
+          if (format === 'json') {
             printJson(webhooks);
             return;
           }
 
+          if (format === 'csv') {
+            process.stdout.write(toCsv(webhooks, ['id', 'name', 'channelId']));
+            return;
+          }
           printTable({
             columns: [
               { header: 'ID', key: 'id', format: (v) => colors.dim(String(v)) },

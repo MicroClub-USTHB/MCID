@@ -1,8 +1,8 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, link, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
-import { formatAge, formatDate, toCsv, writeExportFile } from './output.js';
+import { describe, expect, it, vi } from 'vitest';
+import { formatAge, formatDate, printJson, toCsv, writeExportFile } from './output.js';
 
 describe('output formatters', () => {
   it('formats relative ages cleanly', () => {
@@ -49,16 +49,75 @@ describe('writeExportFile', () => {
     }
   });
 
+  it.skipIf(process.platform === 'win32')(
+    'does not follow a dangling symlink without --force',
+    async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'mcid-export-link-'));
+      try {
+        const target = join(dir, 'report.csv');
+        const missing = join(dir, 'missing');
+        await symlink(missing, target);
+        await expect(writeExportFile(target, 'private report')).rejects.toMatchObject({
+          message: expect.stringContaining('--force'),
+        });
+        await expect(readFile(missing, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')('refuses unsafe forced destinations', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mcid-export-unsafe-'));
+    try {
+      const target = join(dir, 'report.csv');
+      const alias = join(dir, 'alias');
+      await writeFile(target, 'old', { mode: 0o600 });
+      await symlink(target, alias);
+      await expect(writeExportFile(alias, 'secret', true)).rejects.toThrow();
+      expect(await readFile(target, 'utf8')).toBe('old');
+      await rm(alias);
+      await chmod(target, 0o644);
+      await expect(writeExportFile(target, 'secret', true)).rejects.toThrow();
+      expect(await readFile(target, 'utf8')).toBe('old');
+      await chmod(target, 0o600);
+      await link(target, alias);
+      await expect(writeExportFile(target, 'secret', true)).rejects.toThrow();
+      expect(await readFile(alias, 'utf8')).toBe('old');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('overwrites an existing report when --force is passed', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'mcid-export-'));
     try {
       const target = join(dir, 'report.csv');
-      await writeFile(target, 'old', 'utf8');
+      await writeFile(target, 'old', { mode: 0o600 });
 
       await writeExportFile(target, 'new', true);
       expect(await readFile(target, 'utf8')).toBe('new');
     } finally {
       await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('JSON secret redaction', () => {
+  it('redacts short and nested secret values without exposing prefixes', () => {
+    const output = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      printJson({
+        apiKey: 'tiny',
+        nested: { accessToken: 'long-sensitive-token', secret: { value: 'abc' } },
+      });
+      const parsed = JSON.parse(String(output.mock.calls[0]?.[0]));
+      expect(parsed).toEqual({
+        apiKey: '[REDACTED]',
+        nested: { accessToken: '[REDACTED]', secret: '[REDACTED]' },
+      });
+    } finally {
+      output.mockRestore();
     }
   });
 });

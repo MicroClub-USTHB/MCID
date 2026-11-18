@@ -3,9 +3,10 @@ import { configPath, loadConfig, resolveProfileName } from '../config.js';
 import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
 import { confirmAction } from '../lib/confirm.js';
-import { normalizeRoleStats } from '../lib/api-normalize.js';
+import { normalizeRoleStats, unwrapArray } from '../lib/api-normalize.js';
 import { ApiClient } from '../lib/client.js';
 import {
+  listOutputFormat,
   printJson,
   printKeyValue,
   printQuiet,
@@ -46,21 +47,22 @@ export function registerRoleCommand(program: Command): void {
     } & ListPaging,
   ) => {
     try {
+      const outFormat = listOutputFormat(options);
       const client = await getClient(options.profile);
       const resolvedServer = await resolveServer(client, options.server);
       const raw = await client.get(
         `/admin/stats/roles?serverId=${encodeURIComponent(resolvedServer.id)}`,
       );
-      const roles = pageRows(normalizeRoleStats(raw), options);
+      const rawRoles = pageRows(unwrapArray<Record<string, unknown>>(raw, ['roles']), options);
+      const roles = normalizeRoleStats(rawRoles);
 
-      if (options.quiet) {
+      if (outFormat === 'quiet') {
         printQuiet(roles.map((r) => r.id));
         return;
       }
 
-      const outFormat = options.json ? 'json' : options.output || 'table';
       if (outFormat === 'json') {
-        printJson(raw);
+        printJson(rawRoles);
         return;
       }
       if (outFormat === 'csv') {
@@ -159,7 +161,12 @@ export function registerRoleCommand(program: Command): void {
 
           const list = res.permissions || [];
           if (options.json) {
-            printJson(list);
+            // `key` here is a public permission identifier, not a credential.
+            // Project onto the documented DTO so unexpected fields cannot leak.
+            printJson(
+              list.map(({ id, key, description }) => ({ id, key, description })),
+              true,
+            );
             return;
           }
 

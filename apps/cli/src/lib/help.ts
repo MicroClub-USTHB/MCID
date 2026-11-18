@@ -27,7 +27,7 @@ export function addListPaging(command: Command): Command {
 function positiveInt(value: string | undefined, fallback: number, flag: string): number {
   if (value === undefined) return fallback;
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1) {
+  if (!/^[0-9]+$/.test(value) || !Number.isSafeInteger(parsed) || parsed < 1) {
     throw new CliError(`${flag} must be a positive whole number`, ExitCode.Usage);
   }
   return parsed;
@@ -38,10 +38,13 @@ function positiveInt(value: string | undefined, fallback: number, flag: string):
  * so a truncated table is never mistaken for the whole list.
  */
 export function pageRows<T>(rows: readonly T[], paging: ListPaging): T[] {
-  if (paging.all) return [...rows];
   const limit = positiveInt(paging.limit, 30, '--limit');
   const page = positiveInt(paging.page, 1, '--page');
+  if (paging.all) return [...rows];
   const start = (page - 1) * limit;
+  if (!Number.isSafeInteger(start)) {
+    throw new CliError('--page is too large', ExitCode.Usage);
+  }
   const slice = rows.slice(start, start + limit);
   if (rows.length > start + limit) {
     process.stderr.write(

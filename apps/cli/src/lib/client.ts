@@ -61,6 +61,8 @@ export class ApiClient {
       }
     }
 
+    // Query strings may contain credentials or personal data; do not log them.
+    const debugPath = path.split(/[?#]/, 1)[0] ?? '';
     const start = Date.now();
     let res: Response;
 
@@ -76,12 +78,13 @@ export class ApiClient {
       }
       res = await fetch(url, init);
     } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
+      // Runtime errors may include the request URL, headers, or credentials.
+      const timedOut = err instanceof Error && err.name === 'TimeoutError';
       if (this.debug) {
-        process.stderr.write(`${colors.dim(`[debug] ${method} ${path} -> FAILED (${reason})`)}\n`);
+        process.stderr.write(`${colors.dim(`[debug] ${method} ${debugPath} -> FAILED`)}\n`);
       }
       throw new CliError(
-        `Could not reach MCID at ${this.baseUrl} (${reason})\n  hint: check your internet connection or run \`mcid-cli doctor\``,
+        `Could not reach MCID${timedOut ? ' (request timed out)' : ''}\n  hint: check your internet connection or run \`mcid-cli doctor\``,
         ExitCode.Unexpected,
       );
     }
@@ -89,7 +92,7 @@ export class ApiClient {
     const duration = Date.now() - start;
     if (this.debug) {
       process.stderr.write(
-        `${colors.dim(`[debug] ${method} ${path} -> ${res.status} ${res.statusText} (${duration}ms)`)}\n`,
+        `${colors.dim(`[debug] ${method} ${debugPath} -> ${res.status} (${duration}ms)`)}\n`,
       );
     }
 

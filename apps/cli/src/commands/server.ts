@@ -7,6 +7,7 @@ import { confirmDestructive } from '../lib/confirm.js';
 import {
   formatAge,
   formatDate,
+  listOutputFormat,
   printJson,
   printKeyValue,
   printQuiet,
@@ -63,17 +64,17 @@ export function registerServerCommand(program: Command): void {
     } & ListPaging,
   ) => {
     try {
+      const outFormat = listOutputFormat(options);
       const client = await getClient(options.profile);
       const allServers = await client.get<ServerRecord[]>('/servers', { resource: 'server' });
 
       const servers = pageRows(allServers, options);
 
-      if (options.quiet) {
+      if (outFormat === 'quiet') {
         printQuiet(servers.map((s) => s.id));
         return;
       }
 
-      const outFormat = options.json ? 'json' : options.output || 'table';
       if (outFormat === 'json') {
         printJson(servers);
         return;
