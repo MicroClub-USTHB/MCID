@@ -102,24 +102,32 @@ export class InboundWebhookProjectController {
   }
 
   @Patch(':id')
+  @RequireScope('manage_inbound_webhooks')
   @ApiOperation({
     summary: "Update a webhook's name or schema",
     description:
-      'Same schema rules as the admin update. Audited with the project id.',
+      'Same schema rules as the admin update. Audited with the project id. Requires the `manage_inbound_webhooks` scope on the `serverId` given in the query.',
   })
   @ApiParam({ name: 'id' })
   @ApiOkResponse({
     description: 'The updated webhook, in the list projection.',
     type: ProjectInboundWebhookSummaryDto,
   })
-  @ApiBadRequestResponse({ description: 'Unknown or malformed field.' })
+  @ApiBadRequestResponse({
+    description: 'Unknown or malformed field, or no `serverId`.',
+  })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid API key.' })
+  @ApiForbiddenResponse({
+    description:
+      'The project lacks the `manage_inbound_webhooks` scope or access on `serverId`.',
+  })
   @ApiNotFoundResponse({ description: 'No such webhook for this project.' })
   @ApiUnprocessableEntityResponse({ description: 'The schema is invalid.' })
   @ApiTooManyRequestsResponse({ description: 'Project rate limit.' })
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateProjectInboundWebhookDto,
+    @Query() _query: ProjectCreateQueryDto,
     @Req() req: Request & { project?: { id: string } },
   ): Promise<ProjectInboundWebhookSummaryDto> {
     return toSummary(
@@ -128,22 +136,29 @@ export class InboundWebhookProjectController {
   }
 
   @Post(':id/rotate-secret')
+  @RequireScope('manage_inbound_webhooks')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Rotate the signing secret',
     description:
-      'The new secret is returned once and the old one stops verifying. Audited with the project id.',
+      'The new secret is returned once and the old one stops verifying. Audited with the project id. Requires the `manage_inbound_webhooks` scope on the `serverId` given in the query.',
   })
   @ApiParam({ name: 'id' })
   @ApiOkResponse({
     description: 'The new secret, shown once.',
     type: ProjectRotatedSecretDto,
   })
+  @ApiBadRequestResponse({ description: 'No `serverId`.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid API key.' })
+  @ApiForbiddenResponse({
+    description:
+      'The project lacks the `manage_inbound_webhooks` scope or access on `serverId`.',
+  })
   @ApiNotFoundResponse({ description: 'No such webhook for this project.' })
   @ApiTooManyRequestsResponse({ description: 'Project rate limit.' })
   async rotateSecret(
     @Param('id') id: string,
+    @Query() _query: ProjectCreateQueryDto,
     @Req() req: Request & { project?: { id: string } },
   ): Promise<ProjectRotatedSecretDto> {
     const secret = await this.service.rotateSecretForProject(

@@ -1,0 +1,1 @@
+ALTER TABLE "project_idempotency_keys" DROP COLUMN IF EXISTS "response_headers";

@@ -25,7 +25,6 @@ export const projectIdempotencyKeys = pgTable(
     requestHash: varchar('request_hash', { length: 64 }).notNull(),
     status: varchar('status', { length: 20 }).notNull(), // 'in_progress' | 'completed'
     responseStatus: integer('response_status'),
-    responseHeaders: jsonb('response_headers'),
     responseBody: jsonb('response_body'),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true })

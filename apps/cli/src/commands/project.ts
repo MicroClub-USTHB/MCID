@@ -648,10 +648,7 @@ export function registerProjectCommand(program: Command): void {
   accessCmd
     .command('grant <project> <server>')
     .description('Grant project access to a Discord server with scopes and operations')
-    .requiredOption(
-      '--scope <scopes...>',
-      'Scopes to grant (read_members, check_permissions, read_inbound_submissions, manage_inbound_webhooks)',
-    )
+    .requiredOption('--scope <scopes...>', `Scopes to grant (${PROJECT_SCOPES.join(', ')})`)
     .option('--operation <ops...>', 'Operations to allow (READ, SEND_MESSAGES, MANAGE_WEBHOOKS)')
     .option('--profile <name>', 'Profile to use')
     .action(

@@ -131,7 +131,6 @@ describe('IdempotencyInterceptor', () => {
         requestHash: 'expected-hash',
         status: 'in_progress',
         responseStatus: null,
-        responseHeaders: null,
         responseBody: null,
         expiresAt: new Date(Date.now() + 86400000),
         createdAt: new Date(),
@@ -147,6 +146,7 @@ describe('IdempotencyInterceptor', () => {
       expect.objectContaining({
         projectId: mockProject.id,
         key: 'unique-key',
+        staleBefore: expect.any(Date),
       }),
     );
     expect(repository.completeKey).toHaveBeenCalledWith({
@@ -171,7 +171,6 @@ describe('IdempotencyInterceptor', () => {
         requestHash: 'hash',
         status: 'in_progress',
         responseStatus: null,
-        responseHeaders: null,
         responseBody: null,
         expiresAt: new Date(Date.now() + 86400000),
         createdAt: new Date(),
@@ -198,7 +197,6 @@ describe('IdempotencyInterceptor', () => {
         requestHash: 'hash',
         status: 'in_progress',
         responseStatus: null,
-        responseHeaders: null,
         responseBody: null,
         expiresAt: new Date(Date.now() + 86400000),
         createdAt: new Date(),
@@ -230,7 +228,6 @@ describe('IdempotencyInterceptor', () => {
         requestHash: 'different-hash-from-past',
         status: 'completed',
         responseStatus: 201,
-        responseHeaders: null,
         responseBody: { ok: true },
         expiresAt: new Date(Date.now() + 86400000),
         createdAt: new Date(),
@@ -265,7 +262,6 @@ describe('IdempotencyInterceptor', () => {
           requestHash: capturedHash,
           status: 'completed',
           responseStatus: 201,
-          responseHeaders: null,
           responseBody: { roleId: 'cached-role-123' },
           expiresAt: new Date(Date.now() + 86400000),
           createdAt: new Date(),
