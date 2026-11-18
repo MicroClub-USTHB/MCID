@@ -8,6 +8,8 @@ export const PROJECT_SCOPES = [
   'read_inbound_submissions',
   'manage_inbound_webhooks',
   'manage_roles',
+  'manage_channels',
+  'manage_events',
 ] as const;
 export type ProjectScope = (typeof PROJECT_SCOPES)[number];
 

@@ -2212,7 +2212,7 @@
         "additionalProperties": false,
         "properties": {
           "scopes": {
-            "description": "Scopes to grant for this server. If omitted, every scope except the opt-in manage_roles is granted.",
+            "description": "Scopes to grant for this server. If omitted, every scope except opt-in scopes (manage_roles, manage_channels, manage_events) is granted.",
             "example": [
               "read_members",
               "check_permissions"
@@ -2223,7 +2223,9 @@
                 "check_permissions",
                 "read_inbound_submissions",
                 "manage_inbound_webhooks",
-                "manage_roles"
+                "manage_roles",
+                "manage_channels",
+                "manage_events"
               ],
               "type": "string"
             },
@@ -2697,7 +2699,7 @@
             "$ref": "#/components/schemas/AccessOperationsDto"
           },
           "scopes": {
-            "description": "Scopes granted to this project for this server. If omitted, keeps the current scopes, or for a new grant every scope except the opt-in manage_roles.",
+            "description": "Scopes granted to this project for this server. If omitted, keeps the current scopes, or for a new grant every scope except the opt-in scopes (manage_roles, manage_channels, manage_events).",
             "example": [
               "read_members",
               "check_permissions"
@@ -2708,7 +2710,9 @@
                 "check_permissions",
                 "read_inbound_submissions",
                 "manage_inbound_webhooks",
-                "manage_roles"
+                "manage_roles",
+                "manage_channels",
+                "manage_events"
               ],
               "type": "string"
             },
@@ -5741,7 +5745,9 @@
                 "check_permissions",
                 "read_inbound_submissions",
                 "manage_inbound_webhooks",
-                "manage_roles"
+                "manage_roles",
+                "manage_channels",
+                "manage_events"
               ],
               "type": "string"
             }
@@ -5832,7 +5838,9 @@
                 "check_permissions",
                 "read_inbound_submissions",
                 "manage_inbound_webhooks",
-                "manage_roles"
+                "manage_roles",
+                "manage_channels",
+                "manage_events"
               ],
               "type": "string"
             }
@@ -6310,7 +6318,9 @@
                 "check_permissions",
                 "read_inbound_submissions",
                 "manage_inbound_webhooks",
-                "manage_roles"
+                "manage_roles",
+                "manage_channels",
+                "manage_events"
               ],
               "type": "string"
             }
@@ -10616,6 +10626,16 @@
               "example": "123456789012345678",
               "type": "string"
             }
+          },
+          {
+            "description": "Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -10652,7 +10672,7 @@
             "description": "Channel does not exist or bot lacks access."
           },
           "409": {
-            "description": "Project webhook limit reached."
+            "description": "Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload."
           },
           "502": {
             "description": "Discord API error."
@@ -11114,6 +11134,16 @@
               "example": "555666777888999000",
               "type": "string"
             }
+          },
+          {
+            "description": "Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -11128,6 +11158,9 @@
           },
           "404": {
             "description": "Server, member, or role not found"
+          },
+          "409": {
+            "description": "Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload."
           },
           "502": {
             "description": "Discord rejected the role change"
@@ -11179,6 +11212,16 @@
               "example": "555666777888999000",
               "type": "string"
             }
+          },
+          {
+            "description": "Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -11193,6 +11236,9 @@
           },
           "404": {
             "description": "Server, member, or role not found"
+          },
+          "409": {
+            "description": "Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload."
           },
           "502": {
             "description": "Discord rejected the role change"
@@ -11224,6 +11270,16 @@
             "required": true,
             "schema": {
               "example": "987654321098765432",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
               "type": "string"
             }
           }
@@ -11260,6 +11316,9 @@
           },
           "404": {
             "description": "Server not found"
+          },
+          "409": {
+            "description": "Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload."
           }
         },
         "security": [
@@ -11430,6 +11489,16 @@
               "example": "3f6f7f9a-4c1a-4a9e-9d7b-2f1f4b6a8c0d",
               "type": "string"
             }
+          },
+          {
+            "description": "Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -11454,6 +11523,9 @@
           },
           "404": {
             "description": "Webhook not found for this project."
+          },
+          "409": {
+            "description": "Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload."
           },
           "429": {
             "description": "Execution limit exceeded for this project."

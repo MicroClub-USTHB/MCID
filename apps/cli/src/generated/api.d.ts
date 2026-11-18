@@ -3513,13 +3513,13 @@ export interface components {
         };
         ProjectServerAccessDto: {
             /**
-             * @description Scopes to grant for this server. If omitted, every scope except the opt-in manage_roles is granted.
+             * @description Scopes to grant for this server. If omitted, every scope except opt-in scopes (manage_roles, manage_channels, manage_events) is granted.
              * @example [
              *       "read_members",
              *       "check_permissions"
              *     ]
              */
-            scopes?: ("read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks" | "manage_roles")[];
+            scopes?: ("read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks" | "manage_roles" | "manage_channels" | "manage_events")[];
             /** @example 123456789012345678 */
             serverId: string;
         };
@@ -3757,13 +3757,13 @@ export interface components {
         SetProjectServerAccessDto: {
             operations?: components["schemas"]["AccessOperationsDto"];
             /**
-             * @description Scopes granted to this project for this server. If omitted, keeps the current scopes, or for a new grant every scope except the opt-in manage_roles.
+             * @description Scopes granted to this project for this server. If omitted, keeps the current scopes, or for a new grant every scope except the opt-in scopes (manage_roles, manage_channels, manage_events).
              * @example [
              *       "read_members",
              *       "check_permissions"
              *     ]
              */
-            scopes?: ("read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks" | "manage_roles")[];
+            scopes?: ("read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks" | "manage_roles" | "manage_channels" | "manage_events")[];
         };
         SettingValueDto: {
             /** @description Whether PATCH /api/admin/settings accepts it */
@@ -5596,7 +5596,7 @@ export interface operations {
                 /** @description Filter by server ID. */
                 serverId?: string;
                 /** @description Filter by scope. */
-                scope?: "read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks" | "manage_roles";
+                scope?: "read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks" | "manage_roles" | "manage_channels" | "manage_events";
                 /** @description Filter by project name (partial, case-insensitive). */
                 projectName?: string;
             };
@@ -5642,7 +5642,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Filter projects by required scope. */
-                scope?: "read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks" | "manage_roles";
+                scope?: "read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks" | "manage_roles" | "manage_channels" | "manage_events";
                 /** @description Filter by project active status. */
                 isActive?: boolean;
             };
@@ -6109,7 +6109,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Filter servers by required scope. */
-                scope?: "read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks" | "manage_roles";
+                scope?: "read_members" | "check_permissions" | "read_inbound_submissions" | "manage_inbound_webhooks" | "manage_roles" | "manage_channels" | "manage_events";
             };
             header?: never;
             path: {
@@ -9566,7 +9566,10 @@ export interface operations {
     WebhooksController_createWebhook: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response. */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Discord server ID */
                 serverId: string;
@@ -9618,7 +9621,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Project webhook limit reached. */
+            /** @description Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -9926,7 +9929,10 @@ export interface operations {
     ProjectRolesController_grantRole: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response. */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Discord server ID */
                 serverId: string;
@@ -9967,6 +9973,13 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Discord rejected the role change */
             502: {
                 headers: {
@@ -9986,7 +9999,10 @@ export interface operations {
     ProjectRolesController_removeRole: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response. */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Discord server ID */
                 serverId: string;
@@ -10027,6 +10043,13 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Discord rejected the role change */
             502: {
                 headers: {
@@ -10046,7 +10069,10 @@ export interface operations {
     ProjectRolesController_createRole: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response. */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Discord server ID */
                 serverId: string;
@@ -10091,6 +10117,13 @@ export interface operations {
             };
             /** @description Server not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10235,7 +10268,10 @@ export interface operations {
     WebhooksController_executeWebhook: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response. */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Webhook ID */
                 webhookId: string;
@@ -10271,6 +10307,13 @@ export interface operations {
             };
             /** @description Webhook not found for this project. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -20,6 +20,7 @@ Grants a role to a member of the server. Only roles previously created by the ca
 | `serverId` | path | `string` | yes | Discord server ID |
 | `discordId` | path | `string` | yes | Discord member ID |
 | `roleId` | path | `string` | yes | Discord role ID to grant |
+| `Idempotency-Key` | header | `string` | no | Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response. |
 
 **Responses**
 
@@ -29,6 +30,7 @@ Grants a role to a member of the server. Only roles previously created by the ca
 | `401` | Missing or invalid API key |  |
 | `403` | Project lacks manage_roles scope, role was not created by this project, or role is protected |  |
 | `404` | Server, member, or role not found |  |
+| `409` | Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. |  |
 | `502` | Discord rejected the role change |  |
 | `503` | Discord is unavailable |  |
 
@@ -49,6 +51,7 @@ Removes a role from a member of the server. Only roles previously created by the
 | `serverId` | path | `string` | yes | Discord server ID |
 | `discordId` | path | `string` | yes | Discord member ID |
 | `roleId` | path | `string` | yes | Discord role ID to remove |
+| `Idempotency-Key` | header | `string` | no | Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response. |
 
 **Responses**
 
@@ -58,6 +61,7 @@ Removes a role from a member of the server. Only roles previously created by the
 | `401` | Missing or invalid API key |  |
 | `403` | Project lacks manage_roles scope, role was not created by this project, or role is protected |  |
 | `404` | Server, member, or role not found |  |
+| `409` | Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. |  |
 | `502` | Discord rejected the role change |  |
 | `503` | Discord is unavailable |  |
 
@@ -76,6 +80,7 @@ Creates a new Discord role with no permissions by default (0n bitfield) and reco
 | Name | In | Type | Required | Description |
 | --- | --- | --- | --- | --- |
 | `serverId` | path | `string` | yes | Discord server ID |
+| `Idempotency-Key` | header | `string` | no | Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response. |
 
 **Request body** (JSON, required): [CreateProjectRoleDto schema](#createprojectroledto-schema).
 
@@ -88,6 +93,7 @@ Creates a new Discord role with no permissions by default (0n bitfield) and reco
 | `401` | Missing or invalid API key |  |
 | `403` | Project lacks manage_roles scope on this server |  |
 | `404` | Server not found |  |
+| `409` | Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. |  |
 
 <SwaggerLink tag="Roles" operationId="ProjectRolesController_createRole" />
 

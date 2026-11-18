@@ -29,6 +29,7 @@ import {
 import { Request } from 'express';
 import { ApiKeyGuard } from '../../common/guards/api-key.guard';
 import { RequireScope } from '../../common/decorators/require-scope.decorator';
+import { Idempotent } from '../../common/decorators/idempotent.decorator';
 import { ProjectRolesService } from './project-roles.service';
 import { CreateProjectRoleDto } from './dto/create-project-role.dto';
 import { ProjectRoleResponseDto } from './dto/project-role-response.dto';
@@ -48,6 +49,7 @@ export class ProjectRolesController {
 
   @Post('roles')
   @RequireScope('manage_roles')
+  @Idempotent()
   @ApiOperation({
     summary: 'Create a Discord role for an event or project',
     description:
@@ -84,6 +86,7 @@ export class ProjectRolesController {
 
   @Put('members/:discordId/roles/:roleId')
   @RequireScope('manage_roles')
+  @Idempotent()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
     summary: 'Grant a project-created role to a member',
@@ -135,6 +138,7 @@ export class ProjectRolesController {
 
   @Delete('members/:discordId/roles/:roleId')
   @RequireScope('manage_roles')
+  @Idempotent()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
     summary: 'Remove a project-created role from a member',
