@@ -35,6 +35,8 @@ export interface CreateDiscordScheduledEventOptions {
   description?: string;
   channelId?: string;
   location?: string;
+  /** Voice or StageInstance for a channel event; defaults to Voice. */
+  entityType?: Discord.GuildScheduledEventEntityType;
   reason?: string;
 }
 
@@ -45,6 +47,7 @@ export interface EditDiscordScheduledEventOptions {
   description?: string;
   channelId?: string;
   location?: string;
+  entityType?: Discord.GuildScheduledEventEntityType;
   reason?: string;
 }
 
@@ -549,7 +552,7 @@ export class DiscordService {
     if (!guild) return null;
 
     const entityType = options.channelId
-      ? Discord.GuildScheduledEventEntityType.Voice
+      ? (options.entityType ?? Discord.GuildScheduledEventEntityType.Voice)
       : Discord.GuildScheduledEventEntityType.External;
 
     const createOptions: Parameters<
@@ -596,9 +599,12 @@ export class DiscordService {
       editOptions.scheduledEndTime = new Date(options.scheduledEndTime);
     if (options.channelId !== undefined) {
       editOptions.channel = options.channelId;
-      editOptions.entityType = Discord.GuildScheduledEventEntityType.Voice;
+      editOptions.entityType =
+        options.entityType ?? Discord.GuildScheduledEventEntityType.Voice;
     }
     if (options.location !== undefined) {
+      // Discord requires channel_id to be null when an event becomes external.
+      editOptions.channel = null;
       editOptions.entityMetadata = { location: options.location };
       editOptions.entityType = Discord.GuildScheduledEventEntityType.External;
     }

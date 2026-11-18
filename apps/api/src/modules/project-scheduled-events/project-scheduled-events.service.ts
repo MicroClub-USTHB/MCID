@@ -44,14 +44,9 @@ export class ProjectScheduledEventsService {
       throw new NotFoundException(`Server ${serverId} not found`);
     }
 
-    if (dto.channelId) {
-      const channel = await this.discordService.getChannelById(dto.channelId);
-      if (!channel) {
-        throw new NotFoundException(
-          'Channel does not exist or bot lacks access',
-        );
-      }
-    }
+    const channelEntityType = dto.channelId
+      ? await this.resolveChannelEntityType(serverId, dto.channelId)
+      : undefined;
 
     let createdDiscordEvent: Discord.GuildScheduledEvent;
     try {
@@ -62,6 +57,7 @@ export class ProjectScheduledEventsService {
         scheduledEndTime: dto.endsAt,
         location: dto.location,
         channelId: dto.channelId,
+        entityType: channelEntityType,
         reason: `Created by project ${projectId}`,
       });
       if (!event) {
@@ -136,7 +132,20 @@ export class ProjectScheduledEventsService {
       throw new NotFoundException('Scheduled event not found');
     }
 
+    if (dto.location && dto.channelId) {
+      throw new BadRequestException(
+        'Only one of location or channelId can be provided',
+      );
+    }
     this.validateUpdateDates(dto, existingEvent);
+    if (dto.location && !dto.endsAt && !existingEvent.scheduledEndAt) {
+      throw new BadRequestException(
+        'endsAt is required for scheduled events with an external location',
+      );
+    }
+    const channelEntityType = dto.channelId
+      ? await this.resolveChannelEntityType(serverId, dto.channelId)
+      : undefined;
 
     let updatedDiscordEvent: Discord.GuildScheduledEvent;
     try {
@@ -150,6 +159,7 @@ export class ProjectScheduledEventsService {
           scheduledEndTime: dto.endsAt,
           location: dto.location,
           channelId: dto.channelId,
+          entityType: channelEntityType,
           reason: `Updated by project ${projectId}`,
         },
       );
@@ -213,6 +223,27 @@ export class ProjectScheduledEventsService {
       },
       severity: 'info',
     });
+  }
+
+  /**
+   * A channel event needs a voice or stage channel of this server. A channel of
+   * another server answers 404, like a missing one, so its existence is not revealed.
+   */
+  private async resolveChannelEntityType(
+    serverId: string,
+    channelId: string,
+  ): Promise<Discord.GuildScheduledEventEntityType> {
+    const channel = await this.discordService.getChannelById(channelId);
+    if (!channel || channel.isDMBased() || channel.guildId !== serverId) {
+      throw new NotFoundException('Channel not found');
+    }
+    if (channel.type === Discord.ChannelType.GuildStageVoice) {
+      return Discord.GuildScheduledEventEntityType.StageInstance;
+    }
+    if (channel.type === Discord.ChannelType.GuildVoice) {
+      return Discord.GuildScheduledEventEntityType.Voice;
+    }
+    throw new BadRequestException('channelId must be a voice or stage channel');
   }
 
   private validateCreatePayload(dto: CreateScheduledEventDto): void {

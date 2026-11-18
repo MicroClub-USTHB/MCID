@@ -776,8 +776,25 @@ describe('DiscordService', () => {
       expect(guild.scheduledEvents.edit).toHaveBeenCalledWith('evt-1', {
         name: 'New Name',
         description: 'New Desc',
+        channel: null,
         entityMetadata: { location: 'Online' },
         entityType: Discord.GuildScheduledEventEntityType.External,
+      });
+    });
+
+    it('moves the event to a stage channel with the given entity type', async () => {
+      const guild = makeGuild();
+      guild.scheduledEvents.edit.mockResolvedValue({ id: 'evt-1' });
+      mockClient.guilds.fetch.mockResolvedValue(guild);
+
+      await service.editScheduledEvent('g-1', 'evt-1', {
+        channelId: 'ch-1',
+        entityType: Discord.GuildScheduledEventEntityType.StageInstance,
+      });
+
+      expect(guild.scheduledEvents.edit).toHaveBeenCalledWith('evt-1', {
+        channel: 'ch-1',
+        entityType: Discord.GuildScheduledEventEntityType.StageInstance,
       });
     });
   });

@@ -118,6 +118,69 @@ describe('ProjectScheduledEventsService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
+    const channel = (guildId: string, type: Discord.ChannelType) => ({
+      guildId,
+      type,
+      isDMBased: () => false,
+    });
+    const voiceDto = {
+      name: 'Voice Event',
+      startsAt: '2026-12-05T09:00:00.000Z',
+      channelId: '910000000000000010',
+    };
+
+    it('answers 404 for a channel of another server', async () => {
+      discordService.getGuildById.mockResolvedValue({ id: 'srv-1' });
+      discordService.getChannelById.mockResolvedValue(
+        channel('srv-2', Discord.ChannelType.GuildVoice),
+      );
+
+      await expect(
+        service.createEvent('proj-1', 'srv-1', voiceDto),
+      ).rejects.toThrow(NotFoundException);
+      expect(discordService.createScheduledEvent).not.toHaveBeenCalled();
+    });
+
+    it('rejects a channel that is not a voice or stage channel', async () => {
+      discordService.getGuildById.mockResolvedValue({ id: 'srv-1' });
+      discordService.getChannelById.mockResolvedValue(
+        channel('srv-1', Discord.ChannelType.GuildText),
+      );
+
+      await expect(
+        service.createEvent('proj-1', 'srv-1', voiceDto),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('creates a stage event for a stage channel', async () => {
+      discordService.getGuildById.mockResolvedValue({ id: 'srv-1' });
+      discordService.getChannelById.mockResolvedValue(
+        channel('srv-1', Discord.ChannelType.GuildStageVoice),
+      );
+      discordService.createScheduledEvent.mockResolvedValue({
+        id: 'evt-1',
+        name: voiceDto.name,
+        scheduledStartAt: new Date(voiceDto.startsAt),
+        channelId: voiceDto.channelId,
+        status: 1,
+        entityType: 1,
+      });
+      repository.recordCreatedEvent.mockResolvedValue({
+        createdAt: new Date(),
+      });
+
+      const result = await service.createEvent('proj-1', 'srv-1', voiceDto);
+
+      expect(discordService.createScheduledEvent).toHaveBeenCalledWith(
+        'srv-1',
+        expect.objectContaining({
+          channelId: voiceDto.channelId,
+          entityType: Discord.GuildScheduledEventEntityType.StageInstance,
+        }),
+      );
+      expect(result.entityType).toBe('STAGE_INSTANCE');
+    });
+
     it('creates external event, records ownership and logs audit', async () => {
       discordService.getGuildById.mockResolvedValue({ id: 'srv-1' });
       const mockEvent = {
@@ -244,6 +307,49 @@ describe('ProjectScheduledEventsService', () => {
           endsAt: '2026-12-05T08:00:00.000Z',
         }),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects an update with both location and channelId', async () => {
+      repository.findOwnedEvent.mockResolvedValue({ createdAt: new Date() });
+      discordService.getScheduledEvent.mockResolvedValue({ id: 'evt-1' });
+
+      await expect(
+        service.updateEvent('proj-1', 'srv-1', 'evt-1', {
+          location: 'USTHB',
+          channelId: '910000000000000010',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(discordService.editScheduledEvent).not.toHaveBeenCalled();
+    });
+
+    it('requires endsAt to move a voice event without an end to a location', async () => {
+      repository.findOwnedEvent.mockResolvedValue({ createdAt: new Date() });
+      discordService.getScheduledEvent.mockResolvedValue({
+        id: 'evt-1',
+        scheduledStartAt: new Date('2026-12-05T09:00:00.000Z'),
+        scheduledEndAt: null,
+      });
+
+      await expect(
+        service.updateEvent('proj-1', 'srv-1', 'evt-1', { location: 'USTHB' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('answers 404 when moving the event to a channel of another server', async () => {
+      repository.findOwnedEvent.mockResolvedValue({ createdAt: new Date() });
+      discordService.getScheduledEvent.mockResolvedValue({ id: 'evt-1' });
+      discordService.getChannelById.mockResolvedValue({
+        guildId: 'srv-2',
+        type: Discord.ChannelType.GuildVoice,
+        isDMBased: () => false,
+      });
+
+      await expect(
+        service.updateEvent('proj-1', 'srv-1', 'evt-1', {
+          channelId: '910000000000000010',
+        }),
+      ).rejects.toThrow(NotFoundException);
+      expect(discordService.editScheduledEvent).not.toHaveBeenCalled();
     });
 
     it('updates event successfully and logs audit', async () => {

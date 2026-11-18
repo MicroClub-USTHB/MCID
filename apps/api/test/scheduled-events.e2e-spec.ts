@@ -1,6 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import request from 'supertest';
+import { ChannelType } from 'discord.js';
 import { auditLogs, projectScheduledEvents } from '../src/database/entities';
 import { DiscordService } from '../src/modules/discord/discord.service';
 import { createTestApp } from './helpers/create-app';
@@ -82,7 +83,20 @@ describeIf('/api/servers/:serverId/scheduled-events (e2e)', () => {
       .spyOn(DiscordService.prototype, 'getChannelById')
       .mockImplementation((channelId: string) => {
         if (channelId === '910000000000000010') {
-          return Promise.resolve({ id: channelId } as any);
+          return Promise.resolve({
+            id: channelId,
+            guildId: serverId,
+            type: ChannelType.GuildVoice,
+            isDMBased: () => false,
+          } as any);
+        }
+        if (channelId === '910000000000000099') {
+          return Promise.resolve({
+            id: channelId,
+            guildId: '111111111111111111',
+            type: ChannelType.GuildVoice,
+            isDMBased: () => false,
+          } as any);
         }
         return Promise.resolve(null);
       });
@@ -346,6 +360,22 @@ describeIf('/api/servers/:serverId/scheduled-events (e2e)', () => {
         status: 'SCHEDULED',
         entityType: 'VOICE',
       });
+    });
+
+    it('returns 404 for a channel of another server', async () => {
+      await request(app.getHttpServer())
+        .post(`/api/servers/${serverId}/scheduled-events`)
+        .set('X-API-Key', projectWithScope.apiKey)
+        .send({
+          name: 'Elsewhere',
+          startsAt: '2026-12-05T09:00:00.000Z',
+          channelId: '910000000000000099',
+        })
+        .expect(404);
+      expect(createScheduledEventSpy).not.toHaveBeenCalledWith(
+        serverId,
+        expect.objectContaining({ name: 'Elsewhere' }),
+      );
     });
 
     it('replays response idempotently with Idempotency-Key without creating duplicate Discord event', async () => {
