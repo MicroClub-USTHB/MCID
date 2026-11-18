@@ -385,6 +385,17 @@ export class DiscordService {
     }
   }
 
+  /** Creates an invite on a guild channel. Returns null when the channel cannot hold invites. */
+  async createChannelInvite(
+    channelId: string,
+    options: { maxAge?: number; maxUses?: number; reason?: string },
+  ): Promise<Discord.Invite | null> {
+    const channel = await this.getChannelById(channelId);
+    if (!channel || channel.isDMBased() || channel.isThread()) return null;
+    if (!('createInvite' in channel)) return null;
+    return channel.createInvite({ ...options, unique: true });
+  }
+
   async sendMessage(
     channelId: string,
     content: string | Discord.MessageCreateOptions,

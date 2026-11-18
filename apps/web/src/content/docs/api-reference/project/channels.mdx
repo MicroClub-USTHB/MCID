@@ -62,6 +62,39 @@ Returns detailed information about a specific channel.
 
 <SwaggerLink tag="Channels" operationId="ChannelsController_getChannel" />
 
+## Create a channel invite
+
+<Endpoint method="POST" path="/api/servers/{serverId}/channels/{channelId}/invites" />
+
+Creates a Discord invite for a channel of a server the project may access. Retrying with the same Idempotency-Key returns the cached invite instead of creating another one.
+
+**Authentication:** Project API key (`X-API-Key` header)
+
+**Parameters**
+
+| Name | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `serverId` | path | `string` | yes | Discord server ID |
+| `channelId` | path | `string` | yes | Discord channel ID |
+| `Idempotency-Key` | header | `string` | no | Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response. |
+
+**Request body** (JSON, required): [CreateInviteDto schema](#createinvitedto-schema).
+
+**Responses**
+
+| Status | Description | Body |
+| --- | --- | --- |
+| `201` | Invite created. | `InviteResponseDto` |
+| `400` | Invalid invite options. |  |
+| `401` | Missing or invalid API key. |  |
+| `403` | Project lacks the manage_channels scope on this server. |  |
+| `404` | Channel does not exist in this server or bot lacks access. |  |
+| `409` | Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. |  |
+| `429` | Rate limit exceeded. 5 invites per minute per project. |  |
+| `502` | Discord rejected the request or the bot lacks permission. |  |
+
+<SwaggerLink tag="Channels" operationId="ChannelsController_createInvite" />
+
 ## Get recent messages from a channel
 
 <Endpoint method="GET" path="/api/servers/{serverId}/channels/{channelId}/messages" />
@@ -190,6 +223,13 @@ Sends a message with optional embeds and mention configuration.
 | `topic` | `string or null` | yes | Channel topic |
 | `type` | `"text" or "voice" or "announcement" or "category"` | yes | Channel type |
 
+### CreateInviteDto schema
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `maxAgeSeconds` | `number` | no | Seconds until the invite expires (0 = never). Discord default when omitted: 86400 (24 hours). |
+| `maxUses` | `number` | no | Maximum number of uses (0 = unlimited, the Discord default when omitted). |
+
 ### EmbedAuthorDto schema
 
 | Field | Type | Required | Description |
@@ -236,6 +276,14 @@ Sends a message with optional embeds and mention configuration.
 | --- | --- | --- | --- |
 | `hasMore` | `boolean` | yes | Whether there are more messages available |
 | `messages` | `array of MessageDto` | yes |  |
+
+### InviteResponseDto schema
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `code` | `string` | yes | Invite code |
+| `expiresAt` | `string or null` | yes | Expiry (ISO 8601), null when the invite never expires |
+| `url` | `string` | yes | Invite URL |
 
 ### MentionDto schema
 
