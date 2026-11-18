@@ -11,7 +11,7 @@ Discord channel listing, message history, and message sending - project API key
 
 <Endpoint method="POST" path="/api/servers/{serverId}/categories" />
 
-Creates a category channel in the Discord server. Requires the manage_channels scope on the server. Retrying with the same Idempotency-Key header returns the cached response.
+Creates a category channel in the Discord server. Requires the manage_channels scope on the server. The Idempotency-Key header is required: retrying with the same key returns the cached response instead of creating it again.
 
 **Authentication:** Project API key (`X-API-Key` header)
 
@@ -20,7 +20,7 @@ Creates a category channel in the Discord server. Requires the manage_channels s
 | Name | In | Type | Required | Description |
 | --- | --- | --- | --- | --- |
 | `serverId` | path | `string` | yes | Discord server ID |
-| `Idempotency-Key` | header | `string` | no | Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response. |
+| `Idempotency-Key` | header | `string` | yes | Required idempotency key (up to 128 characters). A retry with the same key returns the cached response instead of creating the resource again. |
 
 **Request body** (JSON, required): [CreateCategoryDto schema](#createcategorydto-schema).
 
@@ -29,10 +29,10 @@ Creates a category channel in the Discord server. Requires the manage_channels s
 | Status | Description | Body |
 | --- | --- | --- |
 | `201` | Category created successfully. | `CategoryResponseDto` |
-| `400` | Invalid category payload. |  |
+| `400` | Invalid category payload or missing Idempotency-Key header. |  |
 | `401` | Missing or invalid API key. |  |
-| `403` | Project does not have manage_channels scope on this server. |  |
-| `404` | Server not found or bot not connected. |  |
+| `403` | Project does not have the manage_channels scope on this server. |  |
+| `404` | The project is not mapped to this server, the server does not exist, or the bot cannot reach it. |  |
 | `409` | Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. |  |
 | `429` | Rate limit exceeded. |  |
 | `502` | Discord rejected the request or bot lacks permissions. |  |
@@ -71,7 +71,7 @@ Returns all channels the bot can access in the server, with categories.
 
 <Endpoint method="POST" path="/api/servers/{serverId}/channels" />
 
-Creates a text or voice channel in the Discord server, optionally under a parent category. Requires the manage_channels scope on the server. Retrying with the same Idempotency-Key header returns the cached response.
+Creates a text or voice channel in the Discord server, optionally under a parent category. Requires the manage_channels scope on the server. The Idempotency-Key header is required: retrying with the same key returns the cached response instead of creating it again.
 
 **Authentication:** Project API key (`X-API-Key` header)
 
@@ -80,7 +80,7 @@ Creates a text or voice channel in the Discord server, optionally under a parent
 | Name | In | Type | Required | Description |
 | --- | --- | --- | --- | --- |
 | `serverId` | path | `string` | yes | Discord server ID |
-| `Idempotency-Key` | header | `string` | no | Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response. |
+| `Idempotency-Key` | header | `string` | yes | Required idempotency key (up to 128 characters). A retry with the same key returns the cached response instead of creating the resource again. |
 
 **Request body** (JSON, required): [CreateChannelDto schema](#createchanneldto-schema).
 
@@ -89,10 +89,10 @@ Creates a text or voice channel in the Discord server, optionally under a parent
 | Status | Description | Body |
 | --- | --- | --- |
 | `201` | Channel created successfully. | `CreateChannelResponseDto` |
-| `400` | Invalid channel payload or parent is not a category. |  |
+| `400` | Invalid channel payload, parent is not a category, or missing Idempotency-Key header. |  |
 | `401` | Missing or invalid API key. |  |
-| `403` | Project does not have manage_channels scope on this server. |  |
-| `404` | Server or parent category not found. |  |
+| `403` | Project does not have the manage_channels scope on this server. |  |
+| `404` | The project is not mapped to this server, the server does not exist, or the parent category is not in it. |  |
 | `409` | Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. |  |
 | `429` | Rate limit exceeded. |  |
 | `502` | Discord rejected the request or bot lacks permissions. |  |

@@ -66,6 +66,7 @@ describe('CategoriesController (integration)', () => {
       const res = await request(app.getHttpServer())
         .post('/servers/123/categories')
         .set('X-API-Key', 'test-key')
+        .set('Idempotency-Key', 'key-1')
         .send({ name: 'Hackathon 2026' })
         .expect(201);
 
@@ -84,6 +85,7 @@ describe('CategoriesController (integration)', () => {
       await request(app.getHttpServer())
         .post('/servers/123/categories')
         .set('X-API-Key', 'test-key')
+        .set('Idempotency-Key', 'key-1')
         .send({ name: '' })
         .expect(400);
     });
@@ -92,6 +94,7 @@ describe('CategoriesController (integration)', () => {
       await request(app.getHttpServer())
         .post('/servers/123/categories')
         .set('X-API-Key', 'test-key')
+        .set('Idempotency-Key', 'key-1')
         .send({})
         .expect(400);
     });

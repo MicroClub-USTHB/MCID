@@ -31,6 +31,7 @@ import { ProjectThrottlerGuard } from './guards/project-throttler.guard';
 import { SkipGlobalThrottle } from '../../common/guards/app-throttler.guard';
 import { RequireScope } from '../../common/decorators/require-scope.decorator';
 import { Idempotent } from '../../common/decorators/idempotent.decorator';
+import { HideInaccessibleServer } from '../../common/decorators/hide-inaccessible-server.decorator';
 import { ChannelsExceptionFilter } from './filters/channels-exception.filter';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { CategoryResponseDto } from './dto/category-response.dto';
@@ -52,14 +53,15 @@ export class CategoriesController {
 
   @Post()
   @RequireScope('manage_channels')
-  @Idempotent()
+  @HideInaccessibleServer()
+  @Idempotent({ required: true })
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Create a Discord category channel',
     description:
       'Creates a category channel in the Discord server. ' +
       'Requires the manage_channels scope on the server. ' +
-      'Retrying with the same Idempotency-Key header returns the cached response.',
+      'The Idempotency-Key header is required: retrying with the same key returns the cached response instead of creating it again.',
   })
   @ApiParam({
     name: 'serverId',
@@ -70,13 +72,17 @@ export class CategoriesController {
     description: 'Category created successfully.',
     type: CategoryResponseDto,
   })
-  @ApiBadRequestResponse({ description: 'Invalid category payload.' })
+  @ApiBadRequestResponse({
+    description: 'Invalid category payload or missing Idempotency-Key header.',
+  })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid API key.' })
   @ApiForbiddenResponse({
-    description: 'Project does not have manage_channels scope on this server.',
+    description:
+      'Project does not have the manage_channels scope on this server.',
   })
   @ApiNotFoundResponse({
-    description: 'Server not found or bot not connected.',
+    description:
+      'The project is not mapped to this server, the server does not exist, or the bot cannot reach it.',
   })
   @ApiTooManyRequestsResponse({
     description: 'Rate limit exceeded.',

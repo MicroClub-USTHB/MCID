@@ -1,8 +1,9 @@
+import { randomUUID } from 'crypto';
 import { INestApplication } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import request from 'supertest';
 import Discord, { ChannelType } from 'discord.js';
-import { auditLogs } from '../src/database/entities';
+import { auditLogs, projectServers } from '../src/database/entities';
 import { DiscordService } from '../src/modules/discord/discord.service';
 import { createTestApp } from './helpers/create-app';
 import {
@@ -149,6 +150,7 @@ describeIf('Project Channels and Categories API (e2e)', () => {
     it('creates a category, records audit log, and returns 201', async () => {
       const res = await request(app.getHttpServer())
         .post(`/api/servers/${serverId}/categories`)
+        .set('Idempotency-Key', randomUUID())
         .set('X-API-Key', projectWithScope.apiKey)
         .send({ name: 'Hackathon 2026' })
         .expect(201);
@@ -191,12 +193,14 @@ describeIf('Project Channels and Categories API (e2e)', () => {
     it('returns 400 when name is empty or missing', async () => {
       await request(app.getHttpServer())
         .post(`/api/servers/${serverId}/categories`)
+        .set('Idempotency-Key', randomUUID())
         .set('X-API-Key', projectWithScope.apiKey)
         .send({ name: '' })
         .expect(400);
 
       await request(app.getHttpServer())
         .post(`/api/servers/${serverId}/categories`)
+        .set('Idempotency-Key', randomUUID())
         .set('X-API-Key', projectWithScope.apiKey)
         .send({})
         .expect(400);
@@ -209,6 +213,7 @@ describeIf('Project Channels and Categories API (e2e)', () => {
     it('creates a text channel at root level and records audit log', async () => {
       const res = await request(app.getHttpServer())
         .post(`/api/servers/${serverId}/channels`)
+        .set('Idempotency-Key', randomUUID())
         .set('X-API-Key', projectWithScope.apiKey)
         .send({
           name: 'announcements',
@@ -233,6 +238,7 @@ describeIf('Project Channels and Categories API (e2e)', () => {
     it('creates a voice channel under a parent category', async () => {
       const res = await request(app.getHttpServer())
         .post(`/api/servers/${serverId}/channels`)
+        .set('Idempotency-Key', randomUUID())
         .set('X-API-Key', projectWithScope.apiKey)
         .send({
           name: 'voice-room-1',
@@ -281,6 +287,7 @@ describeIf('Project Channels and Categories API (e2e)', () => {
     it('returns 400 when name or type is invalid', async () => {
       await request(app.getHttpServer())
         .post(`/api/servers/${serverId}/channels`)
+        .set('Idempotency-Key', randomUUID())
         .set('X-API-Key', projectWithScope.apiKey)
         .send({
           name: 'test',
@@ -292,6 +299,7 @@ describeIf('Project Channels and Categories API (e2e)', () => {
     it('returns 404 when parent category does not exist', async () => {
       await request(app.getHttpServer())
         .post(`/api/servers/${serverId}/channels`)
+        .set('Idempotency-Key', randomUUID())
         .set('X-API-Key', projectWithScope.apiKey)
         .send({
           name: 'subchannel',
@@ -304,6 +312,7 @@ describeIf('Project Channels and Categories API (e2e)', () => {
     it('returns 404 when parent category belongs to a different server', async () => {
       await request(app.getHttpServer())
         .post(`/api/servers/${serverId}/channels`)
+        .set('Idempotency-Key', randomUUID())
         .set('X-API-Key', projectWithScope.apiKey)
         .send({
           name: 'subchannel',
@@ -316,6 +325,7 @@ describeIf('Project Channels and Categories API (e2e)', () => {
     it('returns 400 when parent channel is not a category', async () => {
       await request(app.getHttpServer())
         .post(`/api/servers/${serverId}/channels`)
+        .set('Idempotency-Key', randomUUID())
         .set('X-API-Key', projectWithScope.apiKey)
         .send({
           name: 'subchannel',
@@ -332,11 +342,13 @@ describeIf('Project Channels and Categories API (e2e)', () => {
     it('returns 401 when API key is missing', async () => {
       await request(app.getHttpServer())
         .post(`/api/servers/${serverId}/categories`)
+        .set('Idempotency-Key', randomUUID())
         .send({ name: 'Category' })
         .expect(401);
 
       await request(app.getHttpServer())
         .post(`/api/servers/${serverId}/channels`)
+        .set('Idempotency-Key', randomUUID())
         .send({ name: 'channel', type: 'text' })
         .expect(401);
     });
@@ -344,29 +356,66 @@ describeIf('Project Channels and Categories API (e2e)', () => {
     it('returns 403 when project lacks manage_channels scope', async () => {
       await request(app.getHttpServer())
         .post(`/api/servers/${serverId}/categories`)
+        .set('Idempotency-Key', randomUUID())
         .set('X-API-Key', projectWithoutScope.apiKey)
         .send({ name: 'Category' })
         .expect(403);
 
       await request(app.getHttpServer())
         .post(`/api/servers/${serverId}/channels`)
+        .set('Idempotency-Key', randomUUID())
         .set('X-API-Key', projectWithoutScope.apiKey)
         .send({ name: 'channel', type: 'text' })
         .expect(403);
     });
 
-    it('returns 403 when project has no access to the server', async () => {
+    it('returns 404 when the project is not mapped to the server', async () => {
       await request(app.getHttpServer())
         .post('/api/servers/888888888888888888/categories')
+        .set('Idempotency-Key', randomUUID())
         .set('X-API-Key', projectWithScope.apiKey)
         .send({ name: 'Category' })
-        .expect(403);
+        .expect(404);
 
       await request(app.getHttpServer())
         .post('/api/servers/888888888888888888/channels')
+        .set('Idempotency-Key', randomUUID())
         .set('X-API-Key', projectWithScope.apiKey)
         .send({ name: 'channel', type: 'text' })
-        .expect(403);
+        .expect(404);
+    });
+
+    it('returns 404 for a registered server the project is not mapped to', async () => {
+      const otherProject = await seedTestProject(db, serverId, {
+        name: 'Other Server Project',
+        scopes: ['manage_channels'],
+      });
+      await db
+        .delete(projectServers)
+        .where(eq(projectServers.projectId, otherProject.id));
+
+      await request(app.getHttpServer())
+        .post(`/api/servers/${serverId}/categories`)
+        .set('X-API-Key', otherProject.apiKey)
+        .set('Idempotency-Key', randomUUID())
+        .send({ name: 'Category' })
+        .expect(404);
+    });
+
+    it('returns 400 when the Idempotency-Key header is missing', async () => {
+      await request(app.getHttpServer())
+        .post(`/api/servers/${serverId}/categories`)
+        .set('X-API-Key', projectWithScope.apiKey)
+        .send({ name: 'Category' })
+        .expect(400);
+
+      await request(app.getHttpServer())
+        .post(`/api/servers/${serverId}/channels`)
+        .set('X-API-Key', projectWithScope.apiKey)
+        .send({ name: 'channel', type: 'text' })
+        .expect(400);
+
+      expect(createChannelSpy).not.toHaveBeenCalled();
     });
   });
 
@@ -387,6 +436,7 @@ describeIf('Project Channels and Categories API (e2e)', () => {
 
       const res = await request(app.getHttpServer())
         .post(`/api/servers/${serverId}/channels`)
+        .set('Idempotency-Key', randomUUID())
         .set('X-API-Key', projectWithScope.apiKey)
         .send({
           name: 'blocked-chan',

@@ -1965,7 +1965,7 @@ export interface paths {
         put?: never;
         /**
          * Create a Discord category channel
-         * @description Creates a category channel in the Discord server. Requires the manage_channels scope on the server. Retrying with the same Idempotency-Key header returns the cached response.
+         * @description Creates a category channel in the Discord server. Requires the manage_channels scope on the server. The Idempotency-Key header is required: retrying with the same key returns the cached response instead of creating it again.
          */
         post: operations["CategoriesController_createCategory"];
         delete?: never;
@@ -1989,7 +1989,7 @@ export interface paths {
         put?: never;
         /**
          * Create a Discord channel
-         * @description Creates a text or voice channel in the Discord server, optionally under a parent category. Requires the manage_channels scope on the server. Retrying with the same Idempotency-Key header returns the cached response.
+         * @description Creates a text or voice channel in the Discord server, optionally under a parent category. Requires the manage_channels scope on the server. The Idempotency-Key header is required: retrying with the same key returns the cached response instead of creating it again.
          */
         post: operations["ChannelsController_createChannel"];
         delete?: never;
@@ -9624,9 +9624,9 @@ export interface operations {
     CategoriesController_createCategory: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response. */
-                "Idempotency-Key"?: string;
+            header: {
+                /** @description Required idempotency key (up to 128 characters). A retry with the same key returns the cached response instead of creating the resource again. */
+                "Idempotency-Key": string;
             };
             path: {
                 /** @description Discord server ID */
@@ -9649,7 +9649,7 @@ export interface operations {
                     "application/json": components["schemas"]["CategoryResponseDto"];
                 };
             };
-            /** @description Invalid category payload. */
+            /** @description Invalid category payload or missing Idempotency-Key header. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9663,14 +9663,14 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Project does not have manage_channels scope on this server. */
+            /** @description Project does not have the manage_channels scope on this server. */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Server not found or bot not connected. */
+            /** @description The project is not mapped to this server, the server does not exist, or the bot cannot reach it. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -9759,9 +9759,9 @@ export interface operations {
     ChannelsController_createChannel: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response. */
-                "Idempotency-Key"?: string;
+            header: {
+                /** @description Required idempotency key (up to 128 characters). A retry with the same key returns the cached response instead of creating the resource again. */
+                "Idempotency-Key": string;
             };
             path: {
                 /** @description Discord server ID */
@@ -9784,7 +9784,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateChannelResponseDto"];
                 };
             };
-            /** @description Invalid channel payload or parent is not a category. */
+            /** @description Invalid channel payload, parent is not a category, or missing Idempotency-Key header. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9798,14 +9798,14 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Project does not have manage_channels scope on this server. */
+            /** @description Project does not have the manage_channels scope on this server. */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Server or parent category not found. */
+            /** @description The project is not mapped to this server, the server does not exist, or the parent category is not in it. */
             404: {
                 headers: {
                     [name: string]: unknown;

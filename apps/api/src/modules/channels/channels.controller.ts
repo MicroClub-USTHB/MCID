@@ -38,6 +38,7 @@ import { ApiKeyGuard } from '../../common/guards/api-key.guard';
 import { RequireProjectOperation } from '../../common/decorators/require-project-operation.decorator';
 import { RequireScope } from '../../common/decorators/require-scope.decorator';
 import { Idempotent } from '../../common/decorators/idempotent.decorator';
+import { HideInaccessibleServer } from '../../common/decorators/hide-inaccessible-server.decorator';
 import { CreateInviteDto, InviteResponseDto } from './dto/create-invite.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import { ListChannelsQueryDto } from './dto/list-channels-query.dto';
@@ -68,7 +69,8 @@ export class ChannelsController {
 
   @Post()
   @RequireScope('manage_channels')
-  @Idempotent()
+  @HideInaccessibleServer()
+  @Idempotent({ required: true })
   @SkipGlobalThrottle()
   @UseGuards(ProjectThrottlerGuard)
   @HttpCode(HttpStatus.CREATED)
@@ -77,7 +79,7 @@ export class ChannelsController {
     description:
       'Creates a text or voice channel in the Discord server, optionally under a parent category. ' +
       'Requires the manage_channels scope on the server. ' +
-      'Retrying with the same Idempotency-Key header returns the cached response.',
+      'The Idempotency-Key header is required: retrying with the same key returns the cached response instead of creating it again.',
   })
   @ApiParam({
     name: 'serverId',
@@ -89,14 +91,17 @@ export class ChannelsController {
     type: CreateChannelResponseDto,
   })
   @ApiBadRequestResponse({
-    description: 'Invalid channel payload or parent is not a category.',
+    description:
+      'Invalid channel payload, parent is not a category, or missing Idempotency-Key header.',
   })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid API key.' })
   @ApiForbiddenResponse({
-    description: 'Project does not have manage_channels scope on this server.',
+    description:
+      'Project does not have the manage_channels scope on this server.',
   })
   @ApiNotFoundResponse({
-    description: 'Server or parent category not found.',
+    description:
+      'The project is not mapped to this server, the server does not exist, or the parent category is not in it.',
   })
   @ApiTooManyRequestsResponse({
     description: 'Rate limit exceeded.',

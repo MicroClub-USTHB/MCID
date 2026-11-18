@@ -10609,7 +10609,7 @@
     },
     "/api/servers/{serverId}/categories": {
       "post": {
-        "description": "Creates a category channel in the Discord server. Requires the manage_channels scope on the server. Retrying with the same Idempotency-Key header returns the cached response.",
+        "description": "Creates a category channel in the Discord server. Requires the manage_channels scope on the server. The Idempotency-Key header is required: retrying with the same key returns the cached response instead of creating it again.",
         "operationId": "CategoriesController_createCategory",
         "parameters": [
           {
@@ -10623,10 +10623,10 @@
             }
           },
           {
-            "description": "Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response.",
+            "description": "Required idempotency key (up to 128 characters). A retry with the same key returns the cached response instead of creating the resource again.",
             "in": "header",
             "name": "Idempotency-Key",
-            "required": false,
+            "required": true,
             "schema": {
               "maxLength": 128,
               "type": "string"
@@ -10655,16 +10655,16 @@
             "description": "Category created successfully."
           },
           "400": {
-            "description": "Invalid category payload."
+            "description": "Invalid category payload or missing Idempotency-Key header."
           },
           "401": {
             "description": "Missing or invalid API key."
           },
           "403": {
-            "description": "Project does not have manage_channels scope on this server."
+            "description": "Project does not have the manage_channels scope on this server."
           },
           "404": {
-            "description": "Server not found or bot not connected."
+            "description": "The project is not mapped to this server, the server does not exist, or the bot cannot reach it."
           },
           "409": {
             "description": "Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload."
@@ -10764,7 +10764,7 @@
         ]
       },
       "post": {
-        "description": "Creates a text or voice channel in the Discord server, optionally under a parent category. Requires the manage_channels scope on the server. Retrying with the same Idempotency-Key header returns the cached response.",
+        "description": "Creates a text or voice channel in the Discord server, optionally under a parent category. Requires the manage_channels scope on the server. The Idempotency-Key header is required: retrying with the same key returns the cached response instead of creating it again.",
         "operationId": "ChannelsController_createChannel",
         "parameters": [
           {
@@ -10778,10 +10778,10 @@
             }
           },
           {
-            "description": "Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response.",
+            "description": "Required idempotency key (up to 128 characters). A retry with the same key returns the cached response instead of creating the resource again.",
             "in": "header",
             "name": "Idempotency-Key",
-            "required": false,
+            "required": true,
             "schema": {
               "maxLength": 128,
               "type": "string"
@@ -10810,16 +10810,16 @@
             "description": "Channel created successfully."
           },
           "400": {
-            "description": "Invalid channel payload or parent is not a category."
+            "description": "Invalid channel payload, parent is not a category, or missing Idempotency-Key header."
           },
           "401": {
             "description": "Missing or invalid API key."
           },
           "403": {
-            "description": "Project does not have manage_channels scope on this server."
+            "description": "Project does not have the manage_channels scope on this server."
           },
           "404": {
-            "description": "Server or parent category not found."
+            "description": "The project is not mapped to this server, the server does not exist, or the parent category is not in it."
           },
           "409": {
             "description": "Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload."

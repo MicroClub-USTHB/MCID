@@ -70,7 +70,7 @@ A valid key proves who you are. It grants nothing on its own. An admin gives a p
 | `manage_inbound_webhooks` | `POST /api/project/inbound-webhooks`, `PATCH /api/project/inbound-webhooks/{id}` and `POST /api/project/inbound-webhooks/{id}/rotate-secret`, with the server named in the `serverId` query parameter. |
 | `read_inbound_submissions` | `GET /api/project/inbound-webhooks/{id}/submissions`, with the server named in the `serverId` query parameter. |
 | `manage_roles` | `POST /api/servers/{serverId}/roles`, and `PUT` and `DELETE /api/servers/{serverId}/members/{discordId}/roles/{roleId}`. A project grants or removes only the roles it created, never a root role or one at or above the bot's highest role; a refused attempt answers 403 and is audited. Creating a role under a name the project already used on that server returns that role, so a retry never creates a second one. |
-| `manage_channels` | `POST /api/servers/{serverId}/categories`, `POST /api/servers/{serverId}/channels` and `POST /api/servers/{serverId}/channels/{channelId}/invites`. A project creates categories, text or voice channels (optionally under a category of the same server, otherwise 404), and invites (optional `maxAgeSeconds`, `maxUses`) for a channel of a server it may access. Send an `Idempotency-Key` header to get the same category, channel or invite back on a retry. Each creation is audited. When the bot lacks the Discord permission, the API answers 502. |
+| `manage_channels` | `POST /api/servers/{serverId}/categories`, `POST /api/servers/{serverId}/channels` and `POST /api/servers/{serverId}/channels/{channelId}/invites`. A project creates categories, text or voice channels (optionally under a category of the same server, otherwise 404), and invites (optional `maxAgeSeconds`, `maxUses`) for a channel of a server it may access. The category and channel routes require an `Idempotency-Key` header and answer 404 for a server the project is not mapped to; the invite route takes the header as an option. A retry with the same key gets the same category, channel or invite back. Each creation is audited. When the bot lacks the Discord permission, the API answers 502. |
 | `manage_events` | `POST /api/servers/{serverId}/scheduled-events`, and `PATCH` and `DELETE /api/servers/{serverId}/scheduled-events/{eventId}`. A project creates scheduled events (external location or voice/stage channel) and can update or delete only the events it created; attempts to modify other events answer 404. |
 
 When an admin grants access without choosing scopes, the project gets all of them except the opt-in scopes (`manage_roles`, `manage_channels`, `manage_events`), which an admin has to choose explicitly.
@@ -79,12 +79,14 @@ MCID enforces access when the request names a server in its path, in its query s
 
 ## Idempotency keys
 
-These project writes accept an optional `Idempotency-Key` header of 1 to 128 characters, so a retry never repeats the Discord action:
+These project writes accept an `Idempotency-Key` header of 1 to 128 characters, so a retry never repeats the Discord action:
 
 - `POST /api/servers/{serverId}/roles`
 - `PUT` and `DELETE /api/servers/{serverId}/members/{discordId}/roles/{roleId}`
 - `POST /api/servers/{serverId}/channels/{channelId}/webhooks`
 - `POST /api/webhooks/{webhookId}/execute`
+- `POST /api/servers/{serverId}/channels/{channelId}/invites`
+- `POST /api/servers/{serverId}/categories` and `POST /api/servers/{serverId}/channels`, which require it
 
 ```http
 POST /api/servers/900000000000000001/roles
@@ -97,7 +99,7 @@ Content-Type: application/json
 }
 ```
 
-- A request without the header runs as usual. An empty header or one longer than 128 characters answers 400.
+- A request without the header runs as usual, except on the routes that require it, where it answers 400. An empty header or one longer than 128 characters answers 400.
 - A repeat of the same request with the same key does not run again. It answers the stored status and body with the header `Idempotent-Replayed: true`.
 - The same key with a different method, path, query or body answers 409.
 - A request that arrives while the first one with its key is still running answers 409 and does not run. A key that stays in progress for more than 5 minutes belongs to a request that died, so the next request with that key takes it over and runs.
@@ -118,6 +120,7 @@ MCID stores the keys in PostgreSQL rather than Redis. A key must survive a Redis
 | 403    | `Insufficient scope: 'read_members' is required`                      | The project has the server but not this scope. Ask an admin to add the scope.                 |
 | 403    | `Server not found or inactive`                                        | The server is not known to MCID or an admin disabled it.                                      |
 | 403    | `Server is disabled`                                                  | A request that names a server in its body or query refers to one that is unknown or disabled. |
+| 404    | `Server not found`                                                    | On `POST /api/servers/{serverId}/categories` and `/channels`, which never reveal whether a server exists: the server is unknown, disabled, or not mapped to the project. |
 | 400    | `Invalid server ID format`                                            | The server ID is not 17 to 20 digits.                                                         |
 | 400    | `Server ID is required when scope validation is needed`               | The endpoint needs a scope but the request names no server.                                   |
 
