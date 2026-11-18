@@ -1,11 +1,11 @@
 ---
 title: 'Event Platform runbook'
-description: 'How to register the Event Platform as an MCID project per environment, whitelist callbacks, grant server scopes and verify the integration.'
+description: 'How to register the Event Platform as an MCID project, whitelist callbacks, grant server scopes, assign role permissions and verify the integration.'
 ---
 
 The Event Platform signs members in with MCID SSO and calls the permission and member APIs with a project API key. It is an ordinary MCID project. Each environment (development, staging and production) has its own project, its own API key and its own callback address.
 
-This runbook covers how to create the project, whitelist its callback, grant server access, hand over the credentials and verify the integration.
+This runbook covers how to create the project, whitelist its callback, grant server access, hand over the credentials, assign event permissions to Discord roles and verify the integration.
 
 ## Environments and callback addresses
 
@@ -134,6 +134,67 @@ MCID_REDIRECT_URI=https://events.microclub.info/api/auth/callback
 
 </Steps>
 
+## Role permissions per environment
+
+The Event Platform decides what a member may do from `POST /api/permissions/check-batch`. In each environment, an admin assigns the six event permissions to the club's Discord roles on the main server:
+
+| Discord role      | Permissions                                                                                                                 | Why                                                              |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Executive         | `events.create`, `events.responses.read`, `events.email.send`, `events.review`, `events.checkin`, `events.templates.manage` | Everything HR holds, plus template management.                   |
+| HR                | `events.create`, `events.responses.read`, `events.email.send`                                                               | Runs events, reads responses and emails participants.            |
+| Reviewer          | `events.review`                                                                                                             | Reviews submissions. Held by HR members or delegated reviewers.  |
+| Staff (volunteer) | `events.checkin`                                                                                                            | Scans participants in at the door and cannot read their answers. |
+| Any other role    | none                                                                                                                        | A batch check with `mode: "ANY"` answers `false`.                |
+
+<Callout type="warning">
+  Leave the HR, Reviewer and Staff roles without a hierarchy rank. A member also gets the
+  permissions of every ranked role at or below their own best rank, so a ranked Staff role would
+  give `events.checkin` to every higher-ranked role, such as Member. Inheritance rules copy
+  permissions to other servers in the same way. See [Roles and
+  permissions](/docs/integrate/roles-and-permissions).
+</Callout>
+
+<Steps>
+
+### Find the permission ids
+
+Assign the permissions on each role's page under **Roles** in the admin panel, or with the API. The API takes permission ids, which differ between databases, so read them from the catalog:
+
+```bash
+curl -s "$MCID_URL/permissions/catalog" \
+  -H "Cookie: admin_session=$ADMIN_SESSION" | jq '.[] | select(.key | startswith("EVENTS."))'
+```
+
+### Assign the permissions to a role
+
+Here `42` stands for the id of `EVENTS.CHECKIN` from the catalog.
+
+```bash
+curl -s -X POST "$MCID_URL/permissions/admin/servers/$MAIN_SERVER_ID/roles/$STAFF_ROLE_ID/permissions" \
+  -H "Cookie: admin_session=$ADMIN_SESSION" \
+  -H "Content-Type: application/json" \
+  -d '{ "permissionIds": [42] }'
+```
+
+The answer lists every permission the role now holds. MCID clears the cached permissions as soon as the assignment changes, and the Discord role sync keeps these assignments.
+
+```json
+{
+  "roleId": "700000000000000006",
+  "roleName": "Staff",
+  "serverId": "900000000000000001",
+  "permissions": [
+    { "id": 42, "key": "EVENTS.CHECKIN", "description": "Check participants in at events" }
+  ]
+}
+```
+
+### Repeat for each role
+
+Assign the matrix above to the Executive, HR and Reviewer roles, then verify one member of each role with the batch checks below.
+
+</Steps>
+
 ## Verifying the integration
 
 The platform owner verifies a login and a permission check before going live.
@@ -200,22 +261,87 @@ curl -s -X POST "$MCID_URL/permissions/check" \
 { "allowed": true, "source": "server" }
 ```
 
-To check several permissions at once, use the batch endpoint. `matched` lists the permission keys in upper case:
+### 4. Check each role with the batch endpoint
+
+Check one member of each role with `POST /api/permissions/check-batch`.
+
+A Staff member holds `events.checkin` and not `events.responses.read`. `missing` and `matched` list the permission keys in upper case:
 
 ```bash
 curl -s -X POST "$MCID_URL/permissions/check-batch" \
   -H "X-API-Key: $MCID_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "discordId": "800000000000000010",
+    "discordId": "800000000000000007",
     "serverId": "900000000000000001",
-    "permissions": ["events.create", "events.review"],
+    "permissions": ["events.checkin", "events.responses.read"],
+    "mode": "ALL"
+  }'
+```
+
+```json
+{
+  "allowed": false,
+  "missing": ["EVENTS.RESPONSES.READ"]
+}
+```
+
+The same check with `mode: "ANY"` answers:
+
+```json
+{
+  "allowed": true,
+  "matched": ["EVENTS.CHECKIN"]
+}
+```
+
+An Executive member holds all six:
+
+```bash
+curl -s -X POST "$MCID_URL/permissions/check-batch" \
+  -H "X-API-Key: $MCID_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "discordId": "800000000000000001",
+    "serverId": "900000000000000001",
+    "permissions": [
+      "events.create",
+      "events.responses.read",
+      "events.email.send",
+      "events.review",
+      "events.checkin",
+      "events.templates.manage"
+    ],
+    "mode": "ALL"
+  }'
+```
+
+```json
+{
+  "allowed": true,
+  "missing": []
+}
+```
+
+A member with no event role holds none of them:
+
+```bash
+curl -s -X POST "$MCID_URL/permissions/check-batch" \
+  -H "X-API-Key: $MCID_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "discordId": "800000000000000008",
+    "serverId": "900000000000000001",
+    "permissions": ["events.create", "events.checkin"],
     "mode": "ANY"
   }'
 ```
 
 ```json
-{ "allowed": true, "matched": ["EVENTS.CREATE"] }
+{
+  "allowed": false,
+  "matched": []
+}
 ```
 
 ## Common errors

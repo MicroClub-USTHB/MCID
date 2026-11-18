@@ -107,6 +107,8 @@ The name is not case sensitive, so a check for `events.review` finds `EVENTS.REV
 
 These permissions have no Discord bit. An admin assigns them on the role screen of the admin panel, which lists the whole catalog from `GET /api/permissions/catalog`, and the Discord role sync keeps them: it only replaces the permissions it derives from Discord.
 
+Which club role gets which event permission, and how to assign and verify them in each environment, is in the [Event Platform runbook](/docs/integrate/event-platform#role-permissions-per-environment).
+
 ## Role inheritance across servers
 
 Micro Club has one main server and others, such as a club's own. Inheritance lets a role earned on the main server count on the others.
