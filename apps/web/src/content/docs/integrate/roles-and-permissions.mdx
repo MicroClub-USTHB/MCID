@@ -107,6 +107,43 @@ The name is not case sensitive, so a check for `events.review` finds `EVENTS.REV
 
 These permissions have no Discord bit. An admin assigns them on the role screen of the admin panel, which lists the whole catalog from `GET /api/permissions/catalog`, and the Discord role sync keeps them: it only replaces the permissions it derives from Discord.
 
+### Role assignment matrix
+
+Permissions must be assigned to the appropriate club Discord roles per environment:
+
+| Discord role | Assigned permissions | Capabilities |
+| --- | --- | --- |
+| **Executive** | All 6 permissions | Full access: create, read responses, email, review, check-in, and template management. |
+| **HR** | `EVENTS.CREATE`, `EVENTS.RESPONSES.READ`, `EVENTS.EMAIL.SEND` | Manage events, read attendee form submissions, and email participants. |
+| **Reviewer** | `EVENTS.REVIEW` | Evaluate and score event applications/submissions. |
+| **Staff (Volunteer)** | `EVENTS.CHECKIN` | On-site access control: scan participant badges/QR codes. Cannot read application responses. |
+| **General Member** | None | No event permissions. `mode=ANY` checks return `false`. |
+
+### Assigning permissions via Admin API
+
+An admin can assign permissions to a server role by calling `POST /api/permissions/admin/servers/{serverId}/roles/{roleId}/permissions`:
+
+```bash
+curl -s -X POST "$MCID_URL/permissions/admin/servers/$MAIN_SERVER_ID/roles/$STAFF_ROLE_ID/permissions" \
+  -H "Authorization: Bearer $ADMIN_SESSION_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "permissionIds": [5]
+  }'
+```
+
+```json
+{
+  "roleId": "700000000000000004",
+  "name": "Staff",
+  "permissions": [
+    { "id": 5, "key": "EVENTS.CHECKIN", "description": "Check participants in at events" }
+  ]
+}
+```
+
+Detailed operational procedures and environment setup instructions are documented in the [Event Platform runbook](/docs/integrate/event-platform).
+
 ## Role inheritance across servers
 
 Micro Club has one main server and others, such as a club's own. Inheritance lets a role earned on the main server count on the others.
