@@ -18,6 +18,8 @@ export const API_PAGE_DESCRIPTIONS: Record<string, string> = {
     "Search members, fetch one by Discord ID, and get a member's effective permissions on a server.",
   'project/permissions':
     "Check one permission or many at once for a member, and get the member's full resolved permissions.",
+  'project/roles':
+    'Create Discord roles for events or projects, and grant or remove them for members with a project API key.',
   'project/webhooks':
     'Create, update, execute and delete the Discord webhooks a project owns, with a project API key.',
   'admin/overview':

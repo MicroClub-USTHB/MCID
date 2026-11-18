@@ -36,7 +36,8 @@ export class SetProjectServerAccessDto {
   @ApiPropertyOptional({
     description:
       'Scopes granted to this project for this server. ' +
-      'If omitted, defaults to all available scopes.',
+      'If omitted, keeps the current scopes, or for a new grant every scope ' +
+      'except the opt-in scopes (manage_roles, manage_channels, manage_events).',
     example: ['read_members', 'check_permissions'],
     enum: ProjectScope,
     isArray: true,

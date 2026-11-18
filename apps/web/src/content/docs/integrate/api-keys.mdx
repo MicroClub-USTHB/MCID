@@ -67,10 +67,44 @@ A valid key proves who you are. It grants nothing on its own. An admin gives a p
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `read_members`      | The member endpoints under `/api/servers/{serverId}/members`.                                                            |
 | `check_permissions` | The permission endpoints under `/api/permissions`: `POST /check`, `POST /check-batch` and `GET /{serverId}/{discordId}`. |
+| `manage_inbound_webhooks` | `POST /api/project/inbound-webhooks`, `PATCH /api/project/inbound-webhooks/{id}` and `POST /api/project/inbound-webhooks/{id}/rotate-secret`, with the server named in the `serverId` query parameter. |
+| `read_inbound_submissions` | `GET /api/project/inbound-webhooks/{id}/submissions`, with the server named in the `serverId` query parameter. |
+| `manage_roles` | `POST /api/servers/{serverId}/roles`, and `PUT` and `DELETE /api/servers/{serverId}/members/{discordId}/roles/{roleId}`. A project grants or removes only the roles it created, never a root role or one at or above the bot's highest role; a refused attempt answers 403 and is audited. Creating a role under a name the project already used on that server returns that role, so a retry never creates a second one. |
+| `manage_channels` | No endpoint requires it yet. It is reserved for the channel and category endpoints, and an admin can already grant it. |
+| `manage_events` | No endpoint requires it yet. It is reserved for the scheduled event endpoints, and an admin can already grant it. |
 
-When an admin grants access without choosing scopes, the project gets all of them.
+When an admin grants access without choosing scopes, the project gets all of them except the opt-in scopes (`manage_roles`, `manage_channels`, `manage_events`), which an admin has to choose explicitly.
 
 MCID enforces access when the request names a server in its path, in its query string or, for `POST /api/permissions/check` and `POST /api/permissions/check-batch`, in its JSON body. It checks, in order, that the server exists and is active, that the project may perform the operation the endpoint needs, and that the project holds the scope the endpoint needs. A server ID must be 17 to 20 digits.
+
+## Idempotency keys
+
+These project writes accept an optional `Idempotency-Key` header of 1 to 128 characters, so a retry never repeats the Discord action:
+
+- `POST /api/servers/{serverId}/roles`
+- `PUT` and `DELETE /api/servers/{serverId}/members/{discordId}/roles/{roleId}`
+- `POST /api/servers/{serverId}/channels/{channelId}/webhooks`
+- `POST /api/webhooks/{webhookId}/execute`
+
+```http
+POST /api/servers/900000000000000001/roles
+X-API-Key: mc_live_...
+Idempotency-Key: 9a7b52f1-6782-4112-9c3f-7231459a43a1
+Content-Type: application/json
+
+{
+  "name": "Hackathon Staff"
+}
+```
+
+- A request without the header runs as usual. An empty header or one longer than 128 characters answers 400.
+- A repeat of the same request with the same key does not run again. It answers the stored status and body with the header `Idempotent-Replayed: true`.
+- The same key with a different method, path, query or body answers 409.
+- A request that arrives while the first one with its key is still running answers 409 and does not run. A key that stays in progress for more than 5 minutes belongs to a request that died, so the next request with that key takes it over and runs.
+- When the first request fails with an error, MCID forgets the key, so the client can fix the request and retry with the same key.
+- Keys belong to one project, so two projects can use the same key. MCID keeps a key for 24 hours, and an hourly job deletes expired ones.
+
+MCID stores the keys in PostgreSQL rather than Redis. A key must survive a Redis outage, because the API falls back to the database when Redis is down, and a lost key would let a retry repeat a Discord write. The unique index on the project and the key also makes the reservation atomic across API instances.
 
 ## 401, 403 and the others
 
@@ -98,4 +132,4 @@ All of them have the same JSON shape, described in [Conventions](/docs/integrate
 
 For every endpoint and its required access, see the [Project API reference](/docs/api-reference/project/overview).
 
-Source: `apps/api/src/common/guards/api-key.guard.ts`, `apps/api/src/common/utils/auth.util.ts`, `apps/api/src/common/utils/api-key.util.ts`, `apps/api/src/modules/projects/projects.service.ts`, `apps/api/src/modules/servers/server.guard.ts`, `apps/api/src/modules/permissions/permissions.controller.ts`.
+Source: `apps/api/src/common/guards/api-key.guard.ts`, `apps/api/src/common/utils/auth.util.ts`, `apps/api/src/common/utils/api-key.util.ts`, `apps/api/src/modules/projects/projects.service.ts`, `apps/api/src/modules/servers/server.guard.ts`, `apps/api/src/modules/permissions/permissions.controller.ts`, `apps/api/src/modules/idempotency/idempotency.interceptor.ts`.

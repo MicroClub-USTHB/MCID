@@ -170,6 +170,7 @@ describe('AdminMembersService', () => {
         'test',
         ['s1', 's2'],
         ['r1', 'r2'],
+        undefined,
       );
       expect(repository.findMembersPaginated).toHaveBeenCalledWith(
         'all',
@@ -178,6 +179,7 @@ describe('AdminMembersService', () => {
         0,
         ['s1', 's2'],
         ['r1', 'r2'],
+        undefined,
       );
       expect(result.data).toHaveLength(1);
     });
@@ -231,6 +233,21 @@ describe('AdminMembersService', () => {
       });
       expect(rows).toHaveLength(1);
       expect(rows[0]).toHaveProperty('server_id', 's1');
+    });
+
+    it('passes joinedAfter through to the member queries', async () => {
+      await service.getExportData({
+        filter: 'all',
+        joinedAfter: '2026-03-01T00:00:00Z',
+        format: 'json',
+      });
+      expect(repository.countMembers).toHaveBeenCalledWith(
+        'all',
+        undefined,
+        undefined,
+        undefined,
+        '2026-03-01T00:00:00Z',
+      );
     });
 
     it('filters rows to matching serverIds when multiple serverIds are provided', async () => {

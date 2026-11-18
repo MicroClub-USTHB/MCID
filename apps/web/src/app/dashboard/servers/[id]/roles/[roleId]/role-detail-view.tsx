@@ -9,6 +9,7 @@ import {
   useRolePermissionsQuery,
   useAllRolePermissionsQuery,
   useImpactPreviewQuery,
+  usePermissionCatalogQuery,
 } from '@/features/roles/api/queries';
 import {
   useAddPermissionsMutation,
@@ -74,6 +75,7 @@ function RoleDetailView({ roleId, serverId }: RoleDetailViewProps) {
 
   const statsQuery = useRoleStatsQuery(serverId);
   const rolePermissionsQuery = useRolePermissionsQuery(serverId, roleId);
+  const catalogQuery = usePermissionCatalogQuery();
 
   const stats = useMemo(
     () => (statsQuery.data ? mapRoleStatsResponse(statsQuery.data) : null),
@@ -274,6 +276,7 @@ function RoleDetailView({ roleId, serverId }: RoleDetailViewProps) {
                 )}
 
                 <PermissionMatrix
+                  catalog={catalogQuery.data}
                   assignedIds={displayedPermissionIds ?? currentRolePerms.permissionIds}
                   savingIds={isApplying ? new Set(staged.keys()) : new Set()}
                   locked={isApplying || isExecutiveRole || !canWrite}

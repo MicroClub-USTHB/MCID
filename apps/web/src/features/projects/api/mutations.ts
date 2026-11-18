@@ -100,9 +100,9 @@ export function useUpdateRedirectUriMutation() {
   return useMutation({
     mutationFn: ({ id, redirectUri }: { id: string; redirectUri: string }) =>
       updateRedirectUri(id, redirectUri),
-    onSuccess: (_response, { id }) => {
-      void queryClient.invalidateQueries({ queryKey: projectKeys.detail(id) });
-    },
+    // Returned so the mutation stays pending until the refetch lands: the next add builds on the stored list.
+    onSuccess: (_response, { id }) =>
+      queryClient.invalidateQueries({ queryKey: projectKeys.detail(id) }),
   });
 }
 

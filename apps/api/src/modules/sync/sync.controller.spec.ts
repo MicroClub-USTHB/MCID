@@ -99,11 +99,44 @@ describe('SyncController', () => {
       changes: [],
       total: 0,
     });
-    await controller.getSyncChangeDetails(42, 50, 10);
+    await controller.getSyncChangeDetails(42, { limit: 50, offset: 10 });
     expect(mockSyncService.getSyncChangeDetails).toHaveBeenCalledWith(
       42,
       50,
       10,
+      undefined,
+    );
+  });
+
+  it('getSyncChangeDetails applies the endpoint defaults for an empty query', async () => {
+    mockSyncService.getSyncChangeDetails.mockResolvedValue({
+      changes: [],
+      total: 0,
+    });
+    await controller.getSyncChangeDetails(42, {});
+    expect(mockSyncService.getSyncChangeDetails).toHaveBeenCalledWith(
+      42,
+      100,
+      0,
+      undefined,
+    );
+  });
+
+  it('getSyncChangeDetails forwards the action filter to the service', async () => {
+    mockSyncService.getSyncChangeDetails.mockResolvedValue({
+      changes: [],
+      total: 0,
+    });
+    await controller.getSyncChangeDetails(42, {
+      limit: 50,
+      offset: 10,
+      action: 'added',
+    });
+    expect(mockSyncService.getSyncChangeDetails).toHaveBeenCalledWith(
+      42,
+      50,
+      10,
+      'added',
     );
   });
 });

@@ -25,3 +25,29 @@ export const SYNC_CHANGE_ACTIONS = [
   'role_removed',
 ] as const;
 export type SyncChangeAction = (typeof SYNC_CHANGE_ACTIONS)[number];
+
+export const PROJECT_SCOPES = [
+  'read_members',
+  'check_permissions',
+  'read_inbound_submissions',
+  'manage_inbound_webhooks',
+  'manage_roles',
+  'manage_channels',
+  'manage_events',
+] as const;
+export type ProjectScope = (typeof PROJECT_SCOPES)[number];
+
+/** Scopes an admin must choose explicitly: a grant that names no scopes leaves them out. */
+export const OPT_IN_PROJECT_SCOPES: readonly ProjectScope[] = [
+  'manage_roles',
+  'manage_channels',
+  'manage_events',
+];
+
+/** The scopes a grant gets when it names none. */
+export const DEFAULT_PROJECT_SCOPES: readonly ProjectScope[] = PROJECT_SCOPES.filter(
+  (scope) => !OPT_IN_PROJECT_SCOPES.includes(scope),
+);
+
+export const PROJECT_OPERATIONS = ['READ', 'SEND_MESSAGES', 'MANAGE_WEBHOOKS'] as const;
+export type ProjectOperation = (typeof PROJECT_OPERATIONS)[number];

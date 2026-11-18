@@ -7,6 +7,7 @@ import type {
   ImpactPreviewResponse,
   InheritanceRule,
   ListInheritanceRulesParams,
+  PermissionItem,
   RolePermissionsResponse,
   RoleStatsResponse,
 } from '@/features/roles/types';
@@ -28,6 +29,11 @@ function toSearchString<T extends object>(params?: T): string {
 /** `GET /api/admin/stats/roles?serverId=X` — role distribution for a server. */
 export function fetchRoleStats(serverId: string): Promise<ApiResponse<RoleStatsResponse>> {
   return apiClient.get<RoleStatsResponse>(`/admin/stats/roles${toSearchString({ serverId })}`);
+}
+
+/** `GET /permissions/catalog` — every permission an admin can assign. */
+export function fetchPermissionCatalog(): Promise<ApiResponse<PermissionItem[]>> {
+  return apiClient.get<PermissionItem[]>('/permissions/catalog');
 }
 
 /** `GET /permissions/admin/servers/:serverId/roles/:roleId/permissions`. */

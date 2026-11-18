@@ -1,0 +1,50 @@
+---
+title: 'mcid-cli members and roles'
+description: 'Find members, see what they can do, export member lists and preview role permission changes before applying them.'
+---
+
+Admins most often ask who a member is, which roles they hold and what they can do.
+`member` and `role` answer from the terminal.
+
+## Members
+
+```bash
+mcid-cli member list --search alice
+mcid-cli member list --role "Dev Lead" --joined-after 2026-09-01 --all
+mcid-cli member get @alice
+mcid-cli member permissions @alice --project portal
+mcid-cli member export --role "Dev Lead" --file leads.csv
+```
+
+- A member is a Discord ID or `@username`. An unknown member is an error, not a guess.
+- `--role` takes a role name or ID and is resolved on the chosen server.
+- `member export` accepts the same `--role`, `--search` and `--joined-after` filters as
+  the list, writes owner-only files and refuses to replace a file without `--force`.
+- `member permissions` calls the permission API as a project, so pass `--project` or
+  `--api-key`.
+
+## Roles
+
+```bash
+mcid-cli role list
+mcid-cli role get "Dev Lead"
+mcid-cli role permissions list "Dev Lead"
+mcid-cli role permissions add "Dev Lead" projects.read --dry-run
+mcid-cli role permissions add "Dev Lead" projects.read --yes
+```
+
+`role permissions add` and `remove` always show the impact first, for example how many
+members the change affects. `--dry-run` stops after the preview, and `--yes` applies it
+without asking.
+
+## Inheritance rules
+
+```bash
+mcid-cli role inheritance list
+mcid-cli role inheritance set "Dev Lead" --target-scope selected --target-servers 123456789012345678
+```
+
+A rule copies the source role's permissions to the target servers (`--target-scope all`
+or `selected`). The API has no target role, so the command takes the source role only.
+
+Source: `apps/cli/src/commands/member.ts`, `apps/cli/src/commands/role.ts`.

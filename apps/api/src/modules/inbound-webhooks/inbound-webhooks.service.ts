@@ -26,11 +26,14 @@ import {
   verifySignature,
 } from '../../common/utils/inbound-webhook-signature.util';
 import {
+  DraftNotOpenError,
+  FileNotPendingError,
   InboundWebhookRow,
   InboundWebhooksRepository,
   ListSubmissionsFilters,
+  SubmissionCursor,
 } from './inbound-webhooks.repository';
-import { validateSchema } from '@mcid/form-schema';
+import { isFlatSchema, validateSchema } from '@mcid/form-schema';
 import type { FormSchema, SchemaError } from '@mcid/form-schema';
 import { validatePayload, FileMeta } from './schema/payload.validator';
 import { CreateInboundWebhookDto } from './dto/create-inbound-webhook.dto';
@@ -40,6 +43,7 @@ import {
   renderOpenApi,
   WebhookDocsInput,
 } from './docs/webhook-docs.generator';
+import { InboundWebhookFilesService } from './files/inbound-webhook-files.service';
 import { PreviewInboundWebhookSchemaDto } from './dto/preview-inbound-webhook-schema.dto';
 import { UpdateInboundWebhookDto } from './dto/update-inbound-webhook.dto';
 
@@ -115,6 +119,7 @@ export class InboundWebhooksService {
     private readonly auditRepository: AuditRepository,
     private readonly redisService: RedisService,
     private readonly configService: ConfigService,
+    private readonly files: InboundWebhookFilesService,
   ) {}
 
   // ─── Management ─────────────────────────────────────────────────────────
@@ -217,6 +222,40 @@ export class InboundWebhooksService {
     return this.persist(dto.projectId, prepared);
   }
 
+  /**
+   * Create for the project that owns the API key. Same checks as the admin
+   * create plus a per-project cap, but an invalid schema is a 422 and only
+   * the id, slug and secret come back.
+   */
+  async createForProject(
+    projectId: string,
+    dto: Omit<CreateInboundWebhookDto, 'projectId'>,
+  ) {
+    const check = validateSchema(dto.schema);
+    if (!check.ok) {
+      throw new UnprocessableEntityException({
+        statusCode: 422,
+        error: 'InvalidSchema',
+        errors: check.errors,
+      });
+    }
+    const max = this.configService.get<number>(
+      'INBOUND_WEBHOOK_MAX_PER_PROJECT',
+      100,
+    );
+    // ponytail: count-then-insert, two concurrent creates can pass one over the cap; lock the project row if that matters
+    if ((await this.repository.countByProject(projectId)) >= max) {
+      throw new ConflictException({
+        statusCode: 409,
+        error: 'WebhookLimitReached',
+        message: `This project already has the maximum of ${max} inbound webhooks`,
+      });
+    }
+    const prepared = await this.prepare(dto, null, false, projectId, false);
+    const { webhook, signingSecret } = await this.persist(projectId, prepared);
+    return { id: webhook.id, slug: webhook.slug, secret: signingSecret };
+  }
+
   async findById(id: string): Promise<InboundWebhookRow> {
     const webhook = await this.repository.findById(id);
     if (!webhook) throw new NotFoundException('Inbound webhook not found');
@@ -229,10 +268,15 @@ export class InboundWebhooksService {
       : this.repository.listAll();
   }
 
+  listForProject(projectId: string, limit: number, offset: number) {
+    return this.repository.listByProjectPage(projectId, limit, offset);
+  }
+
   async update(
     id: string,
     dto: UpdateInboundWebhookDto,
     actor: string | null,
+    via?: { projectId: string },
   ): Promise<InboundWebhookRow> {
     await this.findById(id);
 
@@ -259,9 +303,48 @@ export class InboundWebhooksService {
       action: 'webhook.updated',
       entityId: id,
       actorId: actor,
-      details: { fields: Object.keys(patch) },
+      details: { fields: Object.keys(patch), ...via },
     });
     return updated;
+  }
+
+  /**
+   * Project-key update: name and schema only. A webhook of another project is
+   * a 404, and a schema that fails validation is a 422 (the admin route says 400).
+   */
+  async updateForProject(
+    projectId: string,
+    id: string,
+    dto: Pick<UpdateInboundWebhookDto, 'name' | 'schema'>,
+  ): Promise<InboundWebhookRow> {
+    await this.findOwned(projectId, id);
+    if (dto.schema !== undefined) {
+      const result = validateSchema(dto.schema);
+      if (!result.ok) {
+        throw new UnprocessableEntityException({
+          statusCode: 422,
+          error: 'InvalidSchema',
+          errors: result.errors,
+        });
+      }
+    }
+    return this.update(id, { name: dto.name, schema: dto.schema }, null, {
+      projectId,
+    });
+  }
+
+  async rotateSecretForProject(projectId: string, id: string): Promise<string> {
+    await this.findOwned(projectId, id);
+    return this.rotateSecret(id, null, { projectId });
+  }
+
+  private async findOwned(projectId: string, id: string) {
+    const webhook = await this.repository.findById(id);
+    // 404, never confirm that another project's webhook exists
+    if (!webhook || webhook.projectId !== projectId) {
+      throw new NotFoundException('Inbound webhook not found');
+    }
+    return webhook;
   }
 
   async getAllowedRoles(id: string) {
@@ -308,7 +391,11 @@ export class InboundWebhooksService {
     return roleIds;
   }
 
-  async rotateSecret(id: string, actor: string | null): Promise<string> {
+  async rotateSecret(
+    id: string,
+    actor: string | null,
+    via?: { projectId: string },
+  ): Promise<string> {
     await this.findById(id);
     const signingSecret = generateSigningSecret();
     await this.repository.updateSecret(
@@ -319,6 +406,7 @@ export class InboundWebhooksService {
       action: 'secret.rotated',
       entityId: id,
       actorId: actor,
+      details: via,
     });
     return signingSecret;
   }
@@ -495,6 +583,75 @@ export class InboundWebhooksService {
     };
   }
 
+  /** Project-key read: oldest first, keyset-paged, cursor opaque to the caller. */
+  async listSubmissionsForProject(
+    webhookId: string,
+    projectId: string,
+    f: { limit: number; cursor?: string; dateFrom?: Date; dateTo?: Date },
+  ) {
+    // 404 for another project's webhook, as ingest does
+    const webhook = await this.repository.findById(webhookId);
+    if (!webhook || webhook.projectId !== projectId) {
+      throw new NotFoundException('Inbound webhook not found');
+    }
+    const cursor = f.cursor ? decodeCursor(f.cursor) : undefined;
+    const found = await this.repository.listSubmissionsAfter(webhookId, {
+      ...f,
+      cursor,
+    });
+    const rows = found.slice(0, f.limit);
+    const last = rows[rows.length - 1];
+    const nextCursor =
+      found.length > f.limit && last
+        ? Buffer.from(
+            JSON.stringify({ r: last.cursorAt, i: last.id }),
+          ).toString('base64url')
+        : null;
+
+    await this.audit({
+      action: 'submissions.read',
+      entityId: webhookId,
+      details: { count: rows.length, projectId, viaApiKey: true },
+    });
+
+    return {
+      items: rows.map((r) => ({
+        id: r.id,
+        payload: r.payload,
+        receivedAt: r.receivedAt.toISOString(),
+        origin: r.origin,
+      })),
+      nextCursor,
+    };
+  }
+
+  /** Project-key read of one submission; another project's webhook or submission is a 404. */
+  async getSubmissionForProject(
+    webhookId: string,
+    submissionId: string,
+    projectId: string,
+  ) {
+    const webhook = await this.repository.findById(webhookId);
+    if (!webhook || webhook.projectId !== projectId) {
+      throw new NotFoundException('Inbound webhook not found');
+    }
+    const row = await this.repository.findSubmission(webhookId, submissionId);
+    if (!row) throw new NotFoundException('Submission not found');
+
+    await this.audit({
+      action: 'submissions.read',
+      entityId: webhookId,
+      details: { submissionId, projectId, viaApiKey: true },
+    });
+
+    return {
+      id: row.id,
+      payload: row.payload,
+      receivedAt: row.receivedAt.toISOString(),
+      origin: row.origin,
+    };
+  }
+
   async getSubmission(
     webhookId: string,
     submissionId: string,
@@ -540,6 +697,37 @@ export class InboundWebhooksService {
     body: Record<string, unknown>,
     ctx: IngestContext,
   ) {
+    return this.withChecks(webhookId, ctx, (webhook) =>
+      this.store(webhook, body, ctx),
+    );
+  }
+
+  /**
+   * Phase one of a file submission. The same checks as a submission, with the
+   * body left unread until they pass; the signature covers the empty string,
+   * as it does for a draft, because a multipart body is not signed.
+   */
+  async uploadFile(
+    webhookId: string,
+    req: Parameters<InboundWebhookFilesService['receive']>[1],
+    ctx: IngestContext,
+  ) {
+    return this.withChecks(webhookId, ctx, async (webhook) => {
+      await this.assertWithinRateLimit(webhook.id, ctx.projectId);
+      return this.files.receive(webhook, req);
+    });
+  }
+
+  /**
+   * The check chain every write route shares: webhook exists for this project,
+   * is active, origin, signature. `run` does the work after that. If it
+   * throws, nothing was stored, so the signed request may be sent again.
+   */
+  private async withChecks<T>(
+    webhookId: string,
+    ctx: IngestContext,
+    run: (webhook: InboundWebhookRow) => Promise<T>,
+  ): Promise<T> {
     const webhook = await this.repository.findByIdWithSecret(webhookId);
 
     // 404 — never confirm that a webhook belonging to another project exists
@@ -554,32 +742,34 @@ export class InboundWebhooksService {
     const replayKey = await this.assertSignature(webhook, ctx);
 
     try {
-      return await this.store(webhook, body, ctx);
+      return await run(webhook);
     } catch (error) {
-      // Nothing was stored, so the same signed request may be sent again.
       if (replayKey) await this.redisService.delete(replayKey);
       throw error;
     }
   }
 
-  private async store(
+  /**
+   * Layer 2 for one payload. Throws the 422 with every error, or returns the
+   * accepted values and the files they reference.
+   */
+  private async checkPayload(
     webhook: InboundWebhookRow,
-    body: Record<string, unknown>,
-    ctx: IngestContext,
+    payload: Record<string, unknown>,
+    onlyStep?: string,
   ) {
-    await this.assertWithinRateLimit(webhook.id, ctx.projectId);
-
     // The id column is a uuid: anything else cannot match a row, and asking
     // Postgres about it fails the whole request instead of the one field.
-    const fileIds = [...new Set(collectFileIds(body))].filter((id) =>
+    const fileIds = [...new Set(collectFileIds(payload))].filter((id) =>
       isUUID(id),
     );
     const files = await this.loadFileMetas(fileIds);
 
-    const result = validatePayload(webhook.schema, body, {
+    const result = validatePayload(webhook.schema, payload, {
       rejectUnknownFields: webhook.rejectUnknownFields,
       files,
       webhookId: webhook.id,
+      onlyStep,
     });
 
     if (!result.ok) {
@@ -596,17 +786,38 @@ export class InboundWebhooksService {
         errors: result.errors,
       });
     }
+    return result;
+  }
 
-    const submission = await this.repository.insertSubmission({
-      webhookId: webhook.id,
-      projectId: webhook.projectId,
-      payload: result.value,
-      ipAddress: ctx.ipAddress,
-      origin: ctx.origin,
-      userAgent: ctx.userAgent,
-      fileIds: result.fileIds,
-    });
+  private async store(
+    webhook: InboundWebhookRow,
+    body: Record<string, unknown>,
+    ctx: IngestContext,
+  ) {
+    await this.assertWithinRateLimit(webhook.id, ctx.projectId);
+    const result = await this.checkPayload(webhook, body);
 
+    const submission = await this.repository
+      .insertSubmission({
+        webhookId: webhook.id,
+        projectId: webhook.projectId,
+        payload: result.value,
+        ipAddress: ctx.ipAddress,
+        origin: ctx.origin,
+        userAgent: ctx.userAgent,
+        fileIds: result.fileIds,
+      })
+      .catch(rethrowFileLost);
+
+    return this.received(webhook, submission, result.fileIds.length);
+  }
+
+  private async received(
+    webhook: InboundWebhookRow,
+    submission: { id: string; receivedAt: Date },
+    fileCount: number,
+    draftId?: string,
+  ) {
     await this.audit({
       action: 'submission.received',
       entityId: webhook.id,
@@ -615,7 +826,8 @@ export class InboundWebhooksService {
       details: {
         projectId: webhook.projectId,
         submissionId: submission.id,
-        fileCount: result.fileIds.length,
+        fileCount,
+        ...(draftId ? { draftId } : {}),
       },
     });
 
@@ -623,6 +835,149 @@ export class InboundWebhooksService {
       id: submission.id,
       receivedAt: submission.receivedAt.toISOString(),
     };
+  }
+
+  // ─── Drafts (multi-step submissions) ────────────────────────────────────
+
+  /** Opens a draft. Only a webhook with steps can have one. */
+  async createDraft(webhookId: string, ctx: IngestContext) {
+    return this.withChecks(webhookId, ctx, async (webhook) => {
+      if (isFlatSchema(webhook.schema)) {
+        throw new BadRequestException(
+          'This webhook has no steps, so it has no drafts. Send the payload to /submit.',
+        );
+      }
+      await this.assertWithinRateLimit(webhook.id, ctx.projectId);
+
+      const ttlHours = this.configService.get<number>(
+        'INBOUND_WEBHOOK_DRAFT_TTL_H',
+        24,
+      );
+      const draft = await this.repository.insertDraft({
+        webhookId: webhook.id,
+        projectId: webhook.projectId,
+        expiresAt: new Date(Date.now() + ttlHours * 3_600_000),
+      });
+      return {
+        draftId: draft.id,
+        expiresAt: draft.expiresAt.toISOString(),
+      };
+    });
+  }
+
+  /**
+   * Validates one step and stores it. Only that step's active fields are
+   * checked, but its conditions can read the steps already stored. Patching a
+   * step again replaces it. Whatever else changed is rechecked at submit.
+   */
+  async patchDraftStep(
+    webhookId: string,
+    draftId: string,
+    stepKey: string,
+    body: Record<string, unknown>,
+    ctx: IngestContext,
+  ) {
+    return this.withChecks(webhookId, ctx, async (webhook) => {
+      await this.assertWithinRateLimit(webhook.id, ctx.projectId);
+      const draft = await this.loadOpenDraft(webhook, draftId);
+
+      const result = await this.checkPayload(
+        webhook,
+        { ...draft.data, [stepKey]: body },
+        stepKey,
+      );
+      const value = result.value[stepKey] as
+        Record<string, unknown> | undefined;
+
+      const saved = await this.repository.saveDraftStep(
+        draft.id,
+        stepKey,
+        value,
+      );
+      // Submitted or expired between the read and the write
+      if (!saved) throw await this.draftClosedError(draft.id);
+      await this.repository.attachFilesToDraft(
+        result.fileIds,
+        saved.id,
+        saved.expiresAt,
+      );
+
+      return {
+        draftId: saved.id,
+        stepKey,
+        completedSteps: saved.completedSteps,
+        expiresAt: saved.expiresAt.toISOString(),
+      };
+    });
+  }
+
+  /** Validates everything accumulated so far and turns the draft into a submission. */
+  async submitDraft(webhookId: string, draftId: string, ctx: IngestContext) {
+    return this.withChecks(webhookId, ctx, async (webhook) => {
+      await this.assertWithinRateLimit(webhook.id, ctx.projectId);
+      const draft = await this.loadOpenDraft(webhook, draftId);
+
+      // A step never sent is absent from the data, so its required fields
+      // fail here, and a step whose condition is false is skipped.
+      const result = await this.checkPayload(webhook, draft.data);
+
+      try {
+        const submission = await this.repository.insertSubmission({
+          webhookId: webhook.id,
+          projectId: webhook.projectId,
+          draftId: draft.id,
+          payload: result.value,
+          ipAddress: ctx.ipAddress,
+          origin: ctx.origin,
+          userAgent: ctx.userAgent,
+          fileIds: result.fileIds,
+        });
+        return await this.received(
+          webhook,
+          submission,
+          result.fileIds.length,
+          draft.id,
+        );
+      } catch (error) {
+        if (error instanceof DraftNotOpenError) {
+          throw await this.draftClosedError(draft.id);
+        }
+        return rethrowFileLost(error);
+      }
+    });
+  }
+
+  /**
+   * A draft of another webhook is a 404, like an unknown id. One that is
+   * already submitted is a 409; one that ran out of time is a 410.
+   */
+  private async loadOpenDraft(webhook: InboundWebhookRow, draftId: string) {
+    const draft = isUUID(draftId)
+      ? await this.repository.findDraft(draftId)
+      : null;
+    if (!draft || draft.webhookId !== webhook.id) {
+      throw new NotFoundException('Draft not found');
+    }
+    if (draft.status === 'open' && draft.expiresAt.getTime() <= Date.now()) {
+      await this.repository.expireDraft(draft.id);
+    }
+    if (draft.status === 'submitted') {
+      throw new ConflictException('This draft has already been submitted');
+    }
+    if (draft.status === 'expired' || draft.expiresAt.getTime() <= Date.now()) {
+      throw new GoneException('This draft has expired');
+    }
+    return draft;
+  }
+
+  /** Why a draft that was open a moment ago no longer accepts writes. */
+  private async draftClosedError(draftId: string): Promise<HttpException> {
+    const draft = await this.repository.findDraft(draftId);
+    if (draft?.status === 'submitted') {
+      return new ConflictException('This draft has already been submitted');
+    }
+    await this.repository.expireDraft(draftId);
+    return new GoneException('This draft has expired');
   }
 
   private assertOriginAllowed(
@@ -967,6 +1322,29 @@ export class InboundWebhooksService {
   }
 }
 
+/**
+ * A file passed validation but was taken by another submission, or swept,
+ * before this one committed. The transaction rolled back, so nothing was
+ * stored and the draft, if any, is still open.
+ */
+function rethrowFileLost(error: unknown): never {
+  if (error instanceof FileNotPendingError) {
+    throw new UnprocessableEntityException({
+      statusCode: 422,
+      error: 'ValidationFailed',
+      errors: [
+        {
+          path: '',
+          code: 'FILE_ALREADY_USED',
+          message:
+            'A file was attached to another submission or has expired; upload it again',
+        },
+      ],
+    });
+  }
+  throw error;
+}
+
 /** Walks a payload collecting every `{ fileId }` reference, at any depth. */
 function collectFileIds(value: unknown, acc: string[] = []): string[] {
   if (Array.isArray(value)) {
@@ -982,4 +1360,26 @@ function collectFileIds(value: unknown, acc: string[] = []): string[] {
     for (const v of Object.values(record)) collectFileIds(v, acc);
   }
   return acc;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function decodeCursor(raw: string): SubmissionCursor {
+  try {
+    const c = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as {
+      r?: unknown;
+      i?: unknown;
+    };
+    if (
+      typeof c.r === 'string' &&
+      typeof c.i === 'string' &&
+      UUID.test(c.i) &&
+      !Number.isNaN(Date.parse(c.r))
+    ) {
+      return { r: c.r, i: c.i };
+    }
+  } catch {
+    // fall through
+  }
+  throw new BadRequestException('Invalid cursor');
 }

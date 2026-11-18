@@ -327,6 +327,15 @@ export class PermissionsService {
     return { allowed: matched.length > 0, matched };
   }
 
+  async listCatalog(): Promise<PermissionItemDto[]> {
+    const rows = await this.permissionsRepository.listCatalog();
+    return rows.map((p) => ({
+      id: p.id,
+      key: p.key,
+      description: p.description ?? undefined,
+    }));
+  }
+
   async getRolePermissions(
     serverId: string,
     roleId: string,

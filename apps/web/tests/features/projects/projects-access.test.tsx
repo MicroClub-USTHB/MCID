@@ -22,6 +22,7 @@ const project = {
   description: null,
   isInternal: false,
   webhookUrl: null,
+  redirectUri: null,
   apiKeyPrefix: 'pk_abc',
   apiKeyCreatedAt: '2026-08-01T10:00:00.000Z',
   apiKeyLastUsedAt: null,

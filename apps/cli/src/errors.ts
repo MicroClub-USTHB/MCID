@@ -6,6 +6,8 @@ export const ExitCode = {
   Auth: 3,
   NotFound: 4,
   Unexpected: 5,
+  /** A `--wait` gave up before the operation finished. */
+  Timeout: 6,
   /** A missing or invalid argument or flag, reported by the argument parser. */
   Usage: 64,
 } as const;
@@ -34,5 +36,8 @@ export function exitWithError(command: string, err: unknown): never {
   const message = err instanceof Error ? err.message : String(err);
   const code = err instanceof CliError ? err.exitCode : ExitCode.Unexpected;
   process.stderr.write(`mcid-cli ${command}: ${stripControlCharacters(message)}\n`);
+  if (process.env.MCID_DEBUG === '1' && err instanceof Error && err.stack) {
+    process.stderr.write(`${stripControlCharacters(err.stack)}\n`);
+  }
   process.exit(code);
 }

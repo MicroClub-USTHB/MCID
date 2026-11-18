@@ -117,6 +117,24 @@ Removes a single permission from a role. Executive roles (global or highest-rank
 
 <SwaggerLink tag="Permissions" operationId="PermissionsController_removePermissionFromRole" />
 
+## List the permission catalog
+
+<Endpoint method="GET" path="/api/permissions/catalog" />
+
+Returns every permission an admin can assign to a role: the Discord permissions and the ones MCID adds, such as EVENTS.*.
+
+**Authentication:** Admin session token (`Authorization: Bearer <token>`)
+
+**Responses**
+
+| Status | Description | Body |
+| --- | --- | --- |
+| `200` | Permission catalog returned. | `array of PermissionItemDto` |
+| `401` | Authentication required. |  |
+| `403` | roles:read access required. |  |
+
+<SwaggerLink tag="Permissions" operationId="PermissionsController_listCatalog" />
+
 ## List inheritance rules
 
 <Endpoint method="GET" path="/api/permissions/inheritance-rules" />

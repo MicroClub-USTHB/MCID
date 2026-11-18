@@ -12,7 +12,10 @@ import type {
 } from '../inbound-webhooks/inbound-webhooks.service';
 import type { ProjectServerOperations } from '../../database/entities/project-server.entity';
 import { generateApiKey } from '../../common/utils/api-key.util';
-import { CreateProjectDto, ProjectScope } from './dto/create-project.dto';
+import {
+  CreateProjectDto,
+  DEFAULT_PROJECT_SCOPES,
+} from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { UpdateRedirectUriDto } from './dto/update-redirect-uri.dto';
 import {
@@ -62,7 +65,7 @@ export class ProjectsService {
 
       serverAccessConfig = mainServers.map((s) => ({
         serverId: s.id,
-        scopes: Object.values(ProjectScope),
+        scopes: [...DEFAULT_PROJECT_SCOPES],
       }));
     }
 
@@ -120,7 +123,7 @@ export class ProjectsService {
 
       const now = new Date();
       for (const access of serverAccessConfig) {
-        const scopes = access.scopes ?? Object.values(ProjectScope);
+        const scopes = access.scopes ?? [...DEFAULT_PROJECT_SCOPES];
 
         await this.projectsRepository.upsertAccessMapping(
           project.id,
@@ -287,11 +290,12 @@ export class ProjectsService {
     const now = new Date();
     const normalizedOps = this.normalizeOperations(params.operations);
 
-    // If scopes are provided, use them; otherwise keep existing or default to all
+    // If scopes are provided, use them; otherwise keep existing or use the
+    // defaults, which leave out the opt-in scopes
     const scopes =
       params.scopes ??
       (before?.scopes as string[] | undefined) ??
-      Object.values(ProjectScope);
+      DEFAULT_PROJECT_SCOPES;
 
     const saved = await this.projectsRepository.upsertAccessMapping(
       params.projectId,

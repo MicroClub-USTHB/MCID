@@ -1,5 +1,6 @@
 'use client';
 
+import { DEFAULT_PROJECT_SCOPES } from '@mcid/contracts';
 import type { ServerListItemDto } from '@/features/servers/types';
 import type {
   AccessMatrixEntry,
@@ -11,7 +12,15 @@ import { McCheckbox } from '@/shared/components/ui/mc-checkbox';
 import { McSwitch } from '@/shared/components/ui/mc-switch';
 import { useCan } from '@/shared/lib/use-access';
 
-const PROJECT_SCOPES: readonly ProjectScope[] = ['read_members', 'check_permissions'];
+const PROJECT_SCOPES: readonly ProjectScope[] = [
+  'read_members',
+  'check_permissions',
+  'read_inbound_submissions',
+  'manage_inbound_webhooks',
+  'manage_roles',
+  'manage_channels',
+  'manage_events',
+];
 const PROJECT_OPERATIONS: readonly ProjectOperation[] = [
   'READ',
   'SEND_MESSAGES',
@@ -27,6 +36,11 @@ const OPERATION_LABELS: Record<ProjectOperation, string> = {
 const SCOPE_LABELS: Record<ProjectScope, string> = {
   read_members: 'Read members',
   check_permissions: 'Check permissions',
+  read_inbound_submissions: 'Read inbound submissions',
+  manage_inbound_webhooks: 'Manage inbound webhooks',
+  manage_roles: 'Manage roles',
+  manage_channels: 'Manage channels',
+  manage_events: 'Manage events',
 };
 
 export interface ServerAccessChange {
@@ -131,7 +145,8 @@ function ServerAccessMatrix({
               } else {
                 onChange(server.id, {
                   operations: { ...DEFAULT_OPERATIONS },
-                  scopes: [...PROJECT_SCOPES],
+                  // Opt-in scopes such as manage_roles stay unticked.
+                  scopes: [...DEFAULT_PROJECT_SCOPES],
                 });
               }
             }

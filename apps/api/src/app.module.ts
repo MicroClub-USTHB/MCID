@@ -26,6 +26,8 @@ import { AdminWebhooksModule } from './modules/admin-webhooks/admin-webhooks.mod
 import { AuditModule } from './modules/audit/audit.module';
 import { StatsModule } from './modules/stats/stats.module';
 import { InboundWebhooksModule } from './modules/inbound-webhooks/inbound-webhooks.module';
+import { ProjectRolesModule } from './modules/project-roles/project-roles.module';
+import { IdempotencyModule } from './modules/idempotency/idempotency.module';
 import { MethodNotAllowedMiddleware } from './common/middleware/method-not-allowed.middleware';
 import { AuditLoggingMiddleware } from './modules/audit/middleware/audit-logging.middleware';
 
@@ -61,6 +63,8 @@ import { AuditLoggingMiddleware } from './modules/audit/middleware/audit-logging
     AuditModule,
     StatsModule,
     InboundWebhooksModule,
+    ProjectRolesModule,
+    IdempotencyModule,
   ],
   controllers: [AppController],
   providers: [
