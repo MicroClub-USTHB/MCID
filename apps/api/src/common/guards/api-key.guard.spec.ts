@@ -10,6 +10,7 @@ import { ApiKeyGuard } from './api-key.guard';
 import { DRIZZLE } from '../../database/database.module';
 import { ProjectsService } from '../../modules/projects/projects.service';
 import { ProjectAuthCacheService } from '../../modules/projects/project-auth-cache.service';
+import { HIDE_INACCESSIBLE_SERVER_KEY } from '../decorators/hide-inaccessible-server.decorator';
 
 // ── Fixtures ───────────────────────────────────────────────────────────────
 
@@ -443,6 +444,7 @@ describe('ApiKeyGuard', () => {
       serverId: '123456789012345678',
       operation: 'READ',
       requiredScope: 'read_members',
+      hideInaccessibleServer: false,
     });
   });
 
@@ -473,6 +475,35 @@ describe('ApiKeyGuard', () => {
       serverId: '123456789012345678',
       operation: 'READ',
       requiredScope: 'check_permissions',
+      hideInaccessibleServer: false,
+    });
+  });
+
+  it('asks for a 404 on routes marked with @HideInaccessibleServer()', async () => {
+    const { generateApiKey } = require('../utils/api-key.util');
+    const { fullKey, prefix, hash } = generateApiKey();
+    guard = await setupGuard([
+      { ...ACTIVE_PROJECT, apiKeyPrefix: prefix, apiKeyHash: hash },
+    ]);
+    mockReflector.get.mockImplementation((key: string) =>
+      key === HIDE_INACCESSIBLE_SERVER_KEY ? true : 'manage_channels',
+    );
+
+    await guard.canActivate(
+      makeContext({
+        headers: { authorization: `Bearer ${fullKey}` },
+        params: { serverId: '123456789012345678' },
+      }),
+    );
+
+    expect(
+      mockAccessService.assertProjectServerRequestAccess,
+    ).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      serverId: '123456789012345678',
+      operation: 'READ',
+      requiredScope: 'manage_channels',
+      hideInaccessibleServer: true,
     });
   });
 

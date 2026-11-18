@@ -377,11 +377,24 @@ export class ProjectsService {
     serverId: string;
     operation: ProjectServerOperation;
     requiredScope?: string;
+    /** Answer 404 instead of 403 when the project cannot reach the server. */
+    hideInaccessibleServer?: boolean;
   }): Promise<void> {
     const accessState = await this.resolveProjectServerAccessState(
       params.projectId,
       params.serverId,
     );
+
+    // A known server without a mapping row comes back with null operations.
+    if (
+      params.hideInaccessibleServer &&
+      (!accessState?.serverIsActive || !accessState.operations)
+    ) {
+      throw new NotFoundException({
+        code: 'SERVER_NOT_FOUND',
+        message: 'Server not found',
+      });
+    }
 
     if (!accessState || !accessState.serverIsActive) {
       throw new ForbiddenException('Server not found or inactive');

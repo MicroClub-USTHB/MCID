@@ -20,6 +20,7 @@ import type { ProjectServerOperation } from '../../modules/projects/projects.rep
 import { verifyApiKey } from '../utils/api-key.util';
 import { extractApiKey } from '../utils/auth.util';
 import { SCOPE_KEY } from '../decorators/require-scope.decorator';
+import { HIDE_INACCESSIBLE_SERVER_KEY } from '../decorators/hide-inaccessible-server.decorator';
 
 type ProjectRow = typeof schema.projects.$inferSelect;
 
@@ -99,6 +100,11 @@ export class ApiKeyGuard implements CanActivate {
       serverId,
       operation: requiredOperation,
       requiredScope: requiredScope ?? undefined,
+      hideInaccessibleServer:
+        this.reflector.get<boolean>(
+          HIDE_INACCESSIBLE_SERVER_KEY,
+          context.getHandler(),
+        ) === true,
     });
 
     request.project = project;

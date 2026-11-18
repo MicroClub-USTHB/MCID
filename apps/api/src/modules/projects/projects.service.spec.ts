@@ -720,6 +720,58 @@ describe('ProjectsService', () => {
         }),
       ).rejects.toThrow(ForbiddenException);
     });
+
+    it('throws NotFoundException for an unreachable server when hideInaccessibleServer is set', async () => {
+      mockRepo.findProjectServerAccessState.mockResolvedValue(null);
+
+      await expect(
+        service.assertProjectServerRequestAccess({
+          projectId: 'proj-1',
+          serverId: 'guild-1',
+          operation: 'READ',
+          requiredScope: 'manage_channels',
+          hideInaccessibleServer: true,
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws NotFoundException for a known server the project is not mapped to when hideInaccessibleServer is set', async () => {
+      mockRepo.findProjectServerAccessState.mockResolvedValue({
+        serverId: 'guild-1',
+        serverIsActive: true,
+        operations: null,
+        scopes: null,
+      });
+
+      await expect(
+        service.assertProjectServerRequestAccess({
+          projectId: 'proj-1',
+          serverId: 'guild-1',
+          operation: 'READ',
+          requiredScope: 'manage_channels',
+          hideInaccessibleServer: true,
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('keeps ForbiddenException for a missing scope when hideInaccessibleServer is set', async () => {
+      mockRepo.findProjectServerAccessState.mockResolvedValue({
+        serverId: 'guild-1',
+        serverIsActive: true,
+        operations: { READ: true, SEND_MESSAGES: true, MANAGE_WEBHOOKS: false },
+        scopes: ['read_members'],
+      });
+
+      await expect(
+        service.assertProjectServerRequestAccess({
+          projectId: 'proj-1',
+          serverId: 'guild-1',
+          operation: 'READ',
+          requiredScope: 'manage_channels',
+          hideInaccessibleServer: true,
+        }),
+      ).rejects.toThrow(ForbiddenException);
+    });
   });
 
   // ── list methods ───────────────────────────────────────────────────
