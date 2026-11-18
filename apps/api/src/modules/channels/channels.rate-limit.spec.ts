@@ -4,6 +4,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { Reflector } from '@nestjs/core';
 import request from 'supertest';
 import { ChannelsController } from './channels.controller';
+import { IdempotencyInterceptor } from '../idempotency/idempotency.interceptor';
 import { ChannelsService } from './channels.service';
 import { ApiKeyGuard } from '../../common/guards/api-key.guard';
 import { ChannelAccessGuard } from './guards/channel-access.guard';
@@ -14,6 +15,7 @@ describe('Channels Rate Limiting', () => {
 
   const mockService = {
     sendMessage: jest.fn(),
+    createInvite: jest.fn(),
     getMessages: jest.fn(),
     listChannels: jest.fn(),
     getChannel: jest.fn(),
@@ -40,6 +42,11 @@ describe('Channels Rate Limiting', () => {
         Reflector,
       ],
     })
+      .overrideInterceptor(IdempotencyInterceptor)
+      .useValue({
+        intercept: (_c: unknown, next: { handle: () => unknown }) =>
+          next.handle(),
+      })
       .overrideGuard(ApiKeyGuard)
       .useValue(mockApiKeyGuard)
       .overrideGuard(ChannelAccessGuard)

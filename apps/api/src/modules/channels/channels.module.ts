@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { DiscordModule } from '../discord/discord.module';
-import { ProjectsModule } from '../projects/projects.module';
 import { AuditModule } from '../audit/audit.module';
+import { ProjectsModule } from '../projects/projects.module';
 import { ChannelsController } from './channels.controller';
 import { CategoriesController } from './categories.controller';
 import { ChannelsService } from './channels.service';

@@ -2018,6 +2018,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{serverId}/channels/{channelId}/invites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a channel invite
+         * @description Creates a Discord invite for a channel of a server the project may access. Retrying with the same Idempotency-Key returns the cached invite instead of creating another one.
+         */
+        post: operations["ChannelsController_createInvite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{serverId}/channels/{channelId}/messages": {
         parameters: {
             query?: never;
@@ -2843,6 +2863,18 @@ export interface components {
              */
             slug: string;
         };
+        CreateInviteDto: {
+            /**
+             * @description Seconds until the invite expires (0 = never). Discord default when omitted: 86400 (24 hours).
+             * @example 604800
+             */
+            maxAgeSeconds?: number;
+            /**
+             * @description Maximum number of uses (0 = unlimited, the Discord default when omitted).
+             * @example 0
+             */
+            maxUses?: number;
+        };
         CreateProjectDto: {
             /** @example Main club website */
             description?: string;
@@ -3259,6 +3291,23 @@ export interface components {
              * @example 15
              */
             roleHolders: number;
+        };
+        InviteResponseDto: {
+            /**
+             * @description Invite code
+             * @example abc123
+             */
+            code: string;
+            /**
+             * @description Expiry (ISO 8601), null when the invite never expires
+             * @example 2026-12-01T00:00:00.000Z
+             */
+            expiresAt: string | null;
+            /**
+             * @description Invite URL
+             * @example https://discord.gg/abc123
+             */
+            url: string;
         };
         LogoutAllDto: {
             /**
@@ -9832,6 +9881,87 @@ export interface operations {
             };
             /** @description Channel does not exist or bot lacks access. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ChannelsController_createInvite: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                /** @description Discord server ID */
+                serverId: string;
+                /** @description Discord channel ID */
+                channelId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateInviteDto"];
+            };
+        };
+        responses: {
+            /** @description Invite created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteResponseDto"];
+                };
+            };
+            /** @description Invalid invite options. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or invalid API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project lacks the manage_channels scope on this server. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Channel does not exist in this server or bot lacks access. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded. 5 invites per minute per project. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Discord rejected the request or the bot lacks permission. */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

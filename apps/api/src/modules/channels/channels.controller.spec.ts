@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import {
+  ExecutionContext,
   BadRequestException,
   ForbiddenException,
   INestApplication,
@@ -8,6 +9,7 @@ import {
 } from '@nestjs/common';
 import request from 'supertest';
 import { ChannelsController } from './channels.controller';
+import { IdempotencyInterceptor } from '../idempotency/idempotency.interceptor';
 import { ChannelsService } from './channels.service';
 import { ApiKeyGuard } from '../../common/guards/api-key.guard';
 import { ChannelAccessGuard } from './guards/channel-access.guard';
@@ -23,10 +25,16 @@ describe('ChannelsController (integration)', () => {
     sendMessage: jest.fn(),
     createChannel: jest.fn(),
     createCategory: jest.fn(),
+    createInvite: jest.fn(),
   };
 
   const mockApiKeyGuard = {
-    canActivate: jest.fn().mockResolvedValue(true),
+    canActivate: jest.fn((ctx: ExecutionContext) => {
+      ctx.switchToHttp().getRequest<{ project?: unknown }>().project = {
+        id: 'project-1',
+      };
+      return true;
+    }),
   };
 
   const mockChannelAccessGuard = {
@@ -47,6 +55,11 @@ describe('ChannelsController (integration)', () => {
         },
       ],
     })
+      .overrideInterceptor(IdempotencyInterceptor)
+      .useValue({
+        intercept: (_c: unknown, next: { handle: () => unknown }) =>
+          next.handle(),
+      })
       .overrideGuard(ApiKeyGuard)
       .useValue(mockApiKeyGuard)
       .overrideGuard(ChannelAccessGuard)
@@ -150,6 +163,39 @@ describe('ChannelsController (integration)', () => {
 
       expect(res.body.messages).toHaveLength(1);
       expect(res.body.hasMore).toBe(false);
+    });
+  });
+
+  describe('POST /servers/:serverId/channels/:channelId/invites', () => {
+    it('returns 201 with the invite', async () => {
+      const body = {
+        code: 'abc123',
+        url: 'https://discord.gg/abc123',
+        expiresAt: '2026-12-01T00:00:00.000Z',
+      };
+      mockService.createInvite.mockResolvedValue(body);
+
+      const res = await request(app.getHttpServer())
+        .post('/servers/123/channels/ch-1/invites')
+        .set('X-API-Key', 'test-key')
+        .send({ maxAgeSeconds: 604800, maxUses: 0 })
+        .expect(201);
+
+      expect(res.body).toEqual(body);
+      expect(mockService.createInvite).toHaveBeenCalledWith(
+        'project-1',
+        '123',
+        'ch-1',
+        { maxAgeSeconds: 604800, maxUses: 0 },
+      );
+    });
+
+    it('returns 400 for out-of-range options', async () => {
+      await request(app.getHttpServer())
+        .post('/servers/123/channels/ch-1/invites')
+        .set('X-API-Key', 'test-key')
+        .send({ maxAgeSeconds: 999999999 })
+        .expect(400);
     });
   });
 

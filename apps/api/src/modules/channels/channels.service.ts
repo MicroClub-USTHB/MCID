@@ -1,13 +1,14 @@
 import {
   Injectable,
   BadRequestException,
-  NotFoundException,
   BadGatewayException,
+  NotFoundException,
   HttpException,
   Logger,
 } from '@nestjs/common';
 import { DiscordService } from '../discord/discord.service';
 import { AuditService } from '../audit/audit.service';
+import { CreateInviteDto, InviteResponseDto } from './dto/create-invite.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import {
   ListChannelsQueryDto,
@@ -190,6 +191,57 @@ export class ChannelsService {
       code: 'DISCORD_ERROR',
       message: 'Failed to communicate with Discord',
     });
+  }
+
+  /** Creates an invite for a channel; the guard has already checked server and channel access. */
+  async createInvite(
+    projectId: string,
+    serverId: string,
+    channelId: string,
+    dto: CreateInviteDto,
+  ): Promise<InviteResponseDto> {
+    let invite: Discord.Invite | null;
+    try {
+      invite = await this.discordService.createChannelInvite(channelId, {
+        maxAge: dto.maxAgeSeconds,
+        maxUses: dto.maxUses,
+        reason: `Created by project ${projectId}`,
+      });
+    } catch (error: unknown) {
+      this.logger.warn(error instanceof Error ? error.message : String(error));
+      throw new BadGatewayException({
+        code: 'DISCORD_ERROR',
+        message: 'Discord rejected the invite or the bot lacks permission',
+      });
+    }
+
+    if (!invite) {
+      throw new NotFoundException({
+        code: 'CHANNEL_NOT_FOUND',
+        message: 'Channel does not exist or bot lacks access',
+      });
+    }
+
+    this.auditService.logAction({
+      actionType: 'server',
+      action: 'channel_invite_created',
+      entityType: 'channel',
+      entityId: channelId,
+      details: {
+        projectId,
+        serverId,
+        code: invite.code,
+        maxAgeSeconds: dto.maxAgeSeconds ?? null,
+        maxUses: dto.maxUses ?? null,
+      },
+      severity: 'info',
+    });
+
+    return {
+      code: invite.code,
+      url: invite.url,
+      expiresAt: invite.expiresAt?.toISOString() ?? null,
+    };
   }
 
   async sendMessage(

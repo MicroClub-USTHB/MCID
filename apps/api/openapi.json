@@ -893,6 +893,26 @@
         ],
         "type": "object"
       },
+      "CreateInviteDto": {
+        "additionalProperties": false,
+        "properties": {
+          "maxAgeSeconds": {
+            "description": "Seconds until the invite expires (0 = never). Discord default when omitted: 86400 (24 hours).",
+            "example": 604800,
+            "maximum": 604800,
+            "minimum": 0,
+            "type": "number"
+          },
+          "maxUses": {
+            "description": "Maximum number of uses (0 = unlimited, the Discord default when omitted).",
+            "example": 0,
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
       "CreateProjectDto": {
         "additionalProperties": false,
         "properties": {
@@ -1643,6 +1663,33 @@
           "affectedMembers",
           "memberIds",
           "roleHolders"
+        ],
+        "type": "object"
+      },
+      "InviteResponseDto": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "description": "Invite code",
+            "example": "abc123",
+            "type": "string"
+          },
+          "expiresAt": {
+            "description": "Expiry (ISO 8601), null when the invite never expires",
+            "example": "2026-12-01T00:00:00.000Z",
+            "nullable": true,
+            "type": "string"
+          },
+          "url": {
+            "description": "Invite URL",
+            "example": "https://discord.gg/abc123",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "url",
+          "expiresAt"
         ],
         "type": "object"
       },
@@ -10850,6 +10897,96 @@
           }
         ],
         "summary": "Get channel details",
+        "tags": [
+          "Channels"
+        ]
+      }
+    },
+    "/api/servers/{serverId}/channels/{channelId}/invites": {
+      "post": {
+        "description": "Creates a Discord invite for a channel of a server the project may access. Retrying with the same Idempotency-Key returns the cached invite instead of creating another one.",
+        "operationId": "ChannelsController_createInvite",
+        "parameters": [
+          {
+            "description": "Discord server ID",
+            "in": "path",
+            "name": "serverId",
+            "required": true,
+            "schema": {
+              "example": "123456789012345678",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Discord channel ID",
+            "in": "path",
+            "name": "channelId",
+            "required": true,
+            "schema": {
+              "example": "123456789012345678",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInviteDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteResponseDto"
+                }
+              }
+            },
+            "description": "Invite created."
+          },
+          "400": {
+            "description": "Invalid invite options."
+          },
+          "401": {
+            "description": "Missing or invalid API key."
+          },
+          "403": {
+            "description": "Project lacks the manage_channels scope on this server."
+          },
+          "404": {
+            "description": "Channel does not exist in this server or bot lacks access."
+          },
+          "409": {
+            "description": "Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload."
+          },
+          "429": {
+            "description": "Rate limit exceeded. 5 invites per minute per project."
+          },
+          "502": {
+            "description": "Discord rejected the request or the bot lacks permission."
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ],
+        "summary": "Create a channel invite",
         "tags": [
           "Channels"
         ]

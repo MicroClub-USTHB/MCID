@@ -21,11 +21,10 @@ describe('ChannelsService', () => {
     getChannelMessages: jest.fn(),
     sendMessage: jest.fn(),
     createChannel: jest.fn(),
+    createChannelInvite: jest.fn(),
   };
 
-  const mockAuditService = {
-    logAction: jest.fn(),
-  };
+  const mockAuditService = { logAction: jest.fn() };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -35,10 +34,7 @@ describe('ChannelsService', () => {
           provide: DiscordService,
           useValue: mockDiscordService,
         },
-        {
-          provide: AuditService,
-          useValue: mockAuditService,
-        },
+        { provide: AuditService, useValue: mockAuditService },
       ],
     }).compile();
 
@@ -49,6 +45,71 @@ describe('ChannelsService', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+  });
+
+  describe('createInvite', () => {
+    const invite = {
+      code: 'abc123',
+      url: 'https://discord.gg/abc123',
+      expiresAt: new Date('2026-12-01T00:00:00.000Z'),
+    };
+
+    it('returns code, url and expiry and audits the creation', async () => {
+      mockDiscordService.createChannelInvite.mockResolvedValue(invite);
+
+      const result = await service.createInvite('p1', 's1', 'c1', {
+        maxAgeSeconds: 604800,
+        maxUses: 0,
+      });
+
+      expect(result).toEqual({
+        code: 'abc123',
+        url: 'https://discord.gg/abc123',
+        expiresAt: '2026-12-01T00:00:00.000Z',
+      });
+      expect(mockDiscordService.createChannelInvite).toHaveBeenCalledWith(
+        'c1',
+        {
+          maxAge: 604800,
+          maxUses: 0,
+          reason: 'Created by project p1',
+        },
+      );
+      expect(mockAuditService.logAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'channel_invite_created',
+          entityId: 'c1',
+          details: expect.objectContaining({ projectId: 'p1', serverId: 's1' }),
+        }),
+      );
+    });
+
+    it('returns a null expiry for a non-expiring invite', async () => {
+      mockDiscordService.createChannelInvite.mockResolvedValue({
+        ...invite,
+        expiresAt: null,
+      });
+      const result = await service.createInvite('p1', 's1', 'c1', {});
+      expect(result.expiresAt).toBeNull();
+    });
+
+    it('throws NotFound when the channel cannot hold invites', async () => {
+      mockDiscordService.createChannelInvite.mockResolvedValue(null);
+      await expect(
+        service.createInvite('p1', 's1', 'c1', {}),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(mockAuditService.logAction).not.toHaveBeenCalled();
+    });
+
+    it('maps a Discord failure to 502 without auditing', async () => {
+      mockDiscordService.createChannelInvite.mockRejectedValue(
+        new Error('Missing Permissions'),
+      );
+      await expect(
+        service.createInvite('p1', 's1', 'c1', {}),
+      ).rejects.toBeInstanceOf(BadGatewayException);
+      expect(mockAuditService.logAction).not.toHaveBeenCalled();
+    });
   });
 
   describe('sendMessage', () => {
