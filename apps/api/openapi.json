@@ -384,6 +384,26 @@
         ],
         "type": "object"
       },
+      "CategoryResponseDto": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "description": "Discord snowflake ID of the created category",
+            "example": "910000000000000002",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name of the category",
+            "example": "Hackathon 2026",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
       "ChannelCategoryDto": {
         "additionalProperties": false,
         "properties": {
@@ -698,6 +718,91 @@
           "serverId",
           "permissions",
           "mode"
+        ],
+        "type": "object"
+      },
+      "CreateCategoryDto": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "description": "Name of the Discord category",
+            "example": "Hackathon 2026",
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "CreateChannelDto": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "description": "Name of the Discord channel",
+            "example": "hackathon-2026-general",
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "parentId": {
+            "description": "Discord snowflake ID of the parent category",
+            "example": "910000000000000002",
+            "pattern": "/^\\d{17,20}$/",
+            "type": "string"
+          },
+          "type": {
+            "description": "Type of the channel (text or voice)",
+            "enum": [
+              "text",
+              "voice"
+            ],
+            "example": "text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type"
+        ],
+        "type": "object"
+      },
+      "CreateChannelResponseDto": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "description": "Discord snowflake ID of the created channel",
+            "example": "910000000000000010",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name of the channel",
+            "example": "hackathon-2026-general",
+            "type": "string"
+          },
+          "parentId": {
+            "description": "Discord snowflake ID of the parent category, or null if root level",
+            "example": "910000000000000002",
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "description": "Type of the channel",
+            "enum": [
+              "text",
+              "voice"
+            ],
+            "example": "text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "parentId"
         ],
         "type": "object"
       },
@@ -10502,6 +10607,86 @@
         ]
       }
     },
+    "/api/servers/{serverId}/categories": {
+      "post": {
+        "description": "Creates a category channel in the Discord server. Requires the manage_channels scope on the server. Retrying with the same Idempotency-Key header returns the cached response.",
+        "operationId": "CategoriesController_createCategory",
+        "parameters": [
+          {
+            "description": "Discord server ID",
+            "in": "path",
+            "name": "serverId",
+            "required": true,
+            "schema": {
+              "example": "123456789012345678",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCategoryDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryResponseDto"
+                }
+              }
+            },
+            "description": "Category created successfully."
+          },
+          "400": {
+            "description": "Invalid category payload."
+          },
+          "401": {
+            "description": "Missing or invalid API key."
+          },
+          "403": {
+            "description": "Project does not have manage_channels scope on this server."
+          },
+          "404": {
+            "description": "Server not found or bot not connected."
+          },
+          "409": {
+            "description": "Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload."
+          },
+          "429": {
+            "description": "Rate limit exceeded."
+          },
+          "502": {
+            "description": "Discord rejected the request or bot lacks permissions."
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ],
+        "summary": "Create a Discord category channel",
+        "tags": [
+          "Channels"
+        ]
+      }
+    },
     "/api/servers/{serverId}/channels": {
       "get": {
         "description": "Returns all channels the bot can access in the server, with categories.",
@@ -10574,6 +10759,84 @@
           }
         ],
         "summary": "List all channels in a server",
+        "tags": [
+          "Channels"
+        ]
+      },
+      "post": {
+        "description": "Creates a text or voice channel in the Discord server, optionally under a parent category. Requires the manage_channels scope on the server. Retrying with the same Idempotency-Key header returns the cached response.",
+        "operationId": "ChannelsController_createChannel",
+        "parameters": [
+          {
+            "description": "Discord server ID",
+            "in": "path",
+            "name": "serverId",
+            "required": true,
+            "schema": {
+              "example": "123456789012345678",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateChannelDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateChannelResponseDto"
+                }
+              }
+            },
+            "description": "Channel created successfully."
+          },
+          "400": {
+            "description": "Invalid channel payload or parent is not a category."
+          },
+          "401": {
+            "description": "Missing or invalid API key."
+          },
+          "403": {
+            "description": "Project does not have manage_channels scope on this server."
+          },
+          "404": {
+            "description": "Server or parent category not found."
+          },
+          "409": {
+            "description": "Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload."
+          },
+          "429": {
+            "description": "Rate limit exceeded."
+          },
+          "502": {
+            "description": "Discord rejected the request or bot lacks permissions."
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ],
+        "summary": "Create a Discord channel",
         "tags": [
           "Channels"
         ]

@@ -3,6 +3,7 @@ import {
   BadRequestException,
   BadGatewayException,
   NotFoundException,
+  HttpException,
   Logger,
 } from '@nestjs/common';
 import { DiscordService } from '../discord/discord.service';
@@ -19,6 +20,10 @@ import {
   ChannelDetailResponseDto,
   ChannelPermissionOverwriteDto,
 } from './dto/channel-response.dto';
+import { CreateCategoryDto } from './dto/create-category.dto';
+import { CategoryResponseDto } from './dto/category-response.dto';
+import { CreateChannelDto, ChannelCreateType } from './dto/create-channel.dto';
+import { CreateChannelResponseDto } from './dto/create-channel-response.dto';
 import Discord, { ChannelType, OverwriteType } from 'discord.js';
 
 @Injectable()
@@ -29,6 +34,164 @@ export class ChannelsService {
     private readonly discordService: DiscordService,
     private readonly auditService: AuditService,
   ) {}
+
+  async createCategory(
+    projectId: string | undefined,
+    serverId: string,
+    dto: CreateCategoryDto,
+  ): Promise<CategoryResponseDto> {
+    let channel: Discord.GuildChannel | null;
+    try {
+      channel = await this.discordService.createChannel(serverId, dto.name, {
+        type: ChannelType.GuildCategory,
+      });
+      if (!channel) {
+        throw new NotFoundException({
+          code: 'SERVER_NOT_FOUND',
+          message: 'Server not found or bot not connected',
+        });
+      }
+    } catch (error: unknown) {
+      this.handleDiscordError(error);
+    }
+
+    this.auditService.logAction({
+      actionType: 'server',
+      action: 'category_created',
+      entityType: 'category',
+      entityId: channel.id,
+      details: {
+        projectId: projectId ?? null,
+        serverId,
+        name: dto.name,
+      },
+      severity: 'info',
+    });
+
+    return {
+      id: channel.id,
+      name: channel.name,
+    };
+  }
+
+  async createChannel(
+    projectId: string | undefined,
+    serverId: string,
+    dto: CreateChannelDto,
+  ): Promise<CreateChannelResponseDto> {
+    if (dto.parentId) {
+      const parentChannel = await this.discordService.getChannelById(
+        dto.parentId,
+      );
+      if (
+        !parentChannel ||
+        parentChannel.isDMBased() ||
+        !('guildId' in parentChannel) ||
+        parentChannel.guildId !== serverId
+      ) {
+        throw new NotFoundException({
+          code: 'PARENT_NOT_FOUND',
+          message: 'Parent category not found',
+        });
+      }
+
+      if (parentChannel.type !== ChannelType.GuildCategory) {
+        throw new BadRequestException({
+          code: 'INVALID_PARENT',
+          message: 'parentId must be a category channel',
+        });
+      }
+    }
+
+    const discordChannelType =
+      dto.type === ChannelCreateType.VOICE
+        ? ChannelType.GuildVoice
+        : ChannelType.GuildText;
+
+    let channel: Discord.GuildChannel | null;
+    try {
+      channel = await this.discordService.createChannel(serverId, dto.name, {
+        type: discordChannelType,
+        parent: dto.parentId,
+      });
+      if (!channel) {
+        throw new NotFoundException({
+          code: 'SERVER_NOT_FOUND',
+          message: 'Server not found or bot not connected',
+        });
+      }
+    } catch (error: unknown) {
+      this.handleDiscordError(error);
+    }
+
+    this.auditService.logAction({
+      actionType: 'server',
+      action: 'channel_created',
+      entityType: 'channel',
+      entityId: channel.id,
+      details: {
+        projectId: projectId ?? null,
+        serverId,
+        name: dto.name,
+        type: dto.type,
+        parentId: dto.parentId ?? null,
+      },
+      severity: 'info',
+    });
+
+    return {
+      id: channel.id,
+      name: channel.name,
+      type: dto.type,
+      parentId: channel.parentId ?? null,
+    };
+  }
+
+  private handleDiscordError(error: unknown): never {
+    if (error instanceof HttpException) {
+      throw error;
+    }
+
+    if (error instanceof Discord.DiscordAPIError) {
+      if (
+        error.code === Discord.RESTJSONErrorCodes.MissingPermissions ||
+        error.code === Discord.RESTJSONErrorCodes.MissingAccess ||
+        error.status === 403
+      ) {
+        throw new BadGatewayException({
+          code: 'DISCORD_FORBIDDEN',
+          message: 'Discord bot lacks permissions to manage channels',
+        });
+      }
+
+      if (error.status === 400 || error.code === 50035) {
+        throw new BadRequestException({
+          code: 'INVALID_CHANNEL_PARAMETERS',
+          message: error.message || 'Invalid channel parameters',
+        });
+      }
+
+      if (error.status === 404) {
+        throw new NotFoundException({
+          code: 'RESOURCE_NOT_FOUND',
+          message: 'Discord resource not found',
+        });
+      }
+
+      throw new BadGatewayException({
+        code: 'DISCORD_ERROR',
+        message: `Discord API error: ${error.message}`,
+      });
+    }
+
+    this.logger.error(
+      `Unexpected error in channel operation: ${String(error)}`,
+    );
+    throw new BadGatewayException({
+      code: 'DISCORD_ERROR',
+      message: 'Failed to communicate with Discord',
+    });
+  }
 
   /** Creates an invite for a channel; the guard has already checked server and channel access. */
   async createInvite(

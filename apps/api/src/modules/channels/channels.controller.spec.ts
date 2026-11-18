@@ -23,6 +23,8 @@ describe('ChannelsController (integration)', () => {
     getChannel: jest.fn(),
     getMessages: jest.fn(),
     sendMessage: jest.fn(),
+    createChannel: jest.fn(),
+    createCategory: jest.fn(),
     createInvite: jest.fn(),
   };
 
@@ -317,6 +319,38 @@ describe('ChannelsController (integration)', () => {
         .expect(403);
 
       expect(res.body.code).toBe('NO_SEND_PERMISSION');
+    });
+  });
+
+  describe('POST /servers/:serverId/channels', () => {
+    it('returns 201 when channel is created', async () => {
+      mockService.createChannel.mockResolvedValue({
+        id: 'ch-new',
+        name: 'dev-chat',
+        type: 'text',
+        parentId: null,
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/servers/123/channels')
+        .set('X-API-Key', 'test-key')
+        .send({ name: 'dev-chat', type: 'text' })
+        .expect(201);
+
+      expect(res.body).toEqual({
+        id: 'ch-new',
+        name: 'dev-chat',
+        type: 'text',
+        parentId: null,
+      });
+    });
+
+    it('returns 400 when name is empty or type is invalid', async () => {
+      await request(app.getHttpServer())
+        .post('/servers/123/channels')
+        .set('X-API-Key', 'test-key')
+        .send({ name: '', type: 'invalid' })
+        .expect(400);
     });
   });
 });

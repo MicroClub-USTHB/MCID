@@ -5,13 +5,13 @@ import {
   Param,
   Query,
   Body,
+  Req,
   UseGuards,
   UseFilters,
   UsePipes,
   ValidationPipe,
   HttpCode,
   HttpStatus,
-  Req,
 } from '@nestjs/common';
 import { Request } from 'express';
 import {
@@ -48,7 +48,14 @@ import {
   ChannelDetailResponseDto,
 } from './dto/channel-response.dto';
 import { GetMessagesResponseDto } from './dto/message-response.dto';
+import { CreateChannelDto } from './dto/create-channel.dto';
+import { CreateChannelResponseDto } from './dto/create-channel-response.dto';
 import { ChannelsExceptionFilter } from './filters/channels-exception.filter';
+import * as schema from '../../database/entities';
+
+interface RequestWithProject extends Request {
+  project?: typeof schema.projects.$inferSelect;
+}
 
 @ApiTags('Channels')
 @ApiSecurity('api-key')
@@ -58,6 +65,53 @@ import { ChannelsExceptionFilter } from './filters/channels-exception.filter';
 @UseFilters(ChannelsExceptionFilter)
 export class ChannelsController {
   constructor(private readonly channelsService: ChannelsService) {}
+
+  @Post()
+  @RequireScope('manage_channels')
+  @Idempotent()
+  @SkipGlobalThrottle()
+  @UseGuards(ProjectThrottlerGuard)
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Create a Discord channel',
+    description:
+      'Creates a text or voice channel in the Discord server, optionally under a parent category. ' +
+      'Requires the manage_channels scope on the server. ' +
+      'Retrying with the same Idempotency-Key header returns the cached response.',
+  })
+  @ApiParam({
+    name: 'serverId',
+    description: 'Discord server ID',
+    example: '123456789012345678',
+  })
+  @ApiCreatedResponse({
+    description: 'Channel created successfully.',
+    type: CreateChannelResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid channel payload or parent is not a category.',
+  })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid API key.' })
+  @ApiForbiddenResponse({
+    description: 'Project does not have manage_channels scope on this server.',
+  })
+  @ApiNotFoundResponse({
+    description: 'Server or parent category not found.',
+  })
+  @ApiTooManyRequestsResponse({
+    description: 'Rate limit exceeded.',
+  })
+  @ApiBadGatewayResponse({
+    description: 'Discord rejected the request or bot lacks permissions.',
+  })
+  async createChannel(
+    @Param('serverId') serverId: string,
+    @Body() dto: CreateChannelDto,
+    @Req() req: RequestWithProject,
+  ): Promise<CreateChannelResponseDto> {
+    const projectId = req.project?.id;
+    return this.channelsService.createChannel(projectId, serverId, dto);
+  }
 
   @Get()
   @RequireProjectOperation('READ')

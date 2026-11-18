@@ -1954,6 +1954,26 @@ export interface paths {
         patch: operations["ServersController_update"];
         trace?: never;
     };
+    "/api/servers/{serverId}/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a Discord category channel
+         * @description Creates a category channel in the Discord server. Requires the manage_channels scope on the server. Retrying with the same Idempotency-Key header returns the cached response.
+         */
+        post: operations["CategoriesController_createCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{serverId}/channels": {
         parameters: {
             query?: never;
@@ -1967,7 +1987,11 @@ export interface paths {
          */
         get: operations["ChannelsController_listChannels"];
         put?: never;
-        post?: never;
+        /**
+         * Create a Discord channel
+         * @description Creates a text or voice channel in the Discord server, optionally under a parent category. Requires the manage_channels scope on the server. Retrying with the same Idempotency-Key header returns the cached response.
+         */
+        post: operations["ChannelsController_createChannel"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2518,6 +2542,18 @@ export interface components {
             projectAuthTtlMs: components["schemas"]["SettingValueDto"];
             statsTtlMs: components["schemas"]["SettingValueDto"];
         };
+        CategoryResponseDto: {
+            /**
+             * @description Discord snowflake ID of the created category
+             * @example 910000000000000002
+             */
+            id: string;
+            /**
+             * @description Name of the category
+             * @example Hackathon 2026
+             */
+            name: string;
+        };
         ChannelCategoryDto: {
             /**
              * @description Child channel IDs
@@ -2718,6 +2754,54 @@ export interface components {
              * @example 987654321098765432
              */
             serverId: string;
+        };
+        CreateCategoryDto: {
+            /**
+             * @description Name of the Discord category
+             * @example Hackathon 2026
+             */
+            name: string;
+        };
+        CreateChannelDto: {
+            /**
+             * @description Name of the Discord channel
+             * @example hackathon-2026-general
+             */
+            name: string;
+            /**
+             * @description Discord snowflake ID of the parent category
+             * @example 910000000000000002
+             */
+            parentId?: string;
+            /**
+             * @description Type of the channel (text or voice)
+             * @example text
+             * @enum {string}
+             */
+            type: "text" | "voice";
+        };
+        CreateChannelResponseDto: {
+            /**
+             * @description Discord snowflake ID of the created channel
+             * @example 910000000000000010
+             */
+            id: string;
+            /**
+             * @description Name of the channel
+             * @example hackathon-2026-general
+             */
+            name: string;
+            /**
+             * @description Discord snowflake ID of the parent category, or null if root level
+             * @example 910000000000000002
+             */
+            parentId: string | null;
+            /**
+             * @description Type of the channel
+             * @example text
+             * @enum {string}
+             */
+            type: "text" | "voice";
         };
         CreateInboundWebhookDto: {
             /**
@@ -9537,6 +9621,85 @@ export interface operations {
             };
         };
     };
+    CategoriesController_createCategory: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                /** @description Discord server ID */
+                serverId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCategoryDto"];
+            };
+        };
+        responses: {
+            /** @description Category created successfully. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryResponseDto"];
+                };
+            };
+            /** @description Invalid category payload. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or invalid API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project does not have manage_channels scope on this server. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Server not found or bot not connected. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Discord rejected the request or bot lacks permissions. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     ChannelsController_listChannels: {
         parameters: {
             query?: {
@@ -9586,6 +9749,85 @@ export interface operations {
             };
             /** @description Server not found or bot not connected. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ChannelsController_createChannel: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                /** @description Discord server ID */
+                serverId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateChannelDto"];
+            };
+        };
+        responses: {
+            /** @description Channel created successfully. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateChannelResponseDto"];
+                };
+            };
+            /** @description Invalid channel payload or parent is not a category. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or invalid API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project does not have manage_channels scope on this server. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Server or parent category not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Discord rejected the request or bot lacks permissions. */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };
