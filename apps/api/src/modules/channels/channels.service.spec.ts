@@ -1,18 +1,30 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ChannelsService } from './channels.service';
 import { DiscordService } from '../discord/discord.service';
-import { NotFoundException } from '@nestjs/common';
-import { ChannelType } from 'discord.js';
+import { AuditService } from '../audit/audit.service';
+import {
+  NotFoundException,
+  BadRequestException,
+  BadGatewayException,
+} from '@nestjs/common';
+import Discord, { ChannelType } from 'discord.js';
+import { ChannelCreateType } from './dto/create-channel.dto';
 
 describe('ChannelsService', () => {
   let service: ChannelsService;
   let discordService: jest.Mocked<DiscordService>;
+  let auditService: { logAction: jest.Mock };
 
   const mockDiscordService = {
     getGuildChannels: jest.fn(),
     getChannelById: jest.fn(),
     getChannelMessages: jest.fn(),
     sendMessage: jest.fn(),
+    createChannel: jest.fn(),
+  };
+
+  const mockAuditService = {
+    logAction: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -23,11 +35,16 @@ describe('ChannelsService', () => {
           provide: DiscordService,
           useValue: mockDiscordService,
         },
+        {
+          provide: AuditService,
+          useValue: mockAuditService,
+        },
       ],
     }).compile();
 
     service = module.get<ChannelsService>(ChannelsService);
     discordService = module.get(DiscordService);
+    auditService = module.get(AuditService);
   });
 
   afterEach(() => {
@@ -519,6 +536,241 @@ describe('ChannelsService', () => {
       await expect(
         service.getMessages('server-123', 'channel-123', { limit: 50 }),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ── createCategory ────────────────────────────────────────────────────────
+
+  describe('createCategory', () => {
+    it('creates category, audits the action, and returns formatted result', async () => {
+      const mockCategory = {
+        id: 'cat-123',
+        name: 'Hackathon 2026',
+        type: ChannelType.GuildCategory,
+      };
+      mockDiscordService.createChannel.mockResolvedValue(mockCategory);
+
+      const result = await service.createCategory('proj-1', 'srv-1', {
+        name: 'Hackathon 2026',
+      });
+
+      expect(result).toEqual({
+        id: 'cat-123',
+        name: 'Hackathon 2026',
+      });
+      expect(mockDiscordService.createChannel).toHaveBeenCalledWith(
+        'srv-1',
+        'Hackathon 2026',
+        { type: ChannelType.GuildCategory },
+      );
+      expect(auditService.logAction).toHaveBeenCalledWith({
+        actionType: 'server',
+        action: 'category_created',
+        entityType: 'category',
+        entityId: 'cat-123',
+        details: {
+          projectId: 'proj-1',
+          serverId: 'srv-1',
+          name: 'Hackathon 2026',
+        },
+        severity: 'info',
+      });
+    });
+
+    it('throws NotFoundException when server is not found or bot not connected', async () => {
+      mockDiscordService.createChannel.mockResolvedValue(null);
+
+      await expect(
+        service.createCategory('proj-1', 'srv-1', { name: 'Category' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('maps Discord MissingPermissions (50013) to BadGatewayException', async () => {
+      mockDiscordService.createChannel.mockRejectedValue(
+        new Discord.DiscordAPIError(
+          { code: 50013, message: 'Missing Permissions' },
+          50013,
+          403,
+          'POST',
+          'https://discord.com/api/v10/guilds/srv-1/channels',
+          { files: undefined, body: undefined },
+        ),
+      );
+
+      await expect(
+        service.createCategory('proj-1', 'srv-1', { name: 'Category' }),
+      ).rejects.toThrow(BadGatewayException);
+    });
+
+    it('maps Discord 50035 to BadRequestException', async () => {
+      mockDiscordService.createChannel.mockRejectedValue(
+        new Discord.DiscordAPIError(
+          { code: 50035, message: 'Invalid Form Body' },
+          50035,
+          400,
+          'POST',
+          'https://discord.com/api/v10/guilds/srv-1/channels',
+          { files: undefined, body: undefined },
+        ),
+      );
+
+      await expect(
+        service.createCategory('proj-1', 'srv-1', { name: 'Category' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  // ── createChannel ─────────────────────────────────────────────────────────
+
+  describe('createChannel', () => {
+    it('creates a text channel at root level and audits the action', async () => {
+      const mockChannel = {
+        id: 'ch-text',
+        name: 'announcements',
+        type: ChannelType.GuildText,
+        parentId: null,
+      };
+      mockDiscordService.createChannel.mockResolvedValue(mockChannel);
+
+      const result = await service.createChannel('proj-1', 'srv-1', {
+        name: 'announcements',
+        type: ChannelCreateType.TEXT,
+      });
+
+      expect(result).toEqual({
+        id: 'ch-text',
+        name: 'announcements',
+        type: ChannelCreateType.TEXT,
+        parentId: null,
+      });
+      expect(mockDiscordService.createChannel).toHaveBeenCalledWith(
+        'srv-1',
+        'announcements',
+        {
+          type: ChannelType.GuildText,
+          parent: undefined,
+        },
+      );
+      expect(auditService.logAction).toHaveBeenCalledWith({
+        actionType: 'server',
+        action: 'channel_created',
+        entityType: 'channel',
+        entityId: 'ch-text',
+        details: {
+          projectId: 'proj-1',
+          serverId: 'srv-1',
+          name: 'announcements',
+          type: ChannelCreateType.TEXT,
+          parentId: null,
+        },
+        severity: 'info',
+      });
+    });
+
+    it('creates a voice channel under a valid parent category', async () => {
+      const parentCat = {
+        id: 'cat-999',
+        name: 'Voice Rooms',
+        type: ChannelType.GuildCategory,
+        guildId: 'srv-1',
+        isDMBased: () => false,
+      };
+      mockDiscordService.getChannelById.mockResolvedValue(parentCat);
+
+      const mockVoiceChannel = {
+        id: 'ch-voice',
+        name: 'team-1',
+        type: ChannelType.GuildVoice,
+        parentId: 'cat-999',
+      };
+      mockDiscordService.createChannel.mockResolvedValue(mockVoiceChannel);
+
+      const result = await service.createChannel('proj-1', 'srv-1', {
+        name: 'team-1',
+        type: ChannelCreateType.VOICE,
+        parentId: 'cat-999',
+      });
+
+      expect(result).toEqual({
+        id: 'ch-voice',
+        name: 'team-1',
+        type: ChannelCreateType.VOICE,
+        parentId: 'cat-999',
+      });
+      expect(mockDiscordService.createChannel).toHaveBeenCalledWith(
+        'srv-1',
+        'team-1',
+        {
+          type: ChannelType.GuildVoice,
+          parent: 'cat-999',
+        },
+      );
+    });
+
+    it('throws NotFoundException when parent channel is not found', async () => {
+      mockDiscordService.getChannelById.mockResolvedValue(null);
+
+      await expect(
+        service.createChannel('proj-1', 'srv-1', {
+          name: 'subchannel',
+          type: ChannelCreateType.TEXT,
+          parentId: '999999999999999999',
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws NotFoundException when parent channel belongs to a different server', async () => {
+      mockDiscordService.getChannelById.mockResolvedValue({
+        id: 'cat-other',
+        guildId: 'different-server',
+        type: ChannelType.GuildCategory,
+        isDMBased: () => false,
+      });
+
+      await expect(
+        service.createChannel('proj-1', 'srv-1', {
+          name: 'subchannel',
+          type: ChannelCreateType.TEXT,
+          parentId: 'cat-other',
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws BadRequestException when parent channel is not a category', async () => {
+      mockDiscordService.getChannelById.mockResolvedValue({
+        id: 'ch-parent',
+        guildId: 'srv-1',
+        type: ChannelType.GuildText,
+        isDMBased: () => false,
+      });
+
+      await expect(
+        service.createChannel('proj-1', 'srv-1', {
+          name: 'subchannel',
+          type: ChannelCreateType.TEXT,
+          parentId: 'ch-parent',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('maps Discord MissingPermissions (50013) to BadGatewayException', async () => {
+      mockDiscordService.createChannel.mockRejectedValue(
+        new Discord.DiscordAPIError(
+          { code: 50013, message: 'Missing Permissions' },
+          50013,
+          403,
+          'POST',
+          'https://discord.com/api/v10/guilds/srv-1/channels',
+          { files: undefined, body: undefined },
+        ),
+      );
+
+      await expect(
+        service.createChannel('proj-1', 'srv-1', {
+          name: 'channel',
+          type: ChannelCreateType.TEXT,
+        }),
+      ).rejects.toThrow(BadGatewayException);
     });
   });
 });

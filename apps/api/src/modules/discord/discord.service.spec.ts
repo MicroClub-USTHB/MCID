@@ -302,6 +302,18 @@ describe('DiscordService', () => {
       mockClient.guilds.fetch.mockRejectedValue(new Error('Not found'));
       expect(await service.createChannel('bad', 'general')).toBeNull();
     });
+
+    it('propagates error when channels.create throws', async () => {
+      const guild = makeGuild({
+        channels: {
+          create: jest.fn().mockRejectedValue(new Error('Discord error')),
+        },
+      });
+      mockClient.guilds.fetch.mockResolvedValue(guild);
+      await expect(service.createChannel('g-1', 'general')).rejects.toThrow(
+        'Discord error',
+      );
+    });
   });
 
   // ── deleteChannel ─────────────────────────────────────────────────────

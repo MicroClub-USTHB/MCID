@@ -232,17 +232,14 @@ export class DiscordService {
   async createChannel(
     guildId: string,
     name: string,
-    options?: Discord.GuildChannelCreateOptions,
+    options?: Omit<Discord.GuildChannelCreateOptions, 'name'>,
   ): Promise<Discord.GuildChannel | null> {
-    try {
-      const guild = await this.getGuildById(guildId);
-      if (!guild) return null;
-      const channel = await guild.channels.create({ name, ...options });
-      return channel;
-    } catch (error: unknown) {
-      this.logger.debug(error instanceof Error ? error.message : String(error));
-      return null;
-    }
+    const guild = await this.getGuildById(guildId);
+    if (!guild) return null;
+    return await guild.channels.create({
+      name,
+      ...options,
+    } as Discord.GuildChannelCreateOptions);
   }
 
   async deleteChannel(channelId: string): Promise<boolean> {
