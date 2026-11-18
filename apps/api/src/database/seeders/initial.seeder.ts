@@ -528,7 +528,7 @@ export async function initialSeeder(db: NodePgDatabase<typeof schema>) {
       permissionsBits: buildPermissionsBits(
         rolePermissionKeysByRoleId.get(MAIN_HR_ROLE_ID) ?? [],
       ),
-      hierarchyLevel: 3,
+      hierarchyLevel: null,
       isGlobal: false,
     },
     {
@@ -543,7 +543,7 @@ export async function initialSeeder(db: NodePgDatabase<typeof schema>) {
       permissionsBits: buildPermissionsBits(
         rolePermissionKeysByRoleId.get(MAIN_REVIEWER_ROLE_ID) ?? [],
       ),
-      hierarchyLevel: 4,
+      hierarchyLevel: null,
       isGlobal: false,
     },
     {
@@ -558,7 +558,7 @@ export async function initialSeeder(db: NodePgDatabase<typeof schema>) {
       permissionsBits: buildPermissionsBits(
         rolePermissionKeysByRoleId.get(MAIN_STAFF_ROLE_ID) ?? [],
       ),
-      hierarchyLevel: 5,
+      hierarchyLevel: null,
       isGlobal: false,
     },
     {

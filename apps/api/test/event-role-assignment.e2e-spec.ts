@@ -122,7 +122,6 @@ describeIf('EP-13: Event role permissions assignment (e2e)', () => {
         position: 4,
         managed: false,
         mentionable: true,
-        hierarchyLevel: 3,
       },
       {
         id: reviewerRoleId,
@@ -133,7 +132,6 @@ describeIf('EP-13: Event role permissions assignment (e2e)', () => {
         position: 5,
         managed: false,
         mentionable: true,
-        hierarchyLevel: 4,
       },
       {
         id: staffRoleId,
@@ -144,7 +142,6 @@ describeIf('EP-13: Event role permissions assignment (e2e)', () => {
         position: 6,
         managed: false,
         mentionable: true,
-        hierarchyLevel: 5,
       },
       {
         id: generalRoleId,
@@ -155,7 +152,6 @@ describeIf('EP-13: Event role permissions assignment (e2e)', () => {
         position: 7,
         managed: false,
         mentionable: false,
-        hierarchyLevel: 6,
       },
     ]);
 
