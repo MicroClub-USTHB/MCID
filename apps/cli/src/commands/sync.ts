@@ -17,7 +17,7 @@ import {
   printTable,
   toCsv,
 } from '../lib/output.js';
-import { type ListPaging, pageRows } from '../lib/help.js';
+import { type ListPaging } from '../lib/help.js';
 import { resolveServer } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
@@ -273,13 +273,48 @@ export function registerSyncCommand(program: Command): void {
         try {
           const client = await getClient(options.profile);
           const resolved = await resolveServer(client, options.server);
-          const raw = await client.get(
-            `/admin/sync/logs?serverId=${encodeURIComponent(resolved.id)}`,
-          );
-          const logs = pageRows(normalizeSyncLogs(raw), options);
+          const limit = Number(options.limit ?? 30);
+          const page = Number(options.page ?? 1);
+          if (
+            !Number.isSafeInteger(limit) ||
+            limit < 1 ||
+            !Number.isSafeInteger(page) ||
+            page < 1
+          ) {
+            throw new CliError('--limit and --page must be positive whole numbers', ExitCode.Usage);
+          }
+          const start = options.all ? 0 : (page - 1) * limit;
+          if (!Number.isSafeInteger(start)) {
+            throw new CliError('Requested page is too large', ExitCode.Usage);
+          }
+          const rawLogs: Record<string, unknown>[] = [];
+          let total = 0;
+          for (;;) {
+            const remaining = options.all ? 100 : limit - rawLogs.length;
+            const chunkSize = Math.min(100, remaining);
+            const offset = start + rawLogs.length;
+            const response = await client.get<{ logs: Record<string, unknown>[]; total: number }>(
+              `/admin/sync/logs?serverId=${encodeURIComponent(resolved.id)}&limit=${chunkSize}&offset=${offset}`,
+            );
+            const chunk = unwrapArray<Record<string, unknown>>(response, ['logs']);
+            total = response.total;
+            rawLogs.push(...chunk);
+            if (
+              chunk.length === 0 ||
+              offset + chunk.length >= total ||
+              (!options.all && rawLogs.length >= limit)
+            )
+              break;
+          }
+          if (!options.all && start + rawLogs.length < total) {
+            process.stderr.write(
+              `Showing ${start + 1}-${start + rawLogs.length} of ${total}; use --page ${page + 1} or --all for more.\n`,
+            );
+          }
+          const logs = normalizeSyncLogs(rawLogs);
 
           if (options.json) {
-            printJson(raw);
+            printJson(rawLogs);
             return;
           }
           if (options.quiet) {

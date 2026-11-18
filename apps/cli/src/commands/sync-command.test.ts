@@ -129,3 +129,52 @@ describe('sync run', () => {
     expect(result.stderr).toContain('Sync timed out');
   });
 });
+
+describe('sync logs pagination', () => {
+  it('returns only the requested raw JSON page and retains API fields', async () => {
+    const rows = [
+      { id: '1', status: 'success', extra: 'one' },
+      { id: '2', status: 'success', extra: 'two' },
+      { id: '3', status: 'failed', extra: 'three' },
+    ];
+    const result = await runCli(['sync', 'logs', '--json', '--limit', '1', '--page', '2'], {
+      routes: baseRoutes({
+        'GET /admin/sync/logs': (url) => {
+          const offset = Number(url.searchParams.get('offset') ?? 0);
+          const limit = Number(url.searchParams.get('limit') ?? 20);
+          return json({ logs: rows.slice(offset, offset + limit), total: rows.length });
+        },
+      }),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual([rows[1]]);
+  });
+});
+
+describe('sync logs server pagination', () => {
+  const rows = Array.from({ length: 125 }, (_, i) => ({ id: String(i + 1), status: 'success' }));
+  const route = (url: URL) => {
+    const limit = Number(url.searchParams.get('limit') ?? 20);
+    const offset = Number(url.searchParams.get('offset') ?? 0);
+    return json({ logs: rows.slice(offset, offset + limit), total: rows.length });
+  };
+
+  it('fetches the requested page from the API', async () => {
+    const result = await runCli(['sync', 'logs', '--json', '--limit', '30', '--page', '2'], {
+      routes: baseRoutes({ 'GET /admin/sync/logs': route }),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual(rows.slice(30, 60));
+  });
+
+  it('fetches every API page with --all', async () => {
+    const result = await runCli(['sync', 'logs', '--json', '--all'], {
+      routes: baseRoutes({ 'GET /admin/sync/logs': route }),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual(rows);
+    expect(result.requests.filter((request) => request.path === '/admin/sync/logs')).toHaveLength(
+      2,
+    );
+  });
+});

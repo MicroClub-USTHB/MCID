@@ -33,6 +33,10 @@ mcid-cli role permissions add "Dev Lead" projects.read --dry-run
 mcid-cli role permissions add "Dev Lead" projects.read --yes
 ```
 
+`role list --json` returns an array of raw API role records for the selected page. Use
+`--limit` and `--page` to select a page, or `--all` to return every role. Scripts that
+previously consumed an API response wrapper should read the array instead.
+
 `role permissions add` and `remove` always show the impact first, for example how many
 members the change affects. `--dry-run` stops after the preview, and `--yes` applies it
 without asking.
