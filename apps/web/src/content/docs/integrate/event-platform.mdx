@@ -134,56 +134,64 @@ MCID_REDIRECT_URI=https://events.microclub.info/api/auth/callback
 
 </Steps>
 
-## Role permissions assignment per environment
+## Role permissions per environment
 
-The Event Platform authorizes member actions by checking permissions with `POST /api/permissions/check-batch`. The six permissions defined in the permission catalog must be assigned to the corresponding Discord roles per environment.
+The Event Platform decides what a member may do from `POST /api/permissions/check-batch`. In each environment, an admin assigns the six event permissions to the club's Discord roles on the main server:
 
-### Role-to-permission matrix
+| Discord role      | Permissions                                                                                                                 | Why                                                              |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Executive         | `events.create`, `events.responses.read`, `events.email.send`, `events.review`, `events.checkin`, `events.templates.manage` | Everything HR holds, plus template management.                   |
+| HR                | `events.create`, `events.responses.read`, `events.email.send`                                                               | Runs events, reads responses and emails participants.            |
+| Reviewer          | `events.review`                                                                                                             | Reviews submissions. Held by HR members or delegated reviewers.  |
+| Staff (volunteer) | `events.checkin`                                                                                                            | Scans participants in at the door and cannot read their answers. |
+| Any other role    | none                                                                                                                        | A batch check with `mode: "ANY"` answers `false`.                |
 
-| Discord role | Assigned permissions | Purpose & Scope |
-| --- | --- | --- |
-| **Executive** | `events.create`, `events.responses.read`, `events.email.send`, `events.review`, `events.checkin`, `events.templates.manage` | Complete access to all 6 event operations. Template management is reserved for Executives. |
-| **HR** | `events.create`, `events.responses.read`, `events.email.send` | Organizes events, reads participant submission forms, and communicates via email. |
-| **Reviewer** | `events.review` | Evaluates and scores event submissions. Can be held by HR members or delegated reviewers. |
-| **Staff (Volunteer)** | `events.checkin` | On-site access control (scanning ticket badges). Strictly barred from reading responses. |
-| **General Member** | *(None)* | No operational event access. Batch checks with `mode=ANY` evaluate to `false`. |
-
-### Admin assignment procedure
+<Callout type="warning">
+  Leave the HR, Reviewer and Staff roles without a hierarchy rank. A member also gets the
+  permissions of every ranked role at or below their own best rank, so a ranked Staff role would
+  give `events.checkin` to every higher-ranked role, such as Member. Inheritance rules copy
+  permissions to other servers in the same way. See [Roles and
+  permissions](/docs/integrate/roles-and-permissions).
+</Callout>
 
 <Steps>
 
-### Select role in the admin panel or call the API
+### Find the permission ids
 
-Open `/dashboard/servers/{serverId}/roles` in the admin UI, or query the permission catalog:
+Assign the permissions on each role's page under **Roles** in the admin panel, or with the API. The API takes permission ids, which differ between databases, so read them from the catalog:
 
 ```bash
 curl -s "$MCID_URL/permissions/catalog" \
-  -H "Cookie: admin_session=$ADMIN_SESSION"
+  -H "Cookie: admin_session=$ADMIN_SESSION" | jq '.[] | select(.key | startswith("EVENTS."))'
 ```
 
-### Assign permissions to the role
+### Assign the permissions to a role
+
+Here `42` stands for the id of `EVENTS.CHECKIN` from the catalog.
 
 ```bash
-# Assign EVENTS.CHECKIN (id 5) to the Staff role
 curl -s -X POST "$MCID_URL/permissions/admin/servers/$MAIN_SERVER_ID/roles/$STAFF_ROLE_ID/permissions" \
   -H "Cookie: admin_session=$ADMIN_SESSION" \
   -H "Content-Type: application/json" \
-  -d '{
-    "permissionIds": [5]
-  }'
+  -d '{ "permissionIds": [42] }'
 ```
+
+The answer lists every permission the role now holds. MCID clears the cached permissions as soon as the assignment changes, and the Discord role sync keeps these assignments.
 
 ```json
 {
   "roleId": "700000000000000006",
-  "name": "Staff",
+  "roleName": "Staff",
+  "serverId": "900000000000000001",
   "permissions": [
-    { "id": 5, "key": "EVENTS.CHECKIN", "description": "Check participants in at events" }
+    { "id": 42, "key": "EVENTS.CHECKIN", "description": "Check participants in at events" }
   ]
 }
 ```
 
-MCID immediately invalidates the server's permission cache upon assignment.
+### Repeat for each role
+
+Assign the matrix above to the Executive, HR and Reviewer roles, then verify one member of each role with the batch checks below.
 
 </Steps>
 
@@ -253,12 +261,11 @@ curl -s -X POST "$MCID_URL/permissions/check" \
 { "allowed": true, "source": "server" }
 ```
 
-### 4. Verify role permissions with batch checks
+### 4. Check each role with the batch endpoint
 
-Verify role-based authorizations with `POST /api/permissions/check-batch`:
+Check one member of each role with `POST /api/permissions/check-batch`.
 
-#### A. Staff role verification
-A Staff member holds `events.checkin` and must NOT have `events.responses.read`:
+A Staff member holds `events.checkin` and not `events.responses.read`. `missing` and `matched` list the permission keys in upper case:
 
 ```bash
 curl -s -X POST "$MCID_URL/permissions/check-batch" \
@@ -279,7 +286,7 @@ curl -s -X POST "$MCID_URL/permissions/check-batch" \
 }
 ```
 
-With `mode: "ANY"`, it confirms the checkin capability:
+The same check with `mode: "ANY"` answers:
 
 ```json
 {
@@ -288,8 +295,7 @@ With `mode: "ANY"`, it confirms the checkin capability:
 }
 ```
 
-#### B. Executive role verification
-An Executive member holds all six permissions:
+An Executive member holds all six:
 
 ```bash
 curl -s -X POST "$MCID_URL/permissions/check-batch" \
@@ -317,8 +323,7 @@ curl -s -X POST "$MCID_URL/permissions/check-batch" \
 }
 ```
 
-#### C. Member with no event role verification
-A member with no event roles is denied:
+A member with no event role holds none of them:
 
 ```bash
 curl -s -X POST "$MCID_URL/permissions/check-batch" \
