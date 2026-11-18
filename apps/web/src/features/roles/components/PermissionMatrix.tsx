@@ -5,9 +5,12 @@ import { Search } from 'lucide-react';
 
 import { McInput } from '@/shared/components/ui/mc-input';
 import { PERMISSION_CATALOG } from '@/features/roles/types';
+import type { PermissionCatalogEntry } from '@/features/roles/types';
 import { PermissionCheckbox } from '@/features/roles/components/PermissionCheckbox';
 
 interface PermissionMatrixProps {
+  /** The permissions to list. Defaults to the Discord permissions. */
+  catalog?: readonly PermissionCatalogEntry[];
   /** Permission ids the role currently has (with any staged changes already applied). */
   assignedIds: Set<number>;
   savingIds: Set<number>;
@@ -19,6 +22,7 @@ interface PermissionMatrixProps {
 }
 
 function PermissionMatrix({
+  catalog = PERMISSION_CATALOG,
   assignedIds,
   savingIds,
   locked = false,
@@ -29,11 +33,11 @@ function PermissionMatrix({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return PERMISSION_CATALOG;
-    return PERMISSION_CATALOG.filter(
+    if (!q) return catalog;
+    return catalog.filter(
       (p) => p.key.toLowerCase().includes(q) || p.description.toLowerCase().includes(q)
     );
-  }, [query]);
+  }, [catalog, query]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -48,7 +52,7 @@ function PermissionMatrix({
           className="flex-1"
         />
         <span className="shrink-0 paragraph-xs font-semibold tracking-wide text-muted-foreground tabular-nums">
-          {filtered.length}/{PERMISSION_CATALOG.length}
+          {filtered.length}/{catalog.length}
         </span>
       </div>
 

@@ -83,7 +83,8 @@ describe('Landing page', () => {
     render(<Home />);
 
     await user.click(screen.getByRole('button', { name: 'Copy request' }));
-    expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+    // The label flips after the clipboard promise settles, not on the click itself
+    expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument();
     act(() => {
       vi.advanceTimersByTime(2000);
     });

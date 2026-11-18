@@ -443,7 +443,7 @@
             <div>
               <div style="font-size:0.82rem;font-weight:500;margin-bottom:8px;">Scopes</div>
               <span class="field-hint" style="display:block;margin-bottom:10px;">
-                Select the permissions this project should be granted. If none are selected, all available scopes are granted by default.
+                Select the permissions this project should be granted. If none are selected, every scope except Manage roles is granted by default.
               </span>
               <div class="checkbox-group">
                 <label>
@@ -458,6 +458,27 @@
                   <div class="checkbox-label-text">
                     <strong>check_permissions</strong>
                     <span>Verify role-based permissions for a member.</span>
+                  </div>
+                </label>
+                <label>
+                  <input type="checkbox" name="scopes" value="read_inbound_submissions">
+                  <div class="checkbox-label-text">
+                    <strong>read_inbound_submissions</strong>
+                    <span>Pull the project's inbound webhook submissions.</span>
+                  </div>
+                </label>
+                <label>
+                  <input type="checkbox" name="scopes" value="manage_inbound_webhooks">
+                  <div class="checkbox-label-text">
+                    <strong>manage_inbound_webhooks</strong>
+                    <span>Create and manage inbound webhooks for the project.</span>
+                  </div>
+                </label>
+                <label>
+                  <input type="checkbox" name="scopes" value="manage_roles">
+                  <div class="checkbox-label-text">
+                    <strong>manage_roles</strong>
+                    <span>Create roles and grant or remove them for members. Opt-in: never granted by default.</span>
                   </div>
                 </label>
               </div>

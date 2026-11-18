@@ -12,11 +12,17 @@ interface ScopeSelectorProps {
 const SCOPE_LABELS: Record<ProjectScope, string> = {
   read_members: 'Read members',
   check_permissions: 'Check permissions',
+  read_inbound_submissions: 'Read inbound submissions',
+  manage_inbound_webhooks: 'Manage inbound webhooks',
+  manage_roles: 'Manage roles',
 };
 
 const SCOPE_HINTS: Record<ProjectScope, string> = {
   read_members: 'Read membership and profile data',
   check_permissions: 'Ask whether a member can perform an operation',
+  read_inbound_submissions: "Pull the project's inbound webhook submissions",
+  manage_inbound_webhooks: 'Create and manage inbound webhooks for the project',
+  manage_roles: 'Create roles and grant or remove them for members',
 };
 
 function ScopeSelector({ selected, onChange, disabled = false }: ScopeSelectorProps) {

@@ -1,0 +1,39 @@
+---
+title: 'mcid-cli admin access'
+description: 'Explain why an admin can or cannot do something, and change role grants and member overrides with a diff before anything is sent.'
+---
+
+Admin access levels (`none`, `read`, `write`, `manage`, per resource) decide what each
+admin can do in MCID. `mcid-cli access` shows where a level comes from and changes it.
+
+## Explain
+
+```bash
+mcid-cli access explain @alice
+mcid-cli whoami
+```
+
+For each resource, `explain` prints the effective level and its source: a role, an
+override, or root. `whoami` shows the same levels for the signed-in admin.
+
+## Change grants
+
+```bash
+mcid-cli access catalog
+mcid-cli access roles
+mcid-cli access role set "Dev Lead" projects=write members=read
+mcid-cli access member get @alice
+mcid-cli access member set @alice settings=read
+mcid-cli access member unset @alice settings
+mcid-cli access overrides
+```
+
+The API replaces the full set of grants, so the CLI reads the current grants, merges
+the pairs you give, prints the difference (`projects: read -> write`) and asks before
+sending. `--replace` sends exactly the pairs you give. A resource or level that does
+not exist is rejected with the closest valid name.
+
+Root members hold every permission, so their overrides cannot be edited, and the
+command says so.
+
+Source: `apps/cli/src/commands/access.ts`, `apps/cli/src/whoami.ts`.

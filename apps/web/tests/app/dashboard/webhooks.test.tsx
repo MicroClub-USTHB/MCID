@@ -17,6 +17,7 @@ function projectDto(id: string, name: string) {
     description: null,
     isInternal: false,
     webhookUrl: null,
+    redirectUri: null,
     apiKeyPrefix: 'mcid_live_abc',
     apiKeyCreatedAt: '2026-08-01T10:00:00.000Z',
     apiKeyLastUsedAt: null,

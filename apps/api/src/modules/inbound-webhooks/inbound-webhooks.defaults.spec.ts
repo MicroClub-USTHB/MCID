@@ -95,6 +95,7 @@ describe('InboundWebhooksService default reader roles', () => {
           return fallback;
         },
       } as never,
+      {} as never,
     );
   };
 

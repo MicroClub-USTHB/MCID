@@ -28,6 +28,7 @@ const projectDto = {
   description: null,
   isInternal: false,
   webhookUrl: null,
+  redirectUri: null,
   apiKeyPrefix: 'mcid_live_abc123',
   apiKeyCreatedAt: '2026-08-19T10:00:00.000Z',
   apiKeyLastUsedAt: null,

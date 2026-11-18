@@ -209,7 +209,7 @@ describe('webhookCreate: --project and --roles', () => {
     );
     expect(err.exitCode).toBe(ExitCode.PrecheckFailed);
     expect(err.message).toBe(
-      'no interactive terminal to pick a project; pass --project <projectId>',
+      'no interactive terminal to pick a project; pass --project <projectId|name>',
     );
   });
 

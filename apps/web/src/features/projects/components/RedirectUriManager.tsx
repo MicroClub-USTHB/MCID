@@ -26,9 +26,8 @@ function isValidUri(uri: string): boolean {
 
 /**
  * Controlled list of a project's redirect URIs. The backend stores them as one
- * comma-separated string and exposes it only through routed mutation responses,
- * so the parent owns the source of truth and passes `uris` in (see the detail
- * view, which joins them back into the comma-separated string on save).
+ * comma-separated string, so the parent owns the source of truth and passes
+ * `uris` in (see the detail view, which joins them back on save).
  */
 function RedirectUriManager({
   uris,

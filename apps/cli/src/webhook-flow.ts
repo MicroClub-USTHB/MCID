@@ -1,5 +1,6 @@
 import { createInterface } from 'node:readline/promises';
 import {
+  addProfile,
   configPath,
   loadConfig,
   removeWebhookSecret,
@@ -16,6 +17,7 @@ import {
   type KeyProvider,
 } from './crypto-store.js';
 import { CliError, ExitCode } from './errors.js';
+import { type ListPaging, pageRows } from './lib/help.js';
 import {
   createInboundWebhook,
   deleteInboundWebhook,
@@ -73,6 +75,23 @@ async function loadSession(profileFlag: string | undefined, deps: WebhookDeps): 
   return resolveSession(config, resolveProfileName(config, profileFlag), deps.keys);
 }
 
+/**
+ * Secrets belong to a profile, but `MCID_TOKEN` can authenticate without one
+ * (CI, local smoke tests). Create the profile on first use rather than losing
+ * a signing secret MCID will never show again.
+ */
+function storeWebhookSecret(
+  config: Parameters<typeof setWebhookSecret>[0],
+  session: Session,
+  webhookId: string,
+  entry: Parameters<typeof setWebhookSecret>[3],
+): ReturnType<typeof setWebhookSecret> {
+  const withProfile = config.profiles[session.profileName]
+    ? config
+    : addProfile(config, session.profileName, session.baseUrl);
+  return setWebhookSecret(withProfile, session.profileName, webhookId, entry);
+}
+
 /** An aligned, two-space-separated text table (header first). */
 export function formatTable(header: string[], rows: string[][]): string[] {
   const widths = header.map((h, i) => Math.max(h.length, ...rows.map((r) => (r[i] ?? '').length)));
@@ -84,14 +103,24 @@ export function formatTable(header: string[], rows: string[][]): string[] {
   return [line(header), ...rows.map(line)];
 }
 
-export interface WebhookListOptions {
+export interface WebhookListOptions extends ListPaging {
   profile?: string;
   project?: string;
+  json?: boolean;
+  quiet?: boolean;
 }
 
 export async function webhookList(options: WebhookListOptions, deps: WebhookDeps): Promise<void> {
   const session = await loadSession(options.profile, deps);
-  const webhooks = await listInboundWebhooks(session, options.project);
+  const webhooks = pageRows(await listInboundWebhooks(session, options.project), options);
+  if (options.quiet) {
+    for (const w of webhooks) deps.out(w.id);
+    return;
+  }
+  if (options.json) {
+    deps.out(JSON.stringify(webhooks, null, 2));
+    return;
+  }
   if (webhooks.length === 0) {
     deps.out(
       options.project
@@ -404,17 +433,34 @@ async function resolveProjectId(
   options: WebhookCreateOptions,
   deps: WebhookDeps,
 ): Promise<string> {
-  if (options.project) return options.project;
+  if (options.project) {
+    // Project ids are UUIDs. Anything else is a name, which the API cannot
+    // resolve itself, so map it against the project list first.
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(options.project)) {
+      return options.project;
+    }
+    const projects = await listProjects(session);
+    const match = projects.find(
+      (project) => project.name.toLowerCase() === options.project!.toLowerCase(),
+    );
+    if (!match) {
+      throw new CliError(
+        `Project "${options.project}" not found; run \`mcid-cli project list\` to see available projects`,
+        ExitCode.NotFound,
+      );
+    }
+    return match.id;
+  }
   if (!deps.isInteractive) {
     throw new CliError(
-      'no interactive terminal to pick a project; pass --project <projectId>',
+      'no interactive terminal to pick a project; pass --project <projectId|name>',
       ExitCode.PrecheckFailed,
     );
   }
   const projects = await listProjects(session);
   if (projects.length === 0) {
     throw new CliError(
-      'no projects are available to create a webhook on; pass --project <projectId>',
+      'no projects are available to create a webhook on; pass --project <projectId|name>',
       ExitCode.NotFound,
     );
   }
@@ -465,7 +511,7 @@ export async function webhookCreate(
       slug: webhook.slug,
     };
     await updateConfig(deps.configPath, (latest) =>
-      setWebhookSecret(latest, session.profileName, webhook.id, entry),
+      storeWebhookSecret(latest, session, webhook.id, entry),
     );
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
@@ -595,7 +641,7 @@ export async function webhookRotateSecret(
       slug: webhook.slug,
     };
     await updateConfig(deps.configPath, (latest) =>
-      setWebhookSecret(latest, session.profileName, webhook.id, entry),
+      storeWebhookSecret(latest, session, webhook.id, entry),
     );
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);

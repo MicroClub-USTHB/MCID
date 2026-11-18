@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { AdminMembersRepository } from './admin-members.repository';
 import { DRIZZLE } from '../../database/database.module';
 
@@ -152,6 +153,50 @@ describe('AdminMembersRepository', () => {
           ['role-1', 'role-2'],
         ),
       ).toBe(2);
+    });
+
+    function joinedAfterWhere(db: any) {
+      const chains = db.selectDistinct.mock.results.map(
+        (result: any) => result.value,
+      );
+      const chain = chains[chains.length - 1];
+      return new PgDialect().sqlToQuery(chain.where.mock.calls[0][0]);
+    }
+
+    it('scopes joinedAfter to the requested servers and active memberships', async () => {
+      const db = buildDb([{ count: 1 }]);
+      const repo = await buildRepo(db);
+
+      await repo.countMembers(
+        'all',
+        undefined,
+        ['srv-1', 'srv-2'],
+        undefined,
+        '2026-03-01T00:00:00Z',
+      );
+
+      const query = joinedAfterWhere(db);
+      expect(query.sql).toContain('is_active');
+      expect(query.sql).toContain('server_id');
+      expect(query.params).toContain('srv-1');
+      expect(query.params).toContain('srv-2');
+    });
+
+    it('keeps the joinedAfter subquery to active memberships of any server when no server is given', async () => {
+      const db = buildDb([{ count: 1 }]);
+      const repo = await buildRepo(db);
+
+      await repo.countMembers(
+        'all',
+        undefined,
+        undefined,
+        undefined,
+        '2026-03-01T00:00:00Z',
+      );
+
+      const query = joinedAfterWhere(db);
+      expect(query.sql).toContain('is_active');
+      expect(query.sql).not.toContain('server_id');
     });
   });
 

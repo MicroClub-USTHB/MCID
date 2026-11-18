@@ -103,6 +103,7 @@ export class AdminMembersService {
       search,
       serverId,
       roleId,
+      joinedAfter,
     } = query;
     const offset = (page - 1) * limit;
 
@@ -112,6 +113,7 @@ export class AdminMembersService {
       search,
       serverId,
       roleId,
+      joinedAfter,
     );
 
     // Fetch the page of members
@@ -122,6 +124,7 @@ export class AdminMembersService {
       offset,
       serverId,
       roleId,
+      joinedAfter,
     );
 
     if (memberRows.length === 0) {
@@ -206,7 +209,7 @@ export class AdminMembersService {
         ? { filter: queryOrFilter, format: 'json' }
         : queryOrFilter;
 
-    const { filter = 'all', serverId, roleId, search } = query;
+    const { filter = 'all', serverId, roleId, search, joinedAfter } = query;
     const rows: Record<string, unknown>[] = [];
     const limit = 1000;
     let page = 1;
@@ -218,6 +221,7 @@ export class AdminMembersService {
         serverId,
         roleId,
         search,
+        joinedAfter,
         page,
         limit,
       });

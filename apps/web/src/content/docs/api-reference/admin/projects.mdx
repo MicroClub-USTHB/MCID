@@ -93,7 +93,7 @@ Returns every project-server mapping including operations and per-server scopes.
 | --- | --- | --- | --- | --- |
 | `projectId` | query | `string` | no | Filter by project ID. |
 | `serverId` | query | `string` | no | Filter by server ID. |
-| `scope` | query | `"read_members" or "check_permissions"` | no | Filter by scope. |
+| `scope` | query | `"read_members" or "check_permissions" or "read_inbound_submissions" or "manage_inbound_webhooks" or "manage_roles"` | no | Filter by scope. |
 | `projectName` | query | `string` | no | Filter by project name (partial, case-insensitive). |
 
 **Responses**
@@ -118,7 +118,7 @@ Returns every project-server mapping including operations and per-server scopes.
 | Name | In | Type | Required | Description |
 | --- | --- | --- | --- | --- |
 | `serverId` | path | `string` | yes | Discord server ID |
-| `scope` | query | `"read_members" or "check_permissions"` | no | Filter projects by required scope. |
+| `scope` | query | `"read_members" or "check_permissions" or "read_inbound_submissions" or "manage_inbound_webhooks" or "manage_roles"` | no | Filter projects by required scope. |
 | `isActive` | query | `boolean` | no | Filter by project active status. |
 
 **Responses**
@@ -345,7 +345,7 @@ Generates a new API key. The old key is immediately invalidated. Returns full ke
 | Name | In | Type | Required | Description |
 | --- | --- | --- | --- | --- |
 | `projectId` | path | `string` | yes | Project UUID |
-| `scope` | query | `"read_members" or "check_permissions"` | no | Filter servers by required scope. |
+| `scope` | query | `"read_members" or "check_permissions" or "read_inbound_submissions" or "manage_inbound_webhooks" or "manage_roles"` | no | Filter servers by required scope. |
 
 **Responses**
 
@@ -431,7 +431,7 @@ Creates or updates the access mapping between a project and a server. You can se
 | `isActive` | `boolean` | no | Whether the project is active. Defaults to true. |
 | `isInternal` | `boolean` | no | Whether this is an internal Micro Club platform project. Internal projects use the main server automatically. Defaults to false. |
 | `name` | `string` | yes |  |
-| `serverAccess` | `array of ProjectServerAccessDto` | no | Server access configurations. If omitted, the project is automatically granted all available scopes to all servers where is_main = true. |
+| `serverAccess` | `array of ProjectServerAccessDto` | no | Server access configurations. If omitted, the project is automatically granted every scope except the opt-in manage_roles on all servers where is_main = true. |
 | `webhookUrl` | `string (uri)` | no | Optional Discord webhook URL for this project. |
 
 ### ProjectInboundWebhookDto schema
@@ -448,7 +448,7 @@ Creates or updates the access mapping between a project and a server. You can se
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `scopes` | `array of "read_members" or "check_permissions"` | no | Scopes to grant for this server. If omitted, all available scopes are granted. |
+| `scopes` | `array of "read_members" or "check_permissions" or "read_inbound_submissions" or "manage_inbound_webhooks" or "manage_roles"` | no | Scopes to grant for this server. If omitted, every scope except the opt-in manage_roles is granted. |
 | `serverId` | `string` | yes |  |
 
 ### SetProjectServerAccessDto schema
@@ -456,7 +456,7 @@ Creates or updates the access mapping between a project and a server. You can se
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `operations` | `AccessOperationsDto` | no |  |
-| `scopes` | `array of "read_members" or "check_permissions"` | no | Scopes granted to this project for this server. If omitted, defaults to all available scopes. |
+| `scopes` | `array of "read_members" or "check_permissions" or "read_inbound_submissions" or "manage_inbound_webhooks" or "manage_roles"` | no | Scopes granted to this project for this server. If omitted, keeps the current scopes, or for a new grant every scope except the opt-in manage_roles. |
 
 ### UpdateProjectDto schema
 
