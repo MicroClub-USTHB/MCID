@@ -25,6 +25,8 @@ const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 // completing or releasing it. It must outlast the slowest Discord write.
 export const IDEMPOTENCY_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
 const MAX_KEY_LENGTH = 128;
+/** Handler metadata set by `@Idempotent({ required: true })`. */
+export const IDEMPOTENCY_REQUIRED_KEY = 'idempotency_required';
 
 @Injectable()
 export class IdempotencyInterceptor implements NestInterceptor {
@@ -45,6 +47,11 @@ export class IdempotencyInterceptor implements NestInterceptor {
 
     const rawHeader = req.headers['idempotency-key'];
     if (rawHeader === undefined) {
+      if (Reflect.getMetadata(IDEMPOTENCY_REQUIRED_KEY, context.getHandler())) {
+        throw new BadRequestException(
+          'Idempotency-Key header is required on this route',
+        );
+      }
       return next.handle();
     }
 

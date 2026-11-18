@@ -5,7 +5,10 @@ import {
   ExecutionContext,
 } from '@nestjs/common';
 import { of, throwError, lastValueFrom } from 'rxjs';
-import { IdempotencyInterceptor } from './idempotency.interceptor';
+import {
+  IDEMPOTENCY_REQUIRED_KEY,
+  IdempotencyInterceptor,
+} from './idempotency.interceptor';
 import { IdempotencyRepository } from './idempotency.repository';
 
 describe('IdempotencyInterceptor', () => {
@@ -29,6 +32,7 @@ describe('IdempotencyInterceptor', () => {
     body = {},
     url = '/api/servers/123/roles',
     method = 'POST',
+    handler: () => void = () => undefined,
   ) => {
     const mockRequest: any = {
       headers,
@@ -46,6 +50,7 @@ describe('IdempotencyInterceptor', () => {
     };
 
     return {
+      getHandler: () => handler,
       switchToHttp: () => ({
         getRequest: () => mockRequest,
         getResponse: () => mockResponse,
@@ -81,6 +86,23 @@ describe('IdempotencyInterceptor', () => {
     const result = await lastValueFrom(result$);
 
     expect(result).toEqual({ id: 'role-1' });
+    expect(repository.reserveKey).not.toHaveBeenCalled();
+  });
+
+  it('should throw BadRequestException if the header is absent on a route that requires it', async () => {
+    const handler = () => undefined;
+    Reflect.defineMetadata(IDEMPOTENCY_REQUIRED_KEY, true, handler);
+    const context = createMockContext(
+      {},
+      {},
+      '/api/servers/123/channels',
+      'POST',
+      handler,
+    );
+
+    await expect(
+      interceptor.intercept(context, createMockCallHandler()),
+    ).rejects.toThrow('Idempotency-Key header is required on this route');
     expect(repository.reserveKey).not.toHaveBeenCalled();
   });
 
