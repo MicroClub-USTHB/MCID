@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 import { ChannelCreateType } from './create-channel.dto';
 
 export class CreateChannelResponseDto {
@@ -21,7 +21,7 @@ export class CreateChannelResponseDto {
   })
   type: ChannelCreateType;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     description:
       'Discord snowflake ID of the parent category, or null if root level',
     example: '910000000000000002',

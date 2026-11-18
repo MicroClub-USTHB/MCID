@@ -801,7 +801,8 @@
         "required": [
           "id",
           "name",
-          "type"
+          "type",
+          "parentId"
         ],
         "type": "object"
       },

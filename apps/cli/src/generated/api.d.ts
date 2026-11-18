@@ -2795,7 +2795,7 @@ export interface components {
              * @description Discord snowflake ID of the parent category, or null if root level
              * @example 910000000000000002
              */
-            parentId?: string | null;
+            parentId: string | null;
             /**
              * @description Type of the channel
              * @example text
