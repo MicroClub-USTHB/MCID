@@ -8,7 +8,7 @@
  * 4. Member performs SSO login with exact redirect URI matching and code-to-token exchange.
  * 5. Rejection of un-whitelisted redirect URIs (400 invalid_redirect_uri).
  * 6. Permission check API answers for the main server with the project API key.
- * 7. Server and scope isolation (403 on ungranted server or scope).
+ * 7. Server isolation (403 on an ungranted server).
  * 8. Zero key leakage: raw API key is never exposed via admin endpoints or database storage.
  */
 import { INestApplication } from '@nestjs/common';
@@ -135,9 +135,11 @@ describeIf('EP-12: Event Platform Registration & Integration (e2e)', () => {
       })
       .expect(200);
 
-    expect(serverGrantRes.body.scopes).toEqual(
-      expect.arrayContaining(['check_permissions', 'read_members']),
-    );
+    // The PUT replaces the default grant made at creation: only the two scopes remain.
+    expect([...serverGrantRes.body.scopes].sort()).toEqual([
+      'check_permissions',
+      'read_members',
+    ]);
 
     // ── 4. Verify no secret leakage via Admin GET endpoints ──────────────────
     const getProjectRes = await request(app.getHttpServer())
