@@ -92,6 +92,7 @@ export class ProjectScheduledEventsController {
 
   @Patch(':eventId')
   @RequireScope('manage_events')
+  @Idempotent()
   @ApiOperation({
     summary: 'Update a Discord scheduled event',
     description:
@@ -139,6 +140,7 @@ export class ProjectScheduledEventsController {
 
   @Delete(':eventId')
   @RequireScope('manage_events')
+  @Idempotent()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
     summary: 'Delete a Discord scheduled event',

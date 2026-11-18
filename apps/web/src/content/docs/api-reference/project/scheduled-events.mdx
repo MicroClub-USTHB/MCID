@@ -51,6 +51,7 @@ Updates a scheduled event on Discord. Projects can only update scheduled events 
 | --- | --- | --- | --- | --- |
 | `serverId` | path | `string` | yes | Discord server ID |
 | `eventId` | path | `string` | yes | Discord scheduled event ID |
+| `Idempotency-Key` | header | `string` | no | Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response. |
 
 **Request body** (JSON, required): [UpdateScheduledEventDto schema](#updatescheduledeventdto-schema).
 
@@ -63,6 +64,7 @@ Updates a scheduled event on Discord. Projects can only update scheduled events 
 | `401` | Missing or invalid API key |  |
 | `403` | Project lacks manage_events scope on this server |  |
 | `404` | Scheduled event not found or not owned by this project |  |
+| `409` | Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. |  |
 | `429` | Project rate limit exceeded |  |
 | `502` | Discord rejected the request or bot lacks permissions |  |
 
@@ -82,6 +84,7 @@ Cancels and deletes a scheduled event from Discord and removes its MCID ownershi
 | --- | --- | --- | --- | --- |
 | `serverId` | path | `string` | yes | Discord server ID |
 | `eventId` | path | `string` | yes | Discord scheduled event ID |
+| `Idempotency-Key` | header | `string` | no | Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response. |
 
 **Responses**
 
@@ -91,6 +94,7 @@ Cancels and deletes a scheduled event from Discord and removes its MCID ownershi
 | `401` | Missing or invalid API key |  |
 | `403` | Project lacks manage_events scope on this server |  |
 | `404` | Scheduled event not found or not owned by this project |  |
+| `409` | Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. |  |
 | `429` | Project rate limit exceeded |  |
 | `502` | Discord rejected the request or bot lacks permissions |  |
 

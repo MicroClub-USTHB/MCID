@@ -11609,6 +11609,16 @@
               "example": "920000000000000001",
               "type": "string"
             }
+          },
+          {
+            "description": "Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -11623,6 +11633,9 @@
           },
           "404": {
             "description": "Scheduled event not found or not owned by this project"
+          },
+          "409": {
+            "description": "Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload."
           },
           "429": {
             "description": "Project rate limit exceeded"
@@ -11664,6 +11677,16 @@
               "example": "920000000000000001",
               "type": "string"
             }
+          },
+          {
+            "description": "Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -11698,6 +11721,9 @@
           },
           "404": {
             "description": "Scheduled event not found or not owned by this project"
+          },
+          "409": {
+            "description": "Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload."
           },
           "429": {
             "description": "Project rate limit exceeded"

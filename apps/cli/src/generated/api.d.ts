@@ -10380,7 +10380,10 @@ export interface operations {
     ProjectScheduledEventsController_deleteEvent: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response. */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Discord server ID */
                 serverId: string;
@@ -10419,6 +10422,13 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Project rate limit exceeded */
             429: {
                 headers: {
@@ -10438,7 +10448,10 @@ export interface operations {
     ProjectScheduledEventsController_updateEvent: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response. */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Discord server ID */
                 serverId: string;
@@ -10485,6 +10498,13 @@ export interface operations {
             };
             /** @description Scheduled event not found or not owned by this project */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
