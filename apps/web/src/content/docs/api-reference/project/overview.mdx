@@ -9,7 +9,7 @@ These endpoints are for the backends and browsers of Micro Club projects. A back
 
 The endpoints the admin dashboard uses are in the [Admin API](/docs/api-reference/admin/overview).
 
-43 endpoints in 9 groups.
+46 endpoints in 10 groups.
 
 ## Authentication
 
@@ -87,6 +87,14 @@ The endpoints the admin dashboard uses are in the [Admin API](/docs/api-referenc
 | `PUT` | `/api/servers/{serverId}/members/{discordId}/roles/{roleId}` | [Grant a project-created role to a member](/docs/api-reference/project/roles#grant-a-project-created-role-to-a-member) |
 | `DELETE` | `/api/servers/{serverId}/members/{discordId}/roles/{roleId}` | [Remove a project-created role from a member](/docs/api-reference/project/roles#remove-a-project-created-role-from-a-member) |
 | `POST` | `/api/servers/{serverId}/roles` | [Create a Discord role for an event or project](/docs/api-reference/project/roles#create-a-discord-role-for-an-event-or-project) |
+
+## Scheduled Events
+
+| Method | Path | Summary |
+| --- | --- | --- |
+| `POST` | `/api/servers/{serverId}/scheduled-events` | [Create a Discord scheduled event](/docs/api-reference/project/scheduled-events#create-a-discord-scheduled-event) |
+| `PATCH` | `/api/servers/{serverId}/scheduled-events/{eventId}` | [Update a Discord scheduled event](/docs/api-reference/project/scheduled-events#update-a-discord-scheduled-event) |
+| `DELETE` | `/api/servers/{serverId}/scheduled-events/{eventId}` | [Delete a Discord scheduled event](/docs/api-reference/project/scheduled-events#delete-a-discord-scheduled-event) |
 
 ## Webhooks
 

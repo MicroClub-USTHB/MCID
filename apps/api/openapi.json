@@ -949,6 +949,52 @@
         ],
         "type": "object"
       },
+      "CreateScheduledEventDto": {
+        "additionalProperties": false,
+        "properties": {
+          "channelId": {
+            "description": "Discord Voice or Stage channel ID. Exactly one of location or channelId must be provided.",
+            "example": "910000000000000010",
+            "pattern": "/^\\d{17,20}$/",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description of the scheduled event (up to 1000 characters)",
+            "example": "Annual Micro Club Hackathon",
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "endsAt": {
+            "description": "End time in ISO 8601 format (required for external events, must be after startsAt)",
+            "example": "2026-12-06T09:00:00Z",
+            "type": "string"
+          },
+          "location": {
+            "description": "External location name (1 to 100 characters). Exactly one of location or channelId must be provided.",
+            "example": "USTHB",
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "description": "Name of the scheduled event (1 to 100 characters)",
+            "example": "Hackathon 2026",
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "startsAt": {
+            "description": "Start time in ISO 8601 format",
+            "example": "2026-12-05T09:00:00Z",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "startsAt"
+        ],
+        "type": "object"
+      },
       "CreateServerDto": {
         "additionalProperties": false,
         "properties": {
@@ -2453,6 +2499,91 @@
         ],
         "type": "object"
       },
+      "ScheduledEventResponseDto": {
+        "additionalProperties": false,
+        "properties": {
+          "channelId": {
+            "description": "Discord channel ID for voice/stage event",
+            "example": "910000000000000010",
+            "nullable": true,
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "Timestamp when this event was recorded in MCID",
+            "example": "2026-11-17T18:00:00.000Z",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description of the scheduled event",
+            "example": "Annual Micro Club Hackathon",
+            "nullable": true,
+            "type": "string"
+          },
+          "endsAt": {
+            "description": "End time in ISO 8601 format",
+            "example": "2026-12-06T09:00:00.000Z",
+            "nullable": true,
+            "type": "string"
+          },
+          "entityType": {
+            "description": "Entity type of the scheduled event",
+            "enum": [
+              "STAGE_INSTANCE",
+              "VOICE",
+              "EXTERNAL"
+            ],
+            "example": "EXTERNAL",
+            "type": "string"
+          },
+          "id": {
+            "description": "Discord scheduled event snowflake ID",
+            "example": "920000000000000001",
+            "type": "string"
+          },
+          "location": {
+            "description": "External location name",
+            "example": "USTHB",
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "description": "Name of the scheduled event",
+            "example": "Hackathon 2026",
+            "type": "string"
+          },
+          "serverId": {
+            "description": "Discord server ID",
+            "example": "987654321098765432",
+            "type": "string"
+          },
+          "startsAt": {
+            "description": "Start time in ISO 8601 format",
+            "example": "2026-12-05T09:00:00.000Z",
+            "type": "string"
+          },
+          "status": {
+            "description": "Current status of the scheduled event",
+            "enum": [
+              "SCHEDULED",
+              "ACTIVE",
+              "COMPLETED",
+              "CANCELED"
+            ],
+            "example": "SCHEDULED",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "serverId",
+          "name",
+          "startsAt",
+          "status",
+          "entityType",
+          "createdAt"
+        ],
+        "type": "object"
+      },
       "SecretSettingDto": {
         "additionalProperties": false,
         "properties": {
@@ -3367,6 +3498,48 @@
         "required": [
           "redirectUri"
         ],
+        "type": "object"
+      },
+      "UpdateScheduledEventDto": {
+        "additionalProperties": false,
+        "properties": {
+          "channelId": {
+            "description": "Updated Discord Voice or Stage channel ID",
+            "example": "910000000000000010",
+            "pattern": "/^\\d{17,20}$/",
+            "type": "string"
+          },
+          "description": {
+            "description": "Updated description of the scheduled event (up to 1000 characters)",
+            "example": "Updated description",
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "endsAt": {
+            "description": "Updated end time in ISO 8601 format",
+            "example": "2026-12-06T18:00:00Z",
+            "type": "string"
+          },
+          "location": {
+            "description": "Updated external location (1 to 100 characters)",
+            "example": "USTHB Cyber Espace",
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "description": "Updated name of the scheduled event (1 to 100 characters)",
+            "example": "Hackathon 2026 - Finale",
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "startsAt": {
+            "description": "Updated start time in ISO 8601 format",
+            "example": "2026-12-05T10:00:00Z",
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "UpdateServerDto": {
@@ -11329,6 +11502,244 @@
         "summary": "Create a Discord role for an event or project",
         "tags": [
           "Roles"
+        ]
+      }
+    },
+    "/api/servers/{serverId}/scheduled-events": {
+      "post": {
+        "description": "Creates a scheduled event in the Discord server (external location or channel) and records project ownership. Retrying with the same Idempotency-Key header returns the cached response without creating a duplicate event on Discord.",
+        "operationId": "ProjectScheduledEventsController_createEvent",
+        "parameters": [
+          {
+            "description": "Discord server ID",
+            "in": "path",
+            "name": "serverId",
+            "required": true,
+            "schema": {
+              "example": "987654321098765432",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateScheduledEventDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledEventResponseDto"
+                }
+              }
+            },
+            "description": "Scheduled event created successfully"
+          },
+          "400": {
+            "description": "Invalid input payload, time range or entity parameters"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "description": "Project lacks manage_events scope on this server"
+          },
+          "404": {
+            "description": "Server or channel not found"
+          },
+          "409": {
+            "description": "Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload."
+          },
+          "429": {
+            "description": "Project rate limit exceeded"
+          },
+          "502": {
+            "description": "Discord rejected the request or bot lacks permissions"
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ],
+        "summary": "Create a Discord scheduled event",
+        "tags": [
+          "Scheduled Events"
+        ]
+      }
+    },
+    "/api/servers/{serverId}/scheduled-events/{eventId}": {
+      "delete": {
+        "description": "Cancels and deletes a scheduled event from Discord and removes its MCID ownership record. Projects can only delete scheduled events they previously created; other events return 404.",
+        "operationId": "ProjectScheduledEventsController_deleteEvent",
+        "parameters": [
+          {
+            "description": "Discord server ID",
+            "in": "path",
+            "name": "serverId",
+            "required": true,
+            "schema": {
+              "example": "987654321098765432",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Discord scheduled event ID",
+            "in": "path",
+            "name": "eventId",
+            "required": true,
+            "schema": {
+              "example": "920000000000000001",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Scheduled event deleted successfully"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "description": "Project lacks manage_events scope on this server"
+          },
+          "404": {
+            "description": "Scheduled event not found or not owned by this project"
+          },
+          "409": {
+            "description": "Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload."
+          },
+          "429": {
+            "description": "Project rate limit exceeded"
+          },
+          "502": {
+            "description": "Discord rejected the request or bot lacks permissions"
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ],
+        "summary": "Delete a Discord scheduled event",
+        "tags": [
+          "Scheduled Events"
+        ]
+      },
+      "patch": {
+        "description": "Updates a scheduled event on Discord. Projects can only update scheduled events they previously created; attempts to update an event created by another project or created manually on Discord will return 404.",
+        "operationId": "ProjectScheduledEventsController_updateEvent",
+        "parameters": [
+          {
+            "description": "Discord server ID",
+            "in": "path",
+            "name": "serverId",
+            "required": true,
+            "schema": {
+              "example": "987654321098765432",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Discord scheduled event ID",
+            "in": "path",
+            "name": "eventId",
+            "required": true,
+            "schema": {
+              "example": "920000000000000001",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateScheduledEventDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledEventResponseDto"
+                }
+              }
+            },
+            "description": "Scheduled event updated successfully"
+          },
+          "400": {
+            "description": "Invalid update parameters or time range"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "description": "Project lacks manage_events scope on this server"
+          },
+          "404": {
+            "description": "Scheduled event not found or not owned by this project"
+          },
+          "409": {
+            "description": "Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload."
+          },
+          "429": {
+            "description": "Project rate limit exceeded"
+          },
+          "502": {
+            "description": "Discord rejected the request or bot lacks permissions"
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ],
+        "summary": "Update a Discord scheduled event",
+        "tags": [
+          "Scheduled Events"
         ]
       }
     },
