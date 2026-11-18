@@ -11,7 +11,9 @@ import {
   ValidationPipe,
   HttpCode,
   HttpStatus,
+  Req,
 } from '@nestjs/common';
+import { Request } from 'express';
 import {
   ApiTags,
   ApiSecurity,
@@ -25,6 +27,7 @@ import {
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiTooManyRequestsResponse,
+  ApiBadGatewayResponse,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { SkipGlobalThrottle } from '../../common/guards/app-throttler.guard';
@@ -33,6 +36,9 @@ import { ChannelAccessGuard } from './guards/channel-access.guard';
 import { ProjectThrottlerGuard } from './guards/project-throttler.guard';
 import { ApiKeyGuard } from '../../common/guards/api-key.guard';
 import { RequireProjectOperation } from '../../common/decorators/require-project-operation.decorator';
+import { RequireScope } from '../../common/decorators/require-scope.decorator';
+import { Idempotent } from '../../common/decorators/idempotent.decorator';
+import { CreateInviteDto, InviteResponseDto } from './dto/create-invite.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import { ListChannelsQueryDto } from './dto/list-channels-query.dto';
 import { ListMessagesQueryDto } from './dto/list-messages-query.dto';
@@ -248,5 +254,60 @@ export class ChannelsController {
     @Body() dto: SendMessageDto,
   ): Promise<SendMessageResponseDto> {
     return this.channelsService.sendMessage(serverId, channelId, dto);
+  }
+
+  @Post(':channelId/invites')
+  @RequireScope('manage_channels')
+  @Idempotent()
+  @SkipGlobalThrottle()
+  @UseGuards(ProjectThrottlerGuard, ChannelAccessGuard)
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Create a channel invite',
+    description:
+      'Creates a Discord invite for a channel of a server the project may access. ' +
+      'Retrying with the same Idempotency-Key returns the cached invite instead of creating another one.',
+  })
+  @ApiParam({
+    name: 'serverId',
+    description: 'Discord server ID',
+    example: '123456789012345678',
+  })
+  @ApiParam({
+    name: 'channelId',
+    description: 'Discord channel ID',
+    example: '123456789012345678',
+  })
+  @ApiCreatedResponse({
+    description: 'Invite created.',
+    type: InviteResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'Invalid invite options.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid API key.' })
+  @ApiForbiddenResponse({
+    description: 'Project lacks the manage_channels scope on this server.',
+  })
+  @ApiNotFoundResponse({
+    description: 'Channel does not exist in this server or bot lacks access.',
+  })
+  @ApiTooManyRequestsResponse({
+    description: 'Rate limit exceeded. 5 invites per minute per project.',
+  })
+  @ApiBadGatewayResponse({
+    description: 'Discord rejected the request or the bot lacks permission.',
+  })
+  async createInvite(
+    @Param('serverId') serverId: string,
+    @Param('channelId') channelId: string,
+    @Body() dto: CreateInviteDto,
+    @Req() req: Request & { project?: { id: string } },
+  ): Promise<InviteResponseDto> {
+    return this.channelsService.createInvite(
+      req.project!.id,
+      serverId,
+      channelId,
+      dto,
+    );
   }
 }
