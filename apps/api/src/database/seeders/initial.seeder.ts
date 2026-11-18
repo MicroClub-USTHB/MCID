@@ -257,48 +257,22 @@ export async function initialSeeder(db: NodePgDatabase<typeof schema>) {
     },
   ];
 
-  const eventPermissionsData = [
-    {
-      key: 'EVENTS.CREATE',
-      bitfield: 0n,
-      description: 'Create events on the Event Platform',
-    },
-    {
-      key: 'EVENTS.RESPONSES.READ',
-      bitfield: 0n,
-      description: 'Read responses submitted to events',
-    },
-    {
-      key: 'EVENTS.EMAIL.SEND',
-      bitfield: 0n,
-      description: 'Send emails to event participants',
-    },
-    {
-      key: 'EVENTS.REVIEW',
-      bitfield: 0n,
-      description: 'Review event submissions',
-    },
-    {
-      key: 'EVENTS.CHECKIN',
-      bitfield: 0n,
-      description: 'Check participants in at events',
-    },
-    {
-      key: 'EVENTS.TEMPLATES.MANAGE',
-      bitfield: 0n,
-      description: 'Manage event templates',
-    },
+  const eventPermissionKeys = [
+    'EVENTS.CREATE',
+    'EVENTS.RESPONSES.READ',
+    'EVENTS.EMAIL.SEND',
+    'EVENTS.REVIEW',
+    'EVENTS.CHECKIN',
+    'EVENTS.TEMPLATES.MANAGE',
   ];
 
   const insertedPermissions = await db
     .insert(schema.permissions)
-    .values([...permissionsData, ...eventPermissionsData])
+    .values(permissionsData)
     .onConflictDoNothing()
     .returning();
 
-  console.log(
-    `  - Seeded ${insertedPermissions.length} permissions (Discord + Event Platform)`,
-  );
+  console.log(`  - Seeded ${insertedPermissions.length} Discord permissions`);
   type RoleInsert = typeof schema.roles.$inferInsert;
   type MemberInsert = typeof schema.members.$inferInsert;
   type ProjectInsert = typeof schema.projects.$inferInsert;
@@ -441,15 +415,7 @@ export async function initialSeeder(db: NodePgDatabase<typeof schema>) {
   const buildPermissionsBits = (keys: string[]) =>
     keys.reduce((bits, key) => bits | (permissionBitsByKey.get(key) ?? 0n), 0n);
 
-  const executivePermissionKeys = [
-    'ADMINISTRATOR',
-    'EVENTS.CREATE',
-    'EVENTS.RESPONSES.READ',
-    'EVENTS.EMAIL.SEND',
-    'EVENTS.REVIEW',
-    'EVENTS.CHECKIN',
-    'EVENTS.TEMPLATES.MANAGE',
-  ];
+  const executivePermissionKeys = ['ADMINISTRATOR', ...eventPermissionKeys];
   const hrPermissionKeys = [
     'EVENTS.CREATE',
     'EVENTS.RESPONSES.READ',
@@ -635,10 +601,10 @@ export async function initialSeeder(db: NodePgDatabase<typeof schema>) {
     .select()
     .from(schema.permissions)
     .where(
-      inArray(
-        schema.permissions.key,
-        [...permissionsData, ...eventPermissionsData].map((p) => p.key),
-      ),
+      inArray(schema.permissions.key, [
+        ...permissionsData.map((p) => p.key),
+        ...eventPermissionKeys,
+      ]),
     );
 
   const permissionIdByKey = new Map(
