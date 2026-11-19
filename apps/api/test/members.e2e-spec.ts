@@ -22,7 +22,8 @@ import {
   TestDb,
 } from './helpers/db';
 import { disableNock, enableNock } from './helpers/discord-mock';
-import { servers } from '../src/database/entities';
+import { members, servers } from '../src/database/entities';
+import { MemberRepository } from '../src/modules/members/member.repository';
 import { eq } from 'drizzle-orm';
 
 const DB_URL = process.env.DATABASE_URL;
@@ -255,6 +256,88 @@ describeIf('/api/servers/:serverId/members (e2e)', () => {
         .get(`${BASE()}/${member.id}`)
         .set(apiKeyHeader())
         .expect(403);
+    });
+  });
+
+  // ─── Club membership ───────────────────────────────────────────
+
+  describe('club membership', () => {
+    const joinerId = '800000000000000099';
+
+    const isClubMember = async (id: string) =>
+      (
+        await db
+          .select({ isClubMember: members.isClubMember })
+          .from(members)
+          .where(eq(members.id, id))
+      )[0]?.isClubMember;
+
+    const syncJoiner = async (serverId: string, isActive: boolean) => {
+      const repo = app.get(MemberRepository);
+      // The sync always sends isClubMember: false; the membership decides.
+      await repo.upsertMember({
+        id: joinerId,
+        username: 'joiner',
+        isClubMember: false,
+        syncedAt: new Date(),
+      });
+      await repo.upsertServerMembership({
+        serverId,
+        memberId: joinerId,
+        isActive,
+        lastSyncedAt: new Date(),
+      });
+    };
+
+    it('makes a member synced into the main server a club member', async () => {
+      await syncJoiner(adminCtx.serverId, true);
+
+      const res = await request(app.getHttpServer())
+        .get(`${BASE()}/${joinerId}`)
+        .set(apiKeyHeader())
+        .expect(200);
+      expect(res.body.isClubMember).toBe(true);
+    });
+
+    it('keeps the flag when the member is synced again', async () => {
+      await syncJoiner(adminCtx.serverId, true);
+      await syncJoiner(adminCtx.serverId, true);
+
+      expect(await isClubMember(joinerId)).toBe(true);
+    });
+
+    it('clears the flag when the member leaves the main server', async () => {
+      await syncJoiner(adminCtx.serverId, true);
+      await syncJoiner(adminCtx.serverId, false);
+
+      expect(await isClubMember(joinerId)).toBe(false);
+    });
+
+    it('clears the flag when a full sync no longer finds the member', async () => {
+      await syncJoiner(adminCtx.serverId, true);
+
+      await app
+        .get(MemberRepository)
+        .markInactiveForServer(adminCtx.serverId, new Date(Date.now() + 1000));
+
+      expect(await isClubMember(joinerId)).toBe(false);
+    });
+
+    it('does not make a member of another server a club member', async () => {
+      const otherServerId = '900000000000000002';
+      await db.insert(servers).values({
+        id: otherServerId,
+        name: 'Other Server',
+        icon: null,
+        isMain: false,
+        isActive: true,
+        type: 'club',
+        syncedAt: new Date(),
+      });
+
+      await syncJoiner(otherServerId, true);
+
+      expect(await isClubMember(joinerId)).toBe(false);
     });
   });
 });
