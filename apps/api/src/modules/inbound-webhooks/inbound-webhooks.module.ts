@@ -5,6 +5,8 @@ import { AuditModule } from '../audit/audit.module';
 
 import { InboundWebhooksController } from './inbound-webhooks.controller';
 import { InboundWebhookIngestController } from './inbound-webhook-ingest.controller';
+import { InboundWebhookProjectController } from './inbound-webhook-project.controller';
+import { ProjectThrottlerGuard } from '../channels/guards/project-throttler.guard';
 import { InboundWebhookReadController } from './inbound-webhook-read.controller';
 import { InboundWebhooksService } from './inbound-webhooks.service';
 import { InboundWebhooksRepository } from './inbound-webhooks.repository';
@@ -20,11 +22,13 @@ import { STORAGE_ADAPTER } from './files/storage.adapter';
     InboundWebhooksController,
     InboundWebhookIngestController,
     InboundWebhookReadController,
+    InboundWebhookProjectController,
   ],
   providers: [
     InboundWebhooksService,
     InboundWebhooksRepository,
     InboundWebhookReadGuard,
+    ProjectThrottlerGuard,
     InboundWebhookFilesService,
     InboundWebhookRetentionService,
     { provide: STORAGE_ADAPTER, useClass: S3StorageAdapter },

@@ -5,6 +5,7 @@ import {
   Param,
   Query,
   Body,
+  Req,
   UseGuards,
   UseFilters,
   UsePipes,
@@ -12,6 +13,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { Request } from 'express';
 import {
   ApiTags,
   ApiSecurity,
@@ -25,6 +27,7 @@ import {
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiTooManyRequestsResponse,
+  ApiBadGatewayResponse,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { SkipGlobalThrottle } from '../../common/guards/app-throttler.guard';
@@ -33,6 +36,10 @@ import { ChannelAccessGuard } from './guards/channel-access.guard';
 import { ProjectThrottlerGuard } from './guards/project-throttler.guard';
 import { ApiKeyGuard } from '../../common/guards/api-key.guard';
 import { RequireProjectOperation } from '../../common/decorators/require-project-operation.decorator';
+import { RequireScope } from '../../common/decorators/require-scope.decorator';
+import { Idempotent } from '../../common/decorators/idempotent.decorator';
+import { HideInaccessibleServer } from '../../common/decorators/hide-inaccessible-server.decorator';
+import { CreateInviteDto, InviteResponseDto } from './dto/create-invite.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import { ListChannelsQueryDto } from './dto/list-channels-query.dto';
 import { ListMessagesQueryDto } from './dto/list-messages-query.dto';
@@ -42,7 +49,14 @@ import {
   ChannelDetailResponseDto,
 } from './dto/channel-response.dto';
 import { GetMessagesResponseDto } from './dto/message-response.dto';
+import { CreateChannelDto } from './dto/create-channel.dto';
+import { CreateChannelResponseDto } from './dto/create-channel-response.dto';
 import { ChannelsExceptionFilter } from './filters/channels-exception.filter';
+import * as schema from '../../database/entities';
+
+interface RequestWithProject extends Request {
+  project?: typeof schema.projects.$inferSelect;
+}
 
 @ApiTags('Channels')
 @ApiSecurity('api-key')
@@ -52,6 +66,57 @@ import { ChannelsExceptionFilter } from './filters/channels-exception.filter';
 @UseFilters(ChannelsExceptionFilter)
 export class ChannelsController {
   constructor(private readonly channelsService: ChannelsService) {}
+
+  @Post()
+  @RequireScope('manage_channels')
+  @HideInaccessibleServer()
+  @Idempotent({ required: true })
+  @SkipGlobalThrottle()
+  @UseGuards(ProjectThrottlerGuard)
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Create a Discord channel',
+    description:
+      'Creates a text or voice channel in the Discord server, optionally under a parent category. ' +
+      'Requires the manage_channels scope on the server. ' +
+      'The Idempotency-Key header is required: retrying with the same key returns the cached response instead of creating it again.',
+  })
+  @ApiParam({
+    name: 'serverId',
+    description: 'Discord server ID',
+    example: '123456789012345678',
+  })
+  @ApiCreatedResponse({
+    description: 'Channel created successfully.',
+    type: CreateChannelResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description:
+      'Invalid channel payload, parent is not a category, or missing Idempotency-Key header.',
+  })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid API key.' })
+  @ApiForbiddenResponse({
+    description:
+      'Project does not have the manage_channels scope on this server.',
+  })
+  @ApiNotFoundResponse({
+    description:
+      'The project is not mapped to this server, the server does not exist, or the parent category is not in it.',
+  })
+  @ApiTooManyRequestsResponse({
+    description: 'Rate limit exceeded.',
+  })
+  @ApiBadGatewayResponse({
+    description: 'Discord rejected the request or bot lacks permissions.',
+  })
+  async createChannel(
+    @Param('serverId') serverId: string,
+    @Body() dto: CreateChannelDto,
+    @Req() req: RequestWithProject,
+  ): Promise<CreateChannelResponseDto> {
+    const projectId = req.project?.id;
+    return this.channelsService.createChannel(projectId, serverId, dto);
+  }
 
   @Get()
   @RequireProjectOperation('READ')
@@ -248,5 +313,60 @@ export class ChannelsController {
     @Body() dto: SendMessageDto,
   ): Promise<SendMessageResponseDto> {
     return this.channelsService.sendMessage(serverId, channelId, dto);
+  }
+
+  @Post(':channelId/invites')
+  @RequireScope('manage_channels')
+  @Idempotent()
+  @SkipGlobalThrottle()
+  @UseGuards(ProjectThrottlerGuard, ChannelAccessGuard)
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Create a channel invite',
+    description:
+      'Creates a Discord invite for a channel of a server the project may access. ' +
+      'Retrying with the same Idempotency-Key returns the cached invite instead of creating another one.',
+  })
+  @ApiParam({
+    name: 'serverId',
+    description: 'Discord server ID',
+    example: '123456789012345678',
+  })
+  @ApiParam({
+    name: 'channelId',
+    description: 'Discord channel ID',
+    example: '123456789012345678',
+  })
+  @ApiCreatedResponse({
+    description: 'Invite created.',
+    type: InviteResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'Invalid invite options.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid API key.' })
+  @ApiForbiddenResponse({
+    description: 'Project lacks the manage_channels scope on this server.',
+  })
+  @ApiNotFoundResponse({
+    description: 'Channel does not exist in this server or bot lacks access.',
+  })
+  @ApiTooManyRequestsResponse({
+    description: 'Rate limit exceeded. 5 invites per minute per project.',
+  })
+  @ApiBadGatewayResponse({
+    description: 'Discord rejected the request or the bot lacks permission.',
+  })
+  async createInvite(
+    @Param('serverId') serverId: string,
+    @Param('channelId') channelId: string,
+    @Body() dto: CreateInviteDto,
+    @Req() req: Request & { project?: { id: string } },
+  ): Promise<InviteResponseDto> {
+    return this.channelsService.createInvite(
+      req.project!.id,
+      serverId,
+      channelId,
+      dto,
+    );
   }
 }

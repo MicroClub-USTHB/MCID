@@ -40,6 +40,7 @@ export const inboundWebhookSubmissions = pgTable(
     webhookIdx: index('idx_inbound_webhook_submissions_webhook').on(
       t.webhookId,
       t.receivedAt,
+      t.id,
     ),
     projectIdx: index('idx_inbound_webhook_submissions_project').on(
       t.projectId,

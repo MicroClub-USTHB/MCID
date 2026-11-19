@@ -229,6 +229,8 @@ export class SettingsService implements OnModuleInit, OnModuleDestroy {
 
   getEffectiveSettings(): EffectiveSettingsDto {
     const isSet = (v: string | undefined): boolean => !!v && v.length > 0;
+    const source = (column: SettingKey): 'env' | 'override' =>
+      this.row?.[column] != null ? 'override' : 'env';
     // THROTTLER_* are not in the Joi schema, so ConfigService hands them back
     // as raw strings — coerce so the response is uniformly numeric.
     const num = (key: string, fallback: number): number =>
@@ -260,8 +262,13 @@ export class SettingsService implements OnModuleInit, OnModuleDestroy {
         permissionTtlMs: {
           value: this.getPermissionCacheTtlMs(),
           editable: true,
+          source: source('permissionCacheTtlMs'),
         },
-        statsTtlMs: { value: this.getStatsCacheTtlMs(), editable: true },
+        statsTtlMs: {
+          value: this.getStatsCacheTtlMs(),
+          editable: true,
+          source: source('statsCacheTtlMs'),
+        },
         projectAuthTtlMs: {
           value: this.config.get<number>('app.projectAuthCacheTtlMs') ?? 30_000,
           editable: false,
@@ -281,12 +288,14 @@ export class SettingsService implements OnModuleInit, OnModuleDestroy {
         maxWebhooksPerProject: {
           value: this.getMaxWebhooksPerProject(),
           editable: true,
+          source: source('maxWebhooksPerProject'),
         },
       },
       preferences: {
         memberActivityThresholdDays: {
           value: this.getMemberActivityThresholdDays(),
           editable: true,
+          source: source('memberActivityThresholdDays'),
         },
       },
       security: {

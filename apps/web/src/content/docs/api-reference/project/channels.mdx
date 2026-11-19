@@ -7,6 +7,38 @@ description: "List a server's channels, read recent messages and send a message 
 
 Discord channel listing, message history, and message sending - project API key
 
+## Create a Discord category channel
+
+<Endpoint method="POST" path="/api/servers/{serverId}/categories" />
+
+Creates a category channel in the Discord server. Requires the manage_channels scope on the server. The Idempotency-Key header is required: retrying with the same key returns the cached response instead of creating it again.
+
+**Authentication:** Project API key (`X-API-Key` header)
+
+**Parameters**
+
+| Name | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `serverId` | path | `string` | yes | Discord server ID |
+| `Idempotency-Key` | header | `string` | yes | Required idempotency key (up to 128 characters). A retry with the same key returns the cached response instead of creating the resource again. |
+
+**Request body** (JSON, required): [CreateCategoryDto schema](#createcategorydto-schema).
+
+**Responses**
+
+| Status | Description | Body |
+| --- | --- | --- |
+| `201` | Category created successfully. | `CategoryResponseDto` |
+| `400` | Invalid category payload or missing Idempotency-Key header. |  |
+| `401` | Missing or invalid API key. |  |
+| `403` | Project does not have the manage_channels scope on this server. |  |
+| `404` | The project is not mapped to this server, the server does not exist, or the bot cannot reach it. |  |
+| `409` | Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. |  |
+| `429` | Rate limit exceeded. |  |
+| `502` | Discord rejected the request or bot lacks permissions. |  |
+
+<SwaggerLink tag="Channels" operationId="CategoriesController_createCategory" />
+
 ## List all channels in a server
 
 <Endpoint method="GET" path="/api/servers/{serverId}/channels" />
@@ -35,6 +67,38 @@ Returns all channels the bot can access in the server, with categories.
 
 <SwaggerLink tag="Channels" operationId="ChannelsController_listChannels" />
 
+## Create a Discord channel
+
+<Endpoint method="POST" path="/api/servers/{serverId}/channels" />
+
+Creates a text or voice channel in the Discord server, optionally under a parent category. Requires the manage_channels scope on the server. The Idempotency-Key header is required: retrying with the same key returns the cached response instead of creating it again.
+
+**Authentication:** Project API key (`X-API-Key` header)
+
+**Parameters**
+
+| Name | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `serverId` | path | `string` | yes | Discord server ID |
+| `Idempotency-Key` | header | `string` | yes | Required idempotency key (up to 128 characters). A retry with the same key returns the cached response instead of creating the resource again. |
+
+**Request body** (JSON, required): [CreateChannelDto schema](#createchanneldto-schema).
+
+**Responses**
+
+| Status | Description | Body |
+| --- | --- | --- |
+| `201` | Channel created successfully. | `CreateChannelResponseDto` |
+| `400` | Invalid channel payload, parent is not a category, or missing Idempotency-Key header. |  |
+| `401` | Missing or invalid API key. |  |
+| `403` | Project does not have the manage_channels scope on this server. |  |
+| `404` | The project is not mapped to this server, the server does not exist, or the parent category is not in it. |  |
+| `409` | Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. |  |
+| `429` | Rate limit exceeded. |  |
+| `502` | Discord rejected the request or bot lacks permissions. |  |
+
+<SwaggerLink tag="Channels" operationId="ChannelsController_createChannel" />
+
 ## Get channel details
 
 <Endpoint method="GET" path="/api/servers/{serverId}/channels/{channelId}" />
@@ -61,6 +125,39 @@ Returns detailed information about a specific channel.
 | `404` | Channel does not exist or bot lacks access. |  |
 
 <SwaggerLink tag="Channels" operationId="ChannelsController_getChannel" />
+
+## Create a channel invite
+
+<Endpoint method="POST" path="/api/servers/{serverId}/channels/{channelId}/invites" />
+
+Creates a Discord invite for a channel of a server the project may access. Retrying with the same Idempotency-Key returns the cached invite instead of creating another one.
+
+**Authentication:** Project API key (`X-API-Key` header)
+
+**Parameters**
+
+| Name | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `serverId` | path | `string` | yes | Discord server ID |
+| `channelId` | path | `string` | yes | Discord channel ID |
+| `Idempotency-Key` | header | `string` | no | Optional idempotency key (up to 128 characters). A retry with the same key returns the cached response. |
+
+**Request body** (JSON, required): [CreateInviteDto schema](#createinvitedto-schema).
+
+**Responses**
+
+| Status | Description | Body |
+| --- | --- | --- |
+| `201` | Invite created. | `InviteResponseDto` |
+| `400` | Invalid invite options. |  |
+| `401` | Missing or invalid API key. |  |
+| `403` | Project lacks the manage_channels scope on this server. |  |
+| `404` | Channel does not exist in this server or bot lacks access. |  |
+| `409` | Idempotency conflict: a request with this key is currently in progress, or the key was reused with a different payload. |  |
+| `429` | Rate limit exceeded. 5 invites per minute per project. |  |
+| `502` | Discord rejected the request or the bot lacks permission. |  |
+
+<SwaggerLink tag="Channels" operationId="ChannelsController_createInvite" />
 
 ## Get recent messages from a channel
 
@@ -134,6 +231,13 @@ Sends a message with optional embeds and mention configuration.
 | `roles` | `array of string` | no | Discord role IDs to allow mentioning |
 | `users` | `array of string` | no | Discord user IDs to allow mentioning |
 
+### CategoryResponseDto schema
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | yes | Discord snowflake ID of the created category |
+| `name` | `string` | yes | Name of the category |
+
 ### ChannelCategoryDto schema
 
 | Field | Type | Required | Description |
@@ -190,6 +294,36 @@ Sends a message with optional embeds and mention configuration.
 | `topic` | `string or null` | yes | Channel topic |
 | `type` | `"text" or "voice" or "announcement" or "category"` | yes | Channel type |
 
+### CreateCategoryDto schema
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | yes | Name of the Discord category |
+
+### CreateChannelDto schema
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | yes | Name of the Discord channel |
+| `parentId` | `string` | no | Discord snowflake ID of the parent category |
+| `type` | `"text" or "voice"` | yes | Type of the channel (text or voice) |
+
+### CreateChannelResponseDto schema
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | yes | Discord snowflake ID of the created channel |
+| `name` | `string` | yes | Name of the channel |
+| `parentId` | `string or null` | yes | Discord snowflake ID of the parent category, or null if root level |
+| `type` | `"text" or "voice"` | yes | Type of the channel |
+
+### CreateInviteDto schema
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `maxAgeSeconds` | `number` | no | Seconds until the invite expires (0 = never). Discord default when omitted: 86400 (24 hours). |
+| `maxUses` | `number` | no | Maximum number of uses (0 = unlimited, the Discord default when omitted). |
+
 ### EmbedAuthorDto schema
 
 | Field | Type | Required | Description |
@@ -236,6 +370,14 @@ Sends a message with optional embeds and mention configuration.
 | --- | --- | --- | --- |
 | `hasMore` | `boolean` | yes | Whether there are more messages available |
 | `messages` | `array of MessageDto` | yes |  |
+
+### InviteResponseDto schema
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `code` | `string` | yes | Invite code |
+| `expiresAt` | `string or null` | yes | Expiry (ISO 8601), null when the invite never expires |
+| `url` | `string` | yes | Invite URL |
 
 ### MentionDto schema
 

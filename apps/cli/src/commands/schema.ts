@@ -111,6 +111,68 @@ export function registerSchemaCommand(program: Command): void {
       process.stdout.write(`✓ Schema is valid (source: ${OUTPUT_SOURCE})\n`);
       process.exitCode = ExitCode.Ok;
     });
+
+  schema
+    .command('preview <path>')
+    .description('Check schema on server and preview generated developer docs')
+    .option('--profile <name>', 'profile to use')
+    .action(async (path: string, options: { profile?: string }) => {
+      let contents: string;
+      try {
+        contents = await readFile(path, FILE_ENCODING);
+      } catch (error) {
+        process.stderr.write(`Could not read schema file: ${errorMessage(error)}\n`);
+        process.exitCode = ExitCode.Unexpected;
+        return;
+      }
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(contents) as unknown;
+      } catch (error) {
+        process.stderr.write(`Invalid JSON in ${path}: ${errorMessage(error)}\n`);
+        process.exitCode = ExitCode.PrecheckFailed;
+        return;
+      }
+
+      try {
+        const { loadConfig, configPath, resolveProfileName } = await import('../config.js');
+        const { resolveSession } = await import('../session.js');
+        const { defaultKeyProvider } = await import('../crypto-store.js');
+        const { ApiClient } = await import('../lib/client.js');
+
+        const cfg = await loadConfig(configPath());
+        const prof = resolveProfileName(cfg, options.profile);
+        const sess = await resolveSession(cfg, prof, defaultKeyProvider());
+        const client = new ApiClient(sess);
+
+        const previewRes = await client.post<{
+          ok: boolean;
+          errors?: { path: string; code: string; message: string }[];
+          markdown?: string;
+          examplePayload?: unknown;
+        }>('/admin/inbound-webhooks/schema/preview', {
+          schema: parsed,
+        });
+
+        if (!previewRes.ok && previewRes.errors) {
+          process.stderr.write(`✗ Server Schema Validation Failed:\n`);
+          for (const err of previewRes.errors) {
+            process.stderr.write(`  ${err.path}  ${err.code}  ${err.message}\n`);
+          }
+          process.exitCode = ExitCode.PrecheckFailed;
+          return;
+        }
+
+        process.stdout.write(`✓ Schema validated successfully on server\n\n`);
+        if (previewRes.markdown) {
+          process.stdout.write(`${previewRes.markdown}\n`);
+        }
+      } catch (err) {
+        process.stderr.write(`Error previewing schema on server: ${(err as Error).message}\n`);
+        process.exitCode = ExitCode.Unexpected;
+      }
+    });
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {

@@ -7,8 +7,11 @@
     "authentication-sso",
     "channels",
     "inbound-webhooks-ingest",
+    "inbound-webhooks-project",
     "members",
     "permissions",
+    "roles",
+    "scheduled-events",
     "webhooks"
   ]
 }

@@ -70,8 +70,9 @@ Returns a paginated list of individual entity-level changes (member added/remove
 | Name | In | Type | Required | Description |
 | --- | --- | --- | --- | --- |
 | `syncLogId` | path | `number` | yes |  |
-| `limit` | query | `number` | no |  |
-| `offset` | query | `number` | no |  |
+| `limit` | query | `number` | no | Max results to return (1-100) Default: `100`. |
+| `offset` | query | `number` | no | Number of records to skip Default: `0`. |
+| `action` | query | `"added" or "removed" or "updated" or "deactivated" or "role_assigned" or "role_removed"` | no | Filter changes by what happened (added, removed, updated, ...) |
 
 **Responses**
 

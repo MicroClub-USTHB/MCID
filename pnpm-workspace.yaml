@@ -16,6 +16,9 @@ overrides:
   form-data: '>=4.0.6'
   picomatch: '>=4.0.4'
   js-yaml: '>=4.3.2'
+  # @redocly/openapi-core (openapi-typescript) calls js-yaml 4's `types.merge`,
+  # which js-yaml 5 removed; keep that one consumer on the v4 line.
+  '@redocly/openapi-core>js-yaml': '4.3.2'
   fast-uri: '>=3.1.8'
   handlebars: '>=4.7.10'
   proxy-addr: '>=2.0.8'

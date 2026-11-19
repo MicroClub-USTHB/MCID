@@ -50,6 +50,7 @@ import {
 } from './dto/webhook-response.dto';
 import { WebhooksExceptionFilter } from './filters/webhooks-exception.filter';
 import { ProjectThrottlerGuard } from '../channels/guards/project-throttler.guard';
+import { Idempotent } from '../../common/decorators/idempotent.decorator';
 
 type RequestWithProject = Request & { project?: { id: string } };
 
@@ -65,6 +66,7 @@ export class WebhooksController {
   @Post('servers/:serverId/channels/:channelId/webhooks')
   @RequireProjectOperation('MANAGE_WEBHOOKS')
   @UseGuards(ChannelAccessGuard)
+  @Idempotent()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Create a webhook for a channel',
@@ -225,6 +227,7 @@ export class WebhooksController {
   @SkipGlobalThrottle()
   @UseGuards(ProjectThrottlerGuard)
   @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  @Idempotent()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
     summary: 'Execute a webhook',

@@ -1,0 +1,359 @@
+---
+title: 'Event Platform runbook'
+description: 'How to register the Event Platform as an MCID project, whitelist callbacks, grant server scopes, assign role permissions and verify the integration.'
+---
+
+The Event Platform signs members in with MCID SSO and calls the permission and member APIs with a project API key. It is an ordinary MCID project. Each environment (development, staging and production) has its own project, its own API key and its own callback address.
+
+This runbook covers how to create the project, whitelist its callback, grant server access, hand over the credentials, assign event permissions to Discord roles and verify the integration.
+
+## Environments and callback addresses
+
+Each environment gets a dedicated project. Never reuse a key between environments.
+
+| Environment | Project name               | Redirect URI                                              | Server access                                     |
+| ----------- | -------------------------- | --------------------------------------------------------- | ------------------------------------------------- |
+| Development | Event Platform Development | `http://localhost:3000/api/auth/callback`                 | Main server (`check_permissions`, `read_members`) |
+| Staging     | Event Platform Staging     | `https://staging-events.microclub.info/api/auth/callback` | Main server (`check_permissions`, `read_members`) |
+| Production  | Event Platform             | `https://events.microclub.info/api/auth/callback`         | Main server (`check_permissions`, `read_members`) |
+
+<Callout type="note">
+  The main server holds the club membership and core roles. When the Event Platform's Discord write
+  features ship, grant the write scope they need (such as `manage_roles`) on the events server only,
+  never on the main server.
+</Callout>
+
+The examples below set `MCID_URL` to the API base including `/api`, for example `https://mcid.microclub.info/api`. Admin calls authenticate with the `admin_session` cookie of the admin panel, or with `Authorization: Bearer <token>`.
+
+## Registration with the CLI
+
+One command creates the project, whitelists the callback, grants the main server with exactly the two scopes and writes the `.env` block:
+
+```bash
+mcid-cli project create --name "Event Platform" \
+  --redirect-uri https://events.microclub.info/api/auth/callback \
+  --server "Micro Club" --scope check_permissions read_members \
+  --env-out event-platform.env
+```
+
+Hand over the file as described in the last registration step below, then delete it. See [CLI projects](/docs/cli/projects) for the flags.
+
+## Registration with the admin panel or the API
+
+<Steps>
+
+### Create the project record
+
+Create the project in the admin panel at `/dashboard/projects` with **New Project**, or call the admin API:
+
+```bash
+curl -s -X POST "$MCID_URL/admin/projects" \
+  -H "Cookie: admin_session=$ADMIN_SESSION" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Event Platform",
+    "description": "Micro Club Event Platform backend"
+  }'
+```
+
+```json
+{
+  "apiKey": "pk_1a2b3c4d.64hexsecret...",
+  "project": {
+    "id": "7f000001-8b9a-4c22-b570-3d3f9e8a1001",
+    "name": "Event Platform",
+    "apiKeyPrefix": "pk_1a2b3c4d",
+    "isActive": true
+  }
+}
+```
+
+<Callout type="warning">
+  The full API key is returned once. MCID stores only its hash and its prefix, so record the key
+  immediately.
+</Callout>
+
+A project created without `serverAccess` gets every default scope on the main server, including the inbound webhook scopes. The grant step below narrows it to what the Event Platform needs.
+
+### Whitelist the redirect URI
+
+MCID compares the `redirect_uri` of a login character for character with the registered addresses. Set the exact callback. The value replaces the current list; separate several addresses with commas.
+
+```bash
+curl -s -X PATCH "$MCID_URL/admin/projects/$PROJECT_ID/redirect-uri" \
+  -H "Cookie: admin_session=$ADMIN_SESSION" \
+  -H "Content-Type: application/json" \
+  -d '{ "redirectUri": "https://events.microclub.info/api/auth/callback" }'
+```
+
+```json
+{
+  "projectId": "7f000001-8b9a-4c22-b570-3d3f9e8a1001",
+  "redirectUri": "https://events.microclub.info/api/auth/callback"
+}
+```
+
+### Grant server access and scopes
+
+The Event Platform needs the main server with two scopes:
+
+- `check_permissions`: `POST /api/permissions/check` and `POST /api/permissions/check-batch`.
+- `read_members`: `GET /api/servers/:serverId/members/:discordId`.
+
+The `scopes` list replaces the scopes the grant has:
+
+```bash
+curl -s -X PUT "$MCID_URL/admin/projects/$PROJECT_ID/servers/$MAIN_SERVER_ID" \
+  -H "Cookie: admin_session=$ADMIN_SESSION" \
+  -H "Content-Type: application/json" \
+  -d '{ "scopes": ["check_permissions", "read_members"] }'
+```
+
+```json
+{
+  "projectId": "7f000001-8b9a-4c22-b570-3d3f9e8a1001",
+  "serverId": "900000000000000001",
+  "operations": { "READ": true, "SEND_MESSAGES": false, "MANAGE_WEBHOOKS": false },
+  "scopes": ["check_permissions", "read_members"]
+}
+```
+
+### Hand over credentials securely
+
+Give the project id and the API key to the Event Platform owner through an encrypted channel, such as a password manager share or a secret vault. Never commit them, paste them in a chat or write them to a log.
+
+The Event Platform backend reads them from its environment:
+
+```bash
+MCID_URL=https://mcid.microclub.info/api
+MCID_CLIENT_ID=7f000001-8b9a-4c22-b570-3d3f9e8a1001
+MCID_API_KEY=pk_1a2b3c4d.64hexsecret...
+MCID_MAIN_SERVER_ID=900000000000000001
+MCID_REDIRECT_URI=https://events.microclub.info/api/auth/callback
+```
+
+</Steps>
+
+## Role permissions per environment
+
+The Event Platform decides what a member may do from `POST /api/permissions/check-batch`. In each environment, an admin assigns the six event permissions to the club's Discord roles on the main server:
+
+| Discord role      | Permissions                                                                                                                 | Why                                                              |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Executive         | `events.create`, `events.responses.read`, `events.email.send`, `events.review`, `events.checkin`, `events.templates.manage` | Everything HR holds, plus template management.                   |
+| HR                | `events.create`, `events.responses.read`, `events.email.send`                                                               | Runs events, reads responses and emails participants.            |
+| Reviewer          | `events.review`                                                                                                             | Reviews submissions. Held by HR members or delegated reviewers.  |
+| Staff (volunteer) | `events.checkin`                                                                                                            | Scans participants in at the door and cannot read their answers. |
+| Any other role    | none                                                                                                                        | A batch check with `mode: "ANY"` answers `false`.                |
+
+<Callout type="warning">
+  Leave the HR, Reviewer and Staff roles without a hierarchy rank. A member also gets the
+  permissions of every ranked role at or below their own best rank, so a ranked Staff role would
+  give `events.checkin` to every higher-ranked role, such as Member. Inheritance rules copy
+  permissions to other servers in the same way. See [Roles and
+  permissions](/docs/integrate/roles-and-permissions).
+</Callout>
+
+<Steps>
+
+### Find the permission ids
+
+Assign the permissions on each role's page under **Roles** in the admin panel, or with the API. The API takes permission ids, which differ between databases, so read them from the catalog:
+
+```bash
+curl -s "$MCID_URL/permissions/catalog" \
+  -H "Cookie: admin_session=$ADMIN_SESSION" | jq '.[] | select(.key | startswith("EVENTS."))'
+```
+
+### Assign the permissions to a role
+
+Here `42` stands for the id of `EVENTS.CHECKIN` from the catalog.
+
+```bash
+curl -s -X POST "$MCID_URL/permissions/admin/servers/$MAIN_SERVER_ID/roles/$STAFF_ROLE_ID/permissions" \
+  -H "Cookie: admin_session=$ADMIN_SESSION" \
+  -H "Content-Type: application/json" \
+  -d '{ "permissionIds": [42] }'
+```
+
+The answer lists every permission the role now holds. MCID clears the cached permissions as soon as the assignment changes, and the Discord role sync keeps these assignments.
+
+```json
+{
+  "roleId": "700000000000000006",
+  "roleName": "Staff",
+  "serverId": "900000000000000001",
+  "permissions": [
+    { "id": 42, "key": "EVENTS.CHECKIN", "description": "Check participants in at events" }
+  ]
+}
+```
+
+### Repeat for each role
+
+Assign the matrix above to the Executive, HR and Reviewer roles, then verify one member of each role with the batch checks below.
+
+</Steps>
+
+## Verifying the integration
+
+The platform owner verifies a login and a permission check before going live.
+
+### 1. Sign in and exchange the code
+
+Send the browser to the authorization endpoint:
+
+```text
+GET /api/auth/sso/authorize?client_id=<project id>&redirect_uri=https://events.microclub.info/api/auth/callback&server_id=<main server id>&state=test-state-123
+```
+
+After the member signs in, or straight away when they have a valid SSO cookie, MCID redirects to the callback with a one-time code:
+
+```text
+https://events.microclub.info/api/auth/callback?code=CODE&state=test-state-123
+```
+
+The Event Platform backend exchanges the code for a session token. A code works once.
+
+```bash
+curl -s -X POST "$MCID_URL/auth/token" \
+  -H "X-API-Key: $MCID_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "code": "CODE",
+    "clientId": "7f000001-8b9a-4c22-b570-3d3f9e8a1001",
+    "redirectUri": "https://events.microclub.info/api/auth/callback"
+  }'
+```
+
+The response carries `token`, `refreshToken`, `expiresAt`, the `member` (its `id` is the Discord ID) and the member's `roles` on the server. See [SSO](/docs/integrate/sso) for the full flow.
+
+### 2. Check that an unknown callback is refused
+
+```bash
+curl -s -i "$MCID_URL/auth/sso/authorize?client_id=$MCID_CLIENT_ID&redirect_uri=https://evil.example.com/callback&server_id=$MCID_MAIN_SERVER_ID&state=s"
+```
+
+MCID answers 400 without redirecting:
+
+```json
+{
+  "statusCode": 400,
+  "error": "invalid_redirect_uri",
+  "message": "Redirect URI not allowed for this project"
+}
+```
+
+### 3. Check a permission with the API key
+
+```bash
+curl -s -X POST "$MCID_URL/permissions/check" \
+  -H "X-API-Key: $MCID_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "discordId": "800000000000000010",
+    "serverId": "900000000000000001",
+    "permission": "events.create"
+  }'
+```
+
+```json
+{ "allowed": true, "source": "server" }
+```
+
+### 4. Check each role with the batch endpoint
+
+Check one member of each role with `POST /api/permissions/check-batch`.
+
+A Staff member holds `events.checkin` and not `events.responses.read`. `missing` and `matched` list the permission keys in upper case:
+
+```bash
+curl -s -X POST "$MCID_URL/permissions/check-batch" \
+  -H "X-API-Key: $MCID_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "discordId": "800000000000000007",
+    "serverId": "900000000000000001",
+    "permissions": ["events.checkin", "events.responses.read"],
+    "mode": "ALL"
+  }'
+```
+
+```json
+{
+  "allowed": false,
+  "missing": ["EVENTS.RESPONSES.READ"]
+}
+```
+
+The same check with `mode: "ANY"` answers:
+
+```json
+{
+  "allowed": true,
+  "matched": ["EVENTS.CHECKIN"]
+}
+```
+
+An Executive member holds all six:
+
+```bash
+curl -s -X POST "$MCID_URL/permissions/check-batch" \
+  -H "X-API-Key: $MCID_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "discordId": "800000000000000001",
+    "serverId": "900000000000000001",
+    "permissions": [
+      "events.create",
+      "events.responses.read",
+      "events.email.send",
+      "events.review",
+      "events.checkin",
+      "events.templates.manage"
+    ],
+    "mode": "ALL"
+  }'
+```
+
+```json
+{
+  "allowed": true,
+  "missing": []
+}
+```
+
+A member with no event role holds none of them:
+
+```bash
+curl -s -X POST "$MCID_URL/permissions/check-batch" \
+  -H "X-API-Key: $MCID_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "discordId": "800000000000000008",
+    "serverId": "900000000000000001",
+    "permissions": ["events.create", "events.checkin"],
+    "mode": "ANY"
+  }'
+```
+
+```json
+{
+  "allowed": false,
+  "matched": []
+}
+```
+
+## Common errors
+
+Errors follow the shape in [Conventions](/docs/integrate/conventions). Rely on the status code and `error`; the `message` wording can change.
+
+| Status | Example `message`                                      | Cause                                               | Fix                                                                     |
+| ------ | ------------------------------------------------------ | --------------------------------------------------- | ----------------------------------------------------------------------- |
+| 400    | `Redirect URI not allowed for this project`            | The callback differs from every registered address. | Match scheme, host, port, path and trailing slash exactly.              |
+| 401    | `Invalid API key` or `API key is required`             | Missing or wrong `X-API-Key`.                       | Check the header. If the key is lost, regenerate it in the admin panel. |
+| 403    | `Project is not allowed to perform READ on server ...` | The project has no access to that server.           | Grant the server in `/dashboard/projects`.                              |
+| 403    | `Insufficient scope: 'read_members' is required`       | The grant lacks the scope.                          | Add `check_permissions` or `read_members` to the main server grant.     |
+| 429    | `ThrottlerException: Too Many Requests`                | Over the endpoint's rate limit.                     | Wait for the `Retry-After` delay and back off.                          |
+
+Source: `apps/api/src/modules/projects/projects.controller.ts`, `apps/api/src/modules/projects/projects.service.ts`, `apps/api/src/modules/auth/auth.controller.ts`, `apps/api/src/modules/auth/auth.service.ts`, `apps/api/src/modules/permissions/permissions.controller.ts`, `apps/api/src/common/guards/api-key.guard.ts`, `apps/cli/src/commands/project.ts`.

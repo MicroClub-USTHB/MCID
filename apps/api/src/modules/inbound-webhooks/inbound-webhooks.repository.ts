@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
   and,
+  asc,
   desc,
   eq,
   gt,
@@ -104,6 +105,19 @@ export interface ListSubmissionsFilters {
   dateTo?: Date;
 }
 
+/**
+ * `received_at` is the start time of the inserting transaction, so a row can
+ * commit after a later one was already served. The keyset read therefore only
+ * returns rows older than this window, which any submit transaction outlasts.
+ */
+export const SUBMISSION_READ_LAG_SECONDS = 10;
+
+export interface SubmissionCursor {
+  /** `received_at` as Postgres prints it, so microseconds survive the round trip. */
+  r: string;
+  i: string;
+}
+
 @Injectable()
 export class InboundWebhooksRepository {
   constructor(
@@ -181,6 +195,34 @@ export class InboundWebhooksRepository {
       .where(eq(inboundWebhooks.projectId, projectId))
       .orderBy(desc(inboundWebhooks.createdAt));
     return rows as InboundWebhookRow[];
+  }
+
+  /** One page of a project's webhooks, oldest first, with the full count. */
+  async listByProjectPage(projectId: string, limit: number, offset: number) {
+    const where = eq(inboundWebhooks.projectId, projectId);
+    const [rows, [{ total }]] = await Promise.all([
+      this.db
+        .select(PUBLIC_COLUMNS)
+        .from(inboundWebhooks)
+        .where(where)
+        // id breaks ties so pages never overlap
+        .orderBy(asc(inboundWebhooks.createdAt), asc(inboundWebhooks.id))
+        .limit(limit)
+        .offset(offset),
+      this.db
+        .select({ total: sql<number>`count(*)::int` })
+        .from(inboundWebhooks)
+        .where(where),
+    ]);
+    return { rows: rows as InboundWebhookRow[], total };
+  }
+
+  async countByProject(projectId: string): Promise<number> {
+    const [{ total }] = await this.db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(inboundWebhooks)
+      .where(eq(inboundWebhooks.projectId, projectId));
+    return total;
   }
 
   async listAll(): Promise<InboundWebhookRow[]> {
@@ -582,6 +624,43 @@ export class InboundWebhooksRepository {
     ]);
 
     return { rows, total: count };
+  }
+
+  /**
+   * Keyset page, oldest first, on (received_at, id). `limit + 1` rows come back
+   * so the caller can tell whether another page exists.
+   */
+  async listSubmissionsAfter(
+    webhookId: string,
+    f: {
+      limit: number;
+      cursor?: SubmissionCursor;
+      dateFrom?: Date;
+      dateTo?: Date;
+    },
+  ) {
+    const t = inboundWebhookSubmissions;
+    const conditions: (SQL | undefined)[] = [
+      eq(t.webhookId, webhookId),
+      sql`${t.receivedAt} <= now() - make_interval(secs => ${SUBMISSION_READ_LAG_SECONDS})`,
+      f.dateFrom ? gte(t.receivedAt, f.dateFrom) : undefined,
+      f.dateTo ? lte(t.receivedAt, f.dateTo) : undefined,
+      f.cursor
+        ? sql`(${t.receivedAt}, ${t.id}) > (${f.cursor.r}::timestamptz, ${f.cursor.i}::uuid)`
+        : undefined,
+    ];
+    return this.db
+      .select({
+        id: t.id,
+        payload: t.payload,
+        receivedAt: t.receivedAt,
+        origin: t.origin,
+        cursorAt: sql<string>`${t.receivedAt}::text`,
+      })
+      .from(t)
+      .where(and(...conditions))
+      .orderBy(asc(t.receivedAt), asc(t.id))
+      .limit(f.limit + 1);
   }
 
   async findSubmission(webhookId: string, submissionId: string) {

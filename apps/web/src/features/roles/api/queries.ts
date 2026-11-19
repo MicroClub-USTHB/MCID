@@ -6,11 +6,29 @@ import { roleKeys } from '@/features/roles/api/keys';
 import {
   fetchImpactPreview,
   fetchInheritanceRules,
+  fetchPermissionCatalog,
   fetchRolePermissions,
   fetchRoleStats,
 } from '@/features/roles/api/service';
-import type { ImpactPreviewPayload, ListInheritanceRulesParams } from '@/features/roles/types';
+import type {
+  ImpactPreviewPayload,
+  ListInheritanceRulesParams,
+  PermissionCatalogEntry,
+} from '@/features/roles/types';
 import { useCan } from '@/shared/lib/use-access';
+
+/** The assignable permissions, from the API (ids differ between databases). */
+export function usePermissionCatalogQuery() {
+  const allowed = useCan('roles', 'read');
+  return useQuery({
+    queryKey: roleKeys.catalog,
+    queryFn: async (): Promise<PermissionCatalogEntry[]> => {
+      const response = await fetchPermissionCatalog();
+      return response.data.map((p) => ({ ...p, description: p.description ?? '' }));
+    },
+    enabled: allowed,
+  });
+}
 
 export function useRoleStatsQuery(serverId: string) {
   const allowed = useCan('stats', 'read');

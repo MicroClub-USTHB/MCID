@@ -257,6 +257,15 @@ export async function initialSeeder(db: NodePgDatabase<typeof schema>) {
     },
   ];
 
+  const eventPermissionKeys = [
+    'EVENTS.CREATE',
+    'EVENTS.RESPONSES.READ',
+    'EVENTS.EMAIL.SEND',
+    'EVENTS.REVIEW',
+    'EVENTS.CHECKIN',
+    'EVENTS.TEMPLATES.MANAGE',
+  ];
+
   const insertedPermissions = await db
     .insert(schema.permissions)
     .values(permissionsData)
@@ -293,6 +302,9 @@ export async function initialSeeder(db: NodePgDatabase<typeof schema>) {
   const MAIN_EXECUTIVE_ROLE_ID = discordId(200001);
   const MAIN_LEAD_ROLE_ID = discordId(200002);
   const MAIN_MEMBER_ROLE_ID = discordId(200003);
+  const MAIN_HR_ROLE_ID = discordId(200004);
+  const MAIN_REVIEWER_ROLE_ID = discordId(200005);
+  const MAIN_STAFF_ROLE_ID = discordId(200006);
   const COMPETITION_LEAD_ROLE_ID = discordId(200011);
   const COMPETITION_MEMBER_ROLE_ID = discordId(200012);
   const COMPETITION_ORGANIZER_ROLE_ID = discordId(200013);
@@ -403,10 +415,22 @@ export async function initialSeeder(db: NodePgDatabase<typeof schema>) {
   const buildPermissionsBits = (keys: string[]) =>
     keys.reduce((bits, key) => bits | (permissionBitsByKey.get(key) ?? 0n), 0n);
 
+  const executivePermissionKeys = ['ADMINISTRATOR', ...eventPermissionKeys];
+  const hrPermissionKeys = [
+    'EVENTS.CREATE',
+    'EVENTS.RESPONSES.READ',
+    'EVENTS.EMAIL.SEND',
+  ];
+  const reviewerPermissionKeys = ['EVENTS.REVIEW'];
+  const staffPermissionKeys = ['EVENTS.CHECKIN'];
+
   const rolePermissionKeysByRoleId = new Map<string, string[]>([
-    [MAIN_EXECUTIVE_ROLE_ID, ['ADMINISTRATOR']],
+    [MAIN_EXECUTIVE_ROLE_ID, executivePermissionKeys],
     [MAIN_LEAD_ROLE_ID, leadPermissionKeys],
     [MAIN_MEMBER_ROLE_ID, memberPermissionKeys],
+    [MAIN_HR_ROLE_ID, hrPermissionKeys],
+    [MAIN_REVIEWER_ROLE_ID, reviewerPermissionKeys],
+    [MAIN_STAFF_ROLE_ID, staffPermissionKeys],
     [COMPETITION_LEAD_ROLE_ID, leadPermissionKeys],
     [COMPETITION_MEMBER_ROLE_ID, memberPermissionKeys],
     [COMPETITION_ORGANIZER_ROLE_ID, organizerPermissionKeys],
@@ -456,6 +480,51 @@ export async function initialSeeder(db: NodePgDatabase<typeof schema>) {
         rolePermissionKeysByRoleId.get(MAIN_MEMBER_ROLE_ID) ?? [],
       ),
       hierarchyLevel: 5,
+      isGlobal: false,
+    },
+    {
+      id: MAIN_HR_ROLE_ID,
+      serverId: MAIN_SERVER_ID,
+      name: 'HR',
+      color: 0x9b59b6,
+      hoist: true,
+      position: 4,
+      managed: false,
+      mentionable: true,
+      permissionsBits: buildPermissionsBits(
+        rolePermissionKeysByRoleId.get(MAIN_HR_ROLE_ID) ?? [],
+      ),
+      hierarchyLevel: null,
+      isGlobal: false,
+    },
+    {
+      id: MAIN_REVIEWER_ROLE_ID,
+      serverId: MAIN_SERVER_ID,
+      name: 'Reviewer',
+      color: 0x1abc9c,
+      hoist: false,
+      position: 5,
+      managed: false,
+      mentionable: true,
+      permissionsBits: buildPermissionsBits(
+        rolePermissionKeysByRoleId.get(MAIN_REVIEWER_ROLE_ID) ?? [],
+      ),
+      hierarchyLevel: null,
+      isGlobal: false,
+    },
+    {
+      id: MAIN_STAFF_ROLE_ID,
+      serverId: MAIN_SERVER_ID,
+      name: 'Staff',
+      color: 0xe67e22,
+      hoist: false,
+      position: 6,
+      managed: false,
+      mentionable: true,
+      permissionsBits: buildPermissionsBits(
+        rolePermissionKeysByRoleId.get(MAIN_STAFF_ROLE_ID) ?? [],
+      ),
+      hierarchyLevel: null,
       isGlobal: false,
     },
     {
@@ -532,10 +601,10 @@ export async function initialSeeder(db: NodePgDatabase<typeof schema>) {
     .select()
     .from(schema.permissions)
     .where(
-      inArray(
-        schema.permissions.key,
-        permissionsData.map((p) => p.key),
-      ),
+      inArray(schema.permissions.key, [
+        ...permissionsData.map((p) => p.key),
+        ...eventPermissionKeys,
+      ]),
     );
 
   const permissionIdByKey = new Map(
@@ -611,11 +680,11 @@ export async function initialSeeder(db: NodePgDatabase<typeof schema>) {
     },
     {
       id: discordId(300005),
-      username: 'seed_member_05',
-      globalName: 'Seed Member 05',
-      displayName: 'Seed 05',
+      username: 'seed_hr',
+      globalName: 'Seed HR',
+      displayName: 'HR Seed',
       avatar: null,
-      email: 'seed05@example.com',
+      email: 'seed.hr@example.com',
       isClubMember: true,
       isSystemAdmin: false,
       joinedAt: new Date('2025-01-13T10:00:00.000Z'),
@@ -623,35 +692,35 @@ export async function initialSeeder(db: NodePgDatabase<typeof schema>) {
     },
     {
       id: discordId(300006),
-      username: 'seed_member_06',
-      globalName: 'Seed Member 06',
-      displayName: 'Seed 06',
+      username: 'seed_reviewer',
+      globalName: 'Seed Reviewer',
+      displayName: 'Reviewer Seed',
       avatar: null,
-      email: 'seed06@example.com',
-      isClubMember: false,
+      email: 'seed.reviewer@example.com',
+      isClubMember: true,
       isSystemAdmin: false,
       joinedAt: new Date('2025-01-14T10:00:00.000Z'),
       syncedAt: new Date('2026-01-14T10:00:00.000Z'),
     },
     {
       id: discordId(300007),
-      username: 'seed_member_07',
-      globalName: 'Seed Member 07',
-      displayName: 'Seed 07',
+      username: 'seed_staff',
+      globalName: 'Seed Staff',
+      displayName: 'Staff Seed',
       avatar: null,
-      email: 'seed07@example.com',
-      isClubMember: false,
+      email: 'seed.staff@example.com',
+      isClubMember: true,
       isSystemAdmin: false,
       joinedAt: new Date('2025-01-15T10:00:00.000Z'),
       syncedAt: new Date('2026-01-15T10:00:00.000Z'),
     },
     {
       id: discordId(300008),
-      username: 'seed_member_08',
-      globalName: 'Seed Member 08',
-      displayName: 'Seed 08',
+      username: 'seed_no_event_role',
+      globalName: 'Seed No Event Role',
+      displayName: 'No Event Role Seed',
       avatar: null,
-      email: 'seed08@example.com',
+      email: 'seed.noevent@example.com',
       isClubMember: true,
       isSystemAdmin: false,
       joinedAt: new Date('2025-01-16T10:00:00.000Z'),
@@ -757,6 +826,10 @@ export async function initialSeeder(db: NodePgDatabase<typeof schema>) {
     { memberId: discordId(300004), roleId: COMPETITION_ORGANIZER_ROLE_ID },
     { memberId: discordId(300002), roleId: COMPETITION_MEMBER_ROLE_ID },
     { memberId: discordId(300003), roleId: COMPETITION_MEMBER_ROLE_ID },
+    { memberId: discordId(300005), roleId: MAIN_HR_ROLE_ID },
+    { memberId: discordId(300006), roleId: MAIN_REVIEWER_ROLE_ID },
+    { memberId: discordId(300007), roleId: MAIN_STAFF_ROLE_ID },
+    { memberId: discordId(300008), roleId: MAIN_MEMBER_ROLE_ID },
   ];
 
   await db
@@ -1046,6 +1119,16 @@ export async function initialSeeder(db: NodePgDatabase<typeof schema>) {
   console.log(`  - Lead test member: ${discordId(300002)} (seed_lead) -> Lead`);
   console.log(
     `  - Member test member: ${discordId(300003)} (seed_member) -> Member`,
+  );
+  console.log(`  - HR test member: ${discordId(300005)} (seed_hr) -> HR`);
+  console.log(
+    `  - Reviewer test member: ${discordId(300006)} (seed_reviewer) -> Reviewer`,
+  );
+  console.log(
+    `  - Staff test member: ${discordId(300007)} (seed_staff) -> Staff`,
+  );
+  console.log(
+    `  - No event role member: ${discordId(300008)} (seed_no_event_role) -> Member`,
   );
   console.log('\nProjects:');
   console.log(

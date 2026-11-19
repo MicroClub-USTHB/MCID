@@ -1,0 +1,40 @@
+---
+title: 'mcid-cli dev'
+description: 'Test a project sign-in, tokens and permission checks end to end from the terminal before you write the integration.'
+---
+
+`mcid-cli dev` acts as a project, not as an admin. Use it to find out that a setup is
+wrong before you have written any code.
+
+## Where the project key comes from
+
+The commands read the key from `--api-key`, then the `MCID_API_KEY` environment
+variable, then `.env` in the current folder, and print which one they used.
+
+## Test the sign-in flow
+
+```bash
+mcid-cli dev sso --project portal --profile prod
+mcid-cli dev sso --project portal --silent
+```
+
+`dev sso` starts a listener on `127.0.0.1` (port 3100 by default), opens the authorize
+URL, catches the callback, exchanges the code and prints the member, session and roles
+with the time each step took. If `http://localhost:<port>/callback` is not a redirect URI
+of the project, it offers to add it, keeping the URIs already stored. `--silent` tests
+`prompt=none` and reports `login_required` when the browser has no MCID session.
+Session tokens are masked unless you pass `--reveal`.
+
+## Tokens and permission checks
+
+```bash
+mcid-cli dev token validate "$TOKEN"
+mcid-cli dev token refresh "$REFRESH_TOKEN" --token "$TOKEN"
+mcid-cli dev check @alice projects.read members.read --server "Micro Club"
+mcid-cli dev env --project portal --file .env
+```
+
+`token refresh` prints the new pair in full, because the old one stops working as soon
+as the call returns. `dev check` prints allowed or denied per permission.
+
+Source: `apps/cli/src/commands/dev.ts`.

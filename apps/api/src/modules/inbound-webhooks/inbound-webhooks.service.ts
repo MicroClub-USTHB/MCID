@@ -31,6 +31,7 @@ import {
   InboundWebhookRow,
   InboundWebhooksRepository,
   ListSubmissionsFilters,
+  SubmissionCursor,
 } from './inbound-webhooks.repository';
 import { isFlatSchema, validateSchema } from '@mcid/form-schema';
 import type { FormSchema, SchemaError } from '@mcid/form-schema';
@@ -221,6 +222,40 @@ export class InboundWebhooksService {
     return this.persist(dto.projectId, prepared);
   }
 
+  /**
+   * Create for the project that owns the API key. Same checks as the admin
+   * create plus a per-project cap, but an invalid schema is a 422 and only
+   * the id, slug and secret come back.
+   */
+  async createForProject(
+    projectId: string,
+    dto: Omit<CreateInboundWebhookDto, 'projectId'>,
+  ) {
+    const check = validateSchema(dto.schema);
+    if (!check.ok) {
+      throw new UnprocessableEntityException({
+        statusCode: 422,
+        error: 'InvalidSchema',
+        errors: check.errors,
+      });
+    }
+    const max = this.configService.get<number>(
+      'INBOUND_WEBHOOK_MAX_PER_PROJECT',
+      100,
+    );
+    // ponytail: count-then-insert, two concurrent creates can pass one over the cap; lock the project row if that matters
+    if ((await this.repository.countByProject(projectId)) >= max) {
+      throw new ConflictException({
+        statusCode: 409,
+        error: 'WebhookLimitReached',
+        message: `This project already has the maximum of ${max} inbound webhooks`,
+      });
+    }
+    const prepared = await this.prepare(dto, null, false, projectId, false);
+    const { webhook, signingSecret } = await this.persist(projectId, prepared);
+    return { id: webhook.id, slug: webhook.slug, secret: signingSecret };
+  }
+
   async findById(id: string): Promise<InboundWebhookRow> {
     const webhook = await this.repository.findById(id);
     if (!webhook) throw new NotFoundException('Inbound webhook not found');
@@ -233,10 +268,15 @@ export class InboundWebhooksService {
       : this.repository.listAll();
   }
 
+  listForProject(projectId: string, limit: number, offset: number) {
+    return this.repository.listByProjectPage(projectId, limit, offset);
+  }
+
   async update(
     id: string,
     dto: UpdateInboundWebhookDto,
     actor: string | null,
+    via?: { projectId: string },
   ): Promise<InboundWebhookRow> {
     await this.findById(id);
 
@@ -263,9 +303,48 @@ export class InboundWebhooksService {
       action: 'webhook.updated',
       entityId: id,
       actorId: actor,
-      details: { fields: Object.keys(patch) },
+      details: { fields: Object.keys(patch), ...via },
     });
     return updated;
+  }
+
+  /**
+   * Project-key update: name and schema only. A webhook of another project is
+   * a 404, and a schema that fails validation is a 422 (the admin route says 400).
+   */
+  async updateForProject(
+    projectId: string,
+    id: string,
+    dto: Pick<UpdateInboundWebhookDto, 'name' | 'schema'>,
+  ): Promise<InboundWebhookRow> {
+    await this.findOwned(projectId, id);
+    if (dto.schema !== undefined) {
+      const result = validateSchema(dto.schema);
+      if (!result.ok) {
+        throw new UnprocessableEntityException({
+          statusCode: 422,
+          error: 'InvalidSchema',
+          errors: result.errors,
+        });
+      }
+    }
+    return this.update(id, { name: dto.name, schema: dto.schema }, null, {
+      projectId,
+    });
+  }
+
+  async rotateSecretForProject(projectId: string, id: string): Promise<string> {
+    await this.findOwned(projectId, id);
+    return this.rotateSecret(id, null, { projectId });
+  }
+
+  private async findOwned(projectId: string, id: string) {
+    const webhook = await this.repository.findById(id);
+    // 404, never confirm that another project's webhook exists
+    if (!webhook || webhook.projectId !== projectId) {
+      throw new NotFoundException('Inbound webhook not found');
+    }
+    return webhook;
   }
 
   async getAllowedRoles(id: string) {
@@ -312,7 +391,11 @@ export class InboundWebhooksService {
     return roleIds;
   }
 
-  async rotateSecret(id: string, actor: string | null): Promise<string> {
+  async rotateSecret(
+    id: string,
+    actor: string | null,
+    via?: { projectId: string },
+  ): Promise<string> {
     await this.findById(id);
     const signingSecret = generateSigningSecret();
     await this.repository.updateSecret(
@@ -323,6 +406,7 @@ export class InboundWebhooksService {
       action: 'secret.rotated',
       entityId: id,
       actorId: actor,
+      details: via,
     });
     return signingSecret;
   }
@@ -496,6 +580,75 @@ export class InboundWebhooksService {
       total,
       limit: filters.limit,
       offset: filters.offset,
+    };
+  }
+
+  /** Project-key read: oldest first, keyset-paged, cursor opaque to the caller. */
+  async listSubmissionsForProject(
+    webhookId: string,
+    projectId: string,
+    f: { limit: number; cursor?: string; dateFrom?: Date; dateTo?: Date },
+  ) {
+    // 404 for another project's webhook, as ingest does
+    const webhook = await this.repository.findById(webhookId);
+    if (!webhook || webhook.projectId !== projectId) {
+      throw new NotFoundException('Inbound webhook not found');
+    }
+    const cursor = f.cursor ? decodeCursor(f.cursor) : undefined;
+    const found = await this.repository.listSubmissionsAfter(webhookId, {
+      ...f,
+      cursor,
+    });
+    const rows = found.slice(0, f.limit);
+    const last = rows[rows.length - 1];
+    const nextCursor =
+      found.length > f.limit && last
+        ? Buffer.from(
+            JSON.stringify({ r: last.cursorAt, i: last.id }),
+          ).toString('base64url')
+        : null;
+
+    await this.audit({
+      action: 'submissions.read',
+      entityId: webhookId,
+      details: { count: rows.length, projectId, viaApiKey: true },
+    });
+
+    return {
+      items: rows.map((r) => ({
+        id: r.id,
+        payload: r.payload,
+        receivedAt: r.receivedAt.toISOString(),
+        origin: r.origin,
+      })),
+      nextCursor,
+    };
+  }
+
+  /** Project-key read of one submission; another project's webhook or submission is a 404. */
+  async getSubmissionForProject(
+    webhookId: string,
+    submissionId: string,
+    projectId: string,
+  ) {
+    const webhook = await this.repository.findById(webhookId);
+    if (!webhook || webhook.projectId !== projectId) {
+      throw new NotFoundException('Inbound webhook not found');
+    }
+    const row = await this.repository.findSubmission(webhookId, submissionId);
+    if (!row) throw new NotFoundException('Submission not found');
+
+    await this.audit({
+      action: 'submissions.read',
+      entityId: webhookId,
+      details: { submissionId, projectId, viaApiKey: true },
+    });
+
+    return {
+      id: row.id,
+      payload: row.payload,
+      receivedAt: row.receivedAt.toISOString(),
+      origin: row.origin,
     };
   }
 
@@ -1207,4 +1360,26 @@ function collectFileIds(value: unknown, acc: string[] = []): string[] {
     for (const v of Object.values(record)) collectFileIds(v, acc);
   }
   return acc;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function decodeCursor(raw: string): SubmissionCursor {
+  try {
+    const c = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as {
+      r?: unknown;
+      i?: unknown;
+    };
+    if (
+      typeof c.r === 'string' &&
+      typeof c.i === 'string' &&
+      UUID.test(c.i) &&
+      !Number.isNaN(Date.parse(c.r))
+    ) {
+      return { r: c.r, i: c.i };
+    }
+  } catch {
+    // fall through
+  }
+  throw new BadRequestException('Invalid cursor');
 }

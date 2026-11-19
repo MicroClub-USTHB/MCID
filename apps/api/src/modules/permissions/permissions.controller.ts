@@ -34,7 +34,10 @@ import { UpsertInheritanceRuleDto } from './dto/upsert-inheritance-rule.dto';
 import { ListInheritanceRulesDto } from './dto/list-inheritance-rules.dto';
 import { AssignPermissionsDto } from './dto/assign-permissions.dto';
 import { ImpactPreviewDto } from './dto/impact-preview.dto';
-import { RolePermissionsResponseDto } from './dto/role-permissions-response.dto';
+import {
+  PermissionItemDto,
+  RolePermissionsResponseDto,
+} from './dto/role-permissions-response.dto';
 import { ImpactPreviewResponseDto } from './dto/impact-preview-response.dto';
 import { PermissionsService } from './permissions.service';
 import { AdminAccessGuard } from '../../common/guards/admin-access.guard';
@@ -206,6 +209,25 @@ export class PermissionsController {
   }
 
   // ─── Role-Permission Management API ────────────────────────────────
+
+  @Get('catalog')
+  @RequirePermission('roles', 'read')
+  @UseGuards(AdminAccessGuard)
+  @ApiBearerAuth('session-token')
+  @ApiOperation({
+    summary: 'List the permission catalog',
+    description:
+      'Returns every permission an admin can assign to a role: the Discord permissions and the ones MCID adds, such as EVENTS.*.',
+  })
+  @ApiOkResponse({
+    description: 'Permission catalog returned.',
+    type: [PermissionItemDto],
+  })
+  @ApiUnauthorizedResponse({ description: 'Authentication required.' })
+  @ApiForbiddenResponse({ description: 'roles:read access required.' })
+  listCatalog(): Promise<PermissionItemDto[]> {
+    return this.permissionsService.listCatalog();
+  }
 
   @Get('admin/servers/:serverId/roles/:roleId/permissions')
   @RequirePermission('roles', 'read')

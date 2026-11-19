@@ -14,6 +14,12 @@ function makeGuild(overrides: Record<string, unknown> = {}) {
     },
     members: { fetch: jest.fn() },
     roles: { fetch: jest.fn() },
+    scheduledEvents: {
+      fetch: jest.fn(),
+      create: jest.fn(),
+      edit: jest.fn(),
+      delete: jest.fn(),
+    },
     ...overrides,
   };
 }
@@ -295,6 +301,18 @@ describe('DiscordService', () => {
     it('returns null when guild not found', async () => {
       mockClient.guilds.fetch.mockRejectedValue(new Error('Not found'));
       expect(await service.createChannel('bad', 'general')).toBeNull();
+    });
+
+    it('propagates error when channels.create throws', async () => {
+      const guild = makeGuild({
+        channels: {
+          create: jest.fn().mockRejectedValue(new Error('Discord error')),
+        },
+      });
+      mockClient.guilds.fetch.mockResolvedValue(guild);
+      await expect(service.createChannel('g-1', 'general')).rejects.toThrow(
+        'Discord error',
+      );
     });
   });
 
@@ -643,6 +661,186 @@ describe('DiscordService', () => {
         ),
       );
       expect(await service.deleteWebhook('wh-1')).toBe(false);
+    });
+  });
+
+  // ── Scheduled Events ──────────────────────────────────────────────────
+
+  describe('createScheduledEvent', () => {
+    it('returns null if guild is not found', async () => {
+      mockClient.guilds.fetch.mockRejectedValue(new Error('Unknown Guild'));
+      const result = await service.createScheduledEvent('g-bad', {
+        name: 'Event',
+        scheduledStartTime: new Date(),
+        location: 'USTHB',
+      });
+      expect(result).toBeNull();
+    });
+
+    it('creates an external scheduled event with entityMetadata', async () => {
+      const guild = makeGuild();
+      const mockEvent = { id: 'evt-1', name: 'Hackathon' };
+      guild.scheduledEvents.create.mockResolvedValue(mockEvent);
+      mockClient.guilds.fetch.mockResolvedValue(guild);
+
+      const start = new Date('2026-12-05T09:00:00Z');
+      const end = new Date('2026-12-06T09:00:00Z');
+      const result = await service.createScheduledEvent('g-1', {
+        name: 'Hackathon',
+        scheduledStartTime: start,
+        scheduledEndTime: end,
+        location: 'USTHB',
+        description: 'Annual Hackathon',
+      });
+
+      expect(result).toBe(mockEvent);
+      expect(guild.scheduledEvents.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Hackathon',
+          entityType: Discord.GuildScheduledEventEntityType.External,
+          entityMetadata: { location: 'USTHB' },
+          scheduledStartTime: start,
+          scheduledEndTime: end,
+          description: 'Annual Hackathon',
+        }),
+      );
+    });
+
+    it('creates a voice scheduled event when channelId is passed', async () => {
+      const guild = makeGuild();
+      const mockEvent = { id: 'evt-2', name: 'Talk' };
+      guild.scheduledEvents.create.mockResolvedValue(mockEvent);
+      mockClient.guilds.fetch.mockResolvedValue(guild);
+
+      const start = new Date('2026-12-05T09:00:00Z');
+      const result = await service.createScheduledEvent('g-1', {
+        name: 'Talk',
+        scheduledStartTime: start,
+        channelId: 'ch-voice-1',
+      });
+
+      expect(result).toBe(mockEvent);
+      expect(guild.scheduledEvents.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Talk',
+          entityType: Discord.GuildScheduledEventEntityType.Voice,
+          channel: 'ch-voice-1',
+        }),
+      );
+    });
+  });
+
+  describe('getScheduledEvent', () => {
+    it('returns null if guild is not found', async () => {
+      mockClient.guilds.fetch.mockRejectedValue(new Error('Unknown Guild'));
+      expect(await service.getScheduledEvent('g-bad', 'evt-1')).toBeNull();
+    });
+
+    it('returns the scheduled event when found', async () => {
+      const guild = makeGuild();
+      const mockEvent = { id: 'evt-1', name: 'Hackathon' };
+      guild.scheduledEvents.fetch.mockResolvedValue(mockEvent);
+      mockClient.guilds.fetch.mockResolvedValue(guild);
+
+      expect(await service.getScheduledEvent('g-1', 'evt-1')).toBe(mockEvent);
+    });
+
+    it('returns null on UnknownGuildScheduledEvent error', async () => {
+      const guild = makeGuild();
+      guild.scheduledEvents.fetch.mockRejectedValue(
+        new DiscordAPIError(
+          { code: 10070, message: 'Unknown Guild Scheduled Event' },
+          10070,
+          404,
+          'GET',
+          'https://discord.com/api/v10/guilds/g-1/scheduled-events/evt-1',
+          { files: undefined, body: undefined },
+        ),
+      );
+      mockClient.guilds.fetch.mockResolvedValue(guild);
+
+      expect(await service.getScheduledEvent('g-1', 'evt-1')).toBeNull();
+    });
+  });
+
+  describe('editScheduledEvent', () => {
+    it('returns null if guild is not found', async () => {
+      mockClient.guilds.fetch.mockRejectedValue(new Error('Unknown Guild'));
+      const result = await service.editScheduledEvent('g-bad', 'evt-1', {
+        name: 'New Name',
+      });
+      expect(result).toBeNull();
+    });
+
+    it('edits the scheduled event on discord', async () => {
+      const guild = makeGuild();
+      const mockEvent = { id: 'evt-1', name: 'New Name' };
+      guild.scheduledEvents.edit.mockResolvedValue(mockEvent);
+      mockClient.guilds.fetch.mockResolvedValue(guild);
+
+      const result = await service.editScheduledEvent('g-1', 'evt-1', {
+        name: 'New Name',
+        description: 'New Desc',
+        location: 'Online',
+      });
+
+      expect(result).toBe(mockEvent);
+      expect(guild.scheduledEvents.edit).toHaveBeenCalledWith('evt-1', {
+        name: 'New Name',
+        description: 'New Desc',
+        channel: null,
+        entityMetadata: { location: 'Online' },
+        entityType: Discord.GuildScheduledEventEntityType.External,
+      });
+    });
+
+    it('moves the event to a stage channel with the given entity type', async () => {
+      const guild = makeGuild();
+      guild.scheduledEvents.edit.mockResolvedValue({ id: 'evt-1' });
+      mockClient.guilds.fetch.mockResolvedValue(guild);
+
+      await service.editScheduledEvent('g-1', 'evt-1', {
+        channelId: 'ch-1',
+        entityType: Discord.GuildScheduledEventEntityType.StageInstance,
+      });
+
+      expect(guild.scheduledEvents.edit).toHaveBeenCalledWith('evt-1', {
+        channel: 'ch-1',
+        entityType: Discord.GuildScheduledEventEntityType.StageInstance,
+      });
+    });
+  });
+
+  describe('deleteScheduledEvent', () => {
+    it('returns false if guild is not found', async () => {
+      mockClient.guilds.fetch.mockRejectedValue(new Error('Unknown Guild'));
+      expect(await service.deleteScheduledEvent('g-bad', 'evt-1')).toBe(false);
+    });
+
+    it('returns true on successful delete', async () => {
+      const guild = makeGuild();
+      guild.scheduledEvents.delete.mockResolvedValue(undefined);
+      mockClient.guilds.fetch.mockResolvedValue(guild);
+
+      expect(await service.deleteScheduledEvent('g-1', 'evt-1')).toBe(true);
+      expect(guild.scheduledEvents.delete).toHaveBeenCalledWith('evt-1');
+    });
+
+    it('treats UnknownGuildScheduledEvent (10070) as already deleted', async () => {
+      const guild = makeGuild();
+      guild.scheduledEvents.delete.mockRejectedValue(
+        new DiscordAPIError(
+          { code: 10070, message: 'Unknown Guild Scheduled Event' },
+          10070,
+          404,
+          'DELETE',
+          'https://discord.com/api/v10/guilds/g-1/scheduled-events/evt-1',
+          { files: undefined, body: undefined },
+        ),
+      );
+      mockClient.guilds.fetch.mockResolvedValue(guild);
+
+      expect(await service.deleteScheduledEvent('g-1', 'evt-1')).toBe(true);
     });
   });
 

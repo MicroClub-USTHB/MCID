@@ -9,7 +9,7 @@ These endpoints are for the backends and browsers of Micro Club projects. A back
 
 The endpoints the admin dashboard uses are in the [Admin API](/docs/api-reference/admin/overview).
 
-34 endpoints in 7 groups.
+49 endpoints in 10 groups.
 
 ## Authentication
 
@@ -38,8 +38,11 @@ The endpoints the admin dashboard uses are in the [Admin API](/docs/api-referenc
 
 | Method | Path | Summary |
 | --- | --- | --- |
+| `POST` | `/api/servers/{serverId}/categories` | [Create a Discord category channel](/docs/api-reference/project/channels#create-a-discord-category-channel) |
 | `GET` | `/api/servers/{serverId}/channels` | [List all channels in a server](/docs/api-reference/project/channels#list-all-channels-in-a-server) |
+| `POST` | `/api/servers/{serverId}/channels` | [Create a Discord channel](/docs/api-reference/project/channels#create-a-discord-channel) |
 | `GET` | `/api/servers/{serverId}/channels/{channelId}` | [Get channel details](/docs/api-reference/project/channels#get-channel-details) |
+| `POST` | `/api/servers/{serverId}/channels/{channelId}/invites` | [Create a channel invite](/docs/api-reference/project/channels#create-a-channel-invite) |
 | `GET` | `/api/servers/{serverId}/channels/{channelId}/messages` | [Get recent messages from a channel](/docs/api-reference/project/channels#get-recent-messages-from-a-channel) |
 | `POST` | `/api/servers/{serverId}/channels/{channelId}/messages` | [Send a message to a Discord channel](/docs/api-reference/project/channels#send-a-message-to-a-discord-channel) |
 
@@ -52,6 +55,17 @@ The endpoints the admin dashboard uses are in the [Admin API](/docs/api-referenc
 | `PATCH` | `/api/inbound-webhooks/{id}/drafts/{draftId}/{stepKey}` | [Save one step of a draft](/docs/api-reference/project/inbound-webhooks-ingest#save-one-step-of-a-draft) |
 | `POST` | `/api/inbound-webhooks/{id}/files` | [Upload a file](/docs/api-reference/project/inbound-webhooks-ingest#upload-a-file) |
 | `POST` | `/api/inbound-webhooks/{id}/submit` | [Submit a payload](/docs/api-reference/project/inbound-webhooks-ingest#submit-a-payload) |
+
+## Inbound Webhooks (Project)
+
+| Method | Path | Summary |
+| --- | --- | --- |
+| `GET` | `/api/project/inbound-webhooks` | [List the project's own inbound webhooks](/docs/api-reference/project/inbound-webhooks-project#list-the-projects-own-inbound-webhooks) |
+| `POST` | `/api/project/inbound-webhooks` | [Create an inbound webhook for the project](/docs/api-reference/project/inbound-webhooks-project#create-an-inbound-webhook-for-the-project) |
+| `PATCH` | `/api/project/inbound-webhooks/{id}` | [Update a webhook's name or schema](/docs/api-reference/project/inbound-webhooks-project#update-a-webhooks-name-or-schema) |
+| `POST` | `/api/project/inbound-webhooks/{id}/rotate-secret` | [Rotate the signing secret](/docs/api-reference/project/inbound-webhooks-project#rotate-the-signing-secret) |
+| `GET` | `/api/project/inbound-webhooks/{id}/submissions` | [List a webhook's submissions after a cursor](/docs/api-reference/project/inbound-webhooks-project#list-a-webhooks-submissions-after-a-cursor) |
+| `GET` | `/api/project/inbound-webhooks/{id}/submissions/{submissionId}` | [Get one of a webhook's submissions](/docs/api-reference/project/inbound-webhooks-project#get-one-of-a-webhooks-submissions) |
 
 ## Members
 
@@ -68,6 +82,22 @@ The endpoints the admin dashboard uses are in the [Admin API](/docs/api-referenc
 | `POST` | `/api/permissions/check` | [Check a single permission](/docs/api-reference/project/permissions#check-a-single-permission) |
 | `POST` | `/api/permissions/check-batch` | [Check multiple permissions (batch)](/docs/api-reference/project/permissions#check-multiple-permissions-batch) |
 | `GET` | `/api/permissions/{serverId}/{discordId}` | [Get full resolved permissions for a member](/docs/api-reference/project/permissions#get-full-resolved-permissions-for-a-member) |
+
+## Roles
+
+| Method | Path | Summary |
+| --- | --- | --- |
+| `PUT` | `/api/servers/{serverId}/members/{discordId}/roles/{roleId}` | [Grant a project-created role to a member](/docs/api-reference/project/roles#grant-a-project-created-role-to-a-member) |
+| `DELETE` | `/api/servers/{serverId}/members/{discordId}/roles/{roleId}` | [Remove a project-created role from a member](/docs/api-reference/project/roles#remove-a-project-created-role-from-a-member) |
+| `POST` | `/api/servers/{serverId}/roles` | [Create a Discord role for an event or project](/docs/api-reference/project/roles#create-a-discord-role-for-an-event-or-project) |
+
+## Scheduled Events
+
+| Method | Path | Summary |
+| --- | --- | --- |
+| `POST` | `/api/servers/{serverId}/scheduled-events` | [Create a Discord scheduled event](/docs/api-reference/project/scheduled-events#create-a-discord-scheduled-event) |
+| `PATCH` | `/api/servers/{serverId}/scheduled-events/{eventId}` | [Update a Discord scheduled event](/docs/api-reference/project/scheduled-events#update-a-discord-scheduled-event) |
+| `DELETE` | `/api/servers/{serverId}/scheduled-events/{eventId}` | [Delete a Discord scheduled event](/docs/api-reference/project/scheduled-events#delete-a-discord-scheduled-event) |
 
 ## Webhooks
 

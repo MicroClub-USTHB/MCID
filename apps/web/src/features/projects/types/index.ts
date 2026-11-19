@@ -2,7 +2,15 @@
  * Scopes a project can hold on a server. Mirrors the backend's `ProjectScope`
  * enum; the OAuth `scope` param is built from these.
  */
-export const PROJECT_SCOPES = ['read_members', 'check_permissions'] as const;
+export const PROJECT_SCOPES = [
+  'read_members',
+  'check_permissions',
+  'read_inbound_submissions',
+  'manage_inbound_webhooks',
+  'manage_roles',
+  'manage_channels',
+  'manage_events',
+] as const;
 export type ProjectScope = (typeof PROJECT_SCOPES)[number];
 
 /** Operations a project may perform on a granted server. */
