@@ -229,7 +229,7 @@ export class MemberRepository {
           displayName: data.displayName,
           avatar: data.avatar,
           email: data.email,
-          isClubMember: data.isClubMember,
+          // isClubMember is derived from the main server membership (refreshClubMembership).
           syncedAt: data.syncedAt,
           updatedAt: new Date(),
         },
@@ -253,7 +253,40 @@ export class MemberRepository {
         },
       })
       .returning();
+    await this.refreshClubMembership(this.db, [data.memberId]);
     return row;
+  }
+
+  /**
+   * A club member is a member active in the main server: recomputes the flag
+   * for these members from their main server membership.
+   */
+  private async refreshClubMembership(
+    db: Pick<NodePgDatabase<typeof schema>, 'update' | 'select'>,
+    memberIds: string[],
+  ): Promise<void> {
+    if (memberIds.length === 0) return;
+    await db
+      .update(members)
+      .set({
+        isClubMember: exists(
+          db
+            .select({ one: sql`1` })
+            .from(serverMembers)
+            .innerJoin(
+              schema.servers,
+              eq(schema.servers.id, serverMembers.serverId),
+            )
+            .where(
+              and(
+                eq(serverMembers.memberId, members.id),
+                eq(serverMembers.isActive, true),
+                eq(schema.servers.isMain, true),
+              ),
+            ),
+        ),
+      })
+      .where(inArray(members.id, memberIds));
   }
 
   /** Returns the role ids the member held in this server before the swap. */
@@ -383,6 +416,10 @@ export class MemberRepository {
 
       // Covers members deactivated before this fix as well as this run.
       await this.deleteRolesOfInactiveMembers(tx, serverId);
+      await this.refreshClubMembership(
+        tx,
+        deactivated.map((d) => d.memberId),
+      );
 
       return deactivated.length;
     });
