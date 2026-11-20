@@ -10,6 +10,8 @@ import {
   updateConfig,
 } from './config.js';
 import { CliError, ExitCode } from './errors.js';
+import { type ListOutputFlags, pageRows, type ListPaging } from './lib/help.js';
+import { listOutputFormat, toCsv } from './lib/output.js';
 import { formatTable } from './webhook-flow.js';
 
 export interface ProfileDeps {
@@ -55,7 +57,10 @@ function secretCount(profile: Profile): number {
 }
 
 /** Offline (PRD §5.2): reads the config file only, no network call. */
-export async function profileList(deps: ProfileDeps): Promise<void> {
+export async function profileList(
+  deps: ProfileDeps,
+  options: ListPaging & ListOutputFlags = {},
+): Promise<void> {
   const config = await loadConfig(deps.configPath);
   const names = Object.keys(config.profiles);
   if (names.length === 0) {
@@ -65,16 +70,47 @@ export async function profileList(deps: ProfileDeps): Promise<void> {
     return;
   }
   const now = (deps.now ?? (() => new Date()))();
-  const rows = names.map((name) => {
+  const page = pageRows(names, options);
+  const format = listOutputFormat(options);
+  const records = page.map((name) => {
     const profile = config.profiles[name]!;
-    return [
-      name === config.activeProfile ? '*' : '',
+    return {
       name,
-      profile.baseUrl,
-      describeSession(profile, now),
-      String(secretCount(profile)),
-    ];
+      active: name === config.activeProfile,
+      baseUrl: profile.baseUrl,
+      session: describeSession(profile, now),
+      secrets: String(secretCount(profile)),
+    };
   });
+
+  if (format === 'json') {
+    deps.out(JSON.stringify(records, null, 2));
+    return;
+  }
+  if (format === 'quiet') {
+    for (const record of records) deps.out(record.name);
+    return;
+  }
+  if (format === 'csv') {
+    deps.out(
+      toCsv(records as unknown as Record<string, unknown>[], [
+        'name',
+        'active',
+        'baseUrl',
+        'session',
+        'secrets',
+      ]),
+    );
+    return;
+  }
+
+  const rows = records.map((record) => [
+    record.active ? '*' : '',
+    record.name,
+    record.baseUrl,
+    record.session,
+    record.secrets,
+  ]);
   for (const line of formatTable(['', 'NAME', 'BASE URL', 'SESSION', 'SECRETS'], rows))
     deps.out(line);
 }

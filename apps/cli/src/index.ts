@@ -23,6 +23,7 @@ import { registerOpsCommand } from './commands/ops.js';
 import { registerDevCommand } from './commands/dev.js';
 import { addExamples } from './lib/help.js';
 import { addCommandExamples } from './lib/examples.js';
+import { enablePromptableArgs } from './lib/promptable.js';
 
 // When stdout is closed early (e.g. `mcid-cli webhook list | head`), stop quietly
 // instead of crashing with an unhandled EPIPE stack trace.
@@ -116,6 +117,7 @@ for (const command of program.commands) {
   if (examples) addExamples(command, examples);
 }
 addCommandExamples(program);
+enablePromptableArgs(program);
 
 const GETTING_STARTED = `mcid-cli ${version}: the MCID command-line client
 

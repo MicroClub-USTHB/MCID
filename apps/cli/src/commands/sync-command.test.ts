@@ -103,6 +103,25 @@ describe('sync run', () => {
     expect(result.stdout).toMatch(/Synced .* 1204 members \(\+2, -1\), 58 roles/);
   });
 
+  it('prints only the raw final status for --wait --json', async () => {
+    const rawStatus = {
+      serverId: MAIN_SERVER_ID,
+      status: 'success',
+      membersSynced: 2,
+      rolesSynced: 1,
+      extra: 'raw-field',
+    };
+    const result = await runCli(['sync', 'run', '--wait', '--json'], {
+      routes: baseRoutes({
+        'POST /admin/sync/full': () => json({ syncLogId: '4242' }),
+        'GET /admin/sync/status': () => json(rawStatus),
+      }),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual(rawStatus);
+    expect(result.requests.some((r) => r.path.includes('/changes'))).toBe(false);
+  });
+
   it('exits non-zero when the sync itself fails under --wait', async () => {
     const result = await runCli(['sync', 'run', '--wait'], {
       routes: baseRoutes({
@@ -127,5 +146,67 @@ describe('sync run', () => {
 
     expect(result.exitCode).toBe(6);
     expect(result.stderr).toContain('Sync timed out');
+  });
+});
+
+describe('sync logs pagination', () => {
+  it('returns only the requested raw JSON page and retains API fields', async () => {
+    const rows = [
+      { id: '1', status: 'success', extra: 'one' },
+      { id: '2', status: 'success', extra: 'two' },
+      { id: '3', status: 'failed', extra: 'three' },
+    ];
+    const result = await runCli(['sync', 'logs', '--json', '--limit', '1', '--page', '2'], {
+      routes: baseRoutes({
+        'GET /admin/sync/logs': (url) => {
+          const offset = Number(url.searchParams.get('offset') ?? 0);
+          const limit = Number(url.searchParams.get('limit') ?? 20);
+          return json({ logs: rows.slice(offset, offset + limit), total: rows.length });
+        },
+      }),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual([rows[1]]);
+  });
+});
+
+describe('sync logs server pagination', () => {
+  const rows = Array.from({ length: 125 }, (_, i) => ({ id: String(i + 1), status: 'success' }));
+  const route = (url: URL) => {
+    const limit = Number(url.searchParams.get('limit') ?? 20);
+    const offset = Number(url.searchParams.get('offset') ?? 0);
+    return json({ logs: rows.slice(offset, offset + limit), total: rows.length });
+  };
+
+  it('fetches the requested page from the API', async () => {
+    const result = await runCli(['sync', 'logs', '--json', '--limit', '30', '--page', '2'], {
+      routes: baseRoutes({ 'GET /admin/sync/logs': route }),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual(rows.slice(30, 60));
+  });
+
+  it('fetches every API page with --all', async () => {
+    const result = await runCli(['sync', 'logs', '--json', '--all'], {
+      routes: baseRoutes({ 'GET /admin/sync/logs': route }),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual(rows);
+    expect(result.requests.filter((request) => request.path === '/admin/sync/logs')).toHaveLength(
+      2,
+    );
+  });
+});
+
+describe('sync logs output formats', () => {
+  it('outputs the selected page as CSV', async () => {
+    const result = await runCli(['sync', 'logs', '--limit', '1', '-o', 'csv'], {
+      routes: baseRoutes({
+        'GET /admin/sync/logs': () => json({ logs: [{ id: '1', status: 'success' }], total: 1 }),
+      }),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('id,status');
+    expect(result.stdout).toContain('1,success');
   });
 });

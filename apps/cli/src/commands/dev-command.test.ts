@@ -21,9 +21,41 @@ describe('dev token refresh', () => {
     'POST /auth/token/refresh': () => json(refreshResponse),
   });
 
+  it.each([['token', 'refresh'], ['token-refresh']])(
+    'requires --reveal before refreshing via %s',
+    async (...command) => {
+      const result = await runCli(
+        ['dev', ...command, 'old-refresh-token', '--token', 'old-access', '--json'],
+        { routes },
+      );
+      expect(result.exitCode).toBe(64);
+      expect(result.stderr).toContain('--reveal');
+      expect(result.requests.some((r) => r.path === '/auth/token/refresh')).toBe(false);
+      expect(result.stdout).not.toContain('new-access-token');
+    },
+  );
+
+  it('outputs the rotated token pair as JSON only after explicit consent', async () => {
+    const result = await runCli(
+      [
+        'dev',
+        'token',
+        'refresh',
+        'old-refresh-token',
+        '--token',
+        'old-access',
+        '--json',
+        '--reveal',
+      ],
+      { routes },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual(refreshResponse);
+  });
+
   it('prints the new token pair unmasked (the old pair is already dead)', async () => {
     const result = await runCli(
-      ['dev', 'token', 'refresh', 'old-refresh-token', '--token', 'old-access'],
+      ['dev', 'token', 'refresh', 'old-refresh-token', '--token', 'old-access', '--reveal'],
       { routes },
     );
 
@@ -35,7 +67,7 @@ describe('dev token refresh', () => {
 
   it('runs as the nested two-token form: dev token refresh', async () => {
     const result = await runCli(
-      ['dev', 'token', 'refresh', 'old-refresh-token', '--token', 'old-access'],
+      ['dev', 'token', 'refresh', 'old-refresh-token', '--token', 'old-access', '--reveal'],
       { routes },
     );
 

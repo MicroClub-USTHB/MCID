@@ -1,29 +1,77 @@
 /* eslint-disable no-control-regex */
-import { access, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { lstat, open, writeFile } from 'node:fs/promises';
 import { CliError, ExitCode } from '../errors.js';
 import { colors } from './tui.js';
 
-/**
- * Writes an exported report owner-only (0600) and refuses to clobber an
- * existing file unless --force was passed.
- */
+/** Create reports privately; forced overwrites require a private regular file. */
 export async function writeExportFile(path: string, content: string, force = false): Promise<void> {
-  if (!force) {
-    try {
-      await access(path);
+  try {
+    // Exclusive creation prevents clobbering a path that appears concurrently.
+    await writeFile(path, content, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    return;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    if (!force) {
       throw new CliError(
         `"${path}" already exists; pass --force to overwrite it`,
         ExitCode.Rejected,
       );
-    } catch (error) {
-      if (error instanceof CliError) throw error;
-      // ENOENT: the file does not exist yet, so writing is safe.
     }
   }
-  await writeFile(path, content, { encoding: 'utf8', mode: 0o600 });
+
+  const before = await lstat(path);
+  if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1) {
+    throw new CliError(
+      'Export destination must be a regular file without hard links',
+      ExitCode.Rejected,
+    );
+  }
+  const handle = await open(path, constants.O_WRONLY | (constants.O_NOFOLLOW ?? 0));
+  try {
+    const current = await handle.stat();
+    if (
+      !current.isFile() ||
+      current.nlink !== 1 ||
+      current.ino !== before.ino ||
+      current.dev !== before.dev ||
+      (process.platform !== 'win32' && (current.mode & 0o777) !== 0o600)
+    ) {
+      throw new CliError(
+        'Export destination changed or is not private (mode 0600)',
+        ExitCode.Rejected,
+      );
+    }
+    await handle.truncate(0);
+    await handle.writeFile(content, 'utf8');
+  } finally {
+    await handle.close();
+  }
 }
 
 export type OutputFormat = 'table' | 'json' | 'csv' | 'quiet';
+
+/** Validate a list format before performing network requests. */
+export function listOutputFormat(options: {
+  output?: string | undefined;
+  json?: boolean | undefined;
+  quiet?: boolean | undefined;
+}): OutputFormat {
+  if (options.output && !['table', 'json', 'csv'].includes(options.output)) {
+    throw new CliError('--output must be table, json, or csv', ExitCode.Usage);
+  }
+  if (options.quiet && (options.json || (options.output && options.output !== 'table'))) {
+    throw new CliError('--quiet cannot be combined with JSON or CSV output', ExitCode.Usage);
+  }
+  if (options.json && options.output && options.output !== 'table' && options.output !== 'json') {
+    throw new CliError('--json cannot be combined with CSV output', ExitCode.Usage);
+  }
+  return options.quiet
+    ? 'quiet'
+    : options.json
+      ? 'json'
+      : ((options.output as OutputFormat | undefined) ?? 'table');
+}
 
 export interface Column<T = Record<string, unknown>> {
   header: string;
@@ -193,16 +241,20 @@ function maskSecrets(obj: unknown): void {
   }
   const rec = obj as Record<string, unknown>;
   for (const [k, v] of Object.entries(rec)) {
+    // Only credential-shaped names are secret. A bare `key` is a public
+    // identifier in the access catalog and permission DTOs, so it stays.
+    const name = k.toLowerCase().replace(/[_-]/g, '');
     if (
-      k.toLowerCase().includes('secret') ||
-      k.toLowerCase().includes('token') ||
-      k.toLowerCase() === 'key' ||
-      k.toLowerCase() === 'apikey' ||
-      k.toLowerCase() === 'api_key'
+      name === 'apikey' ||
+      name === 'accesstoken' ||
+      name === 'refreshtoken' ||
+      name === 'sessiontoken' ||
+      name === 'secret' ||
+      name === 'password' ||
+      name.endsWith('secret') ||
+      name.endsWith('token')
     ) {
-      if (typeof v === 'string' && v.length > 8) {
-        rec[k] = `${v.slice(0, 4)}...[REDACTED]`;
-      }
+      if (v !== null && v !== undefined) rec[k] = '[REDACTED]';
     } else if (typeof v === 'object' && v !== null) {
       maskSecrets(v);
     }

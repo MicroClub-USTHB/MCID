@@ -40,9 +40,15 @@ mcid-cli sync logs --limit 10
 mcid-cli sync changes 4242 --type removed -o csv
 ```
 
+`sync logs --json` returns an array of raw API log records for the selected page. Use
+`--limit` and `--page` to select a page, or `--all` to return every log. Use `-o csv`
+for a CSV of log fields. Scripts that previously consumed an API response wrapper
+should read the array instead.
+
 Without `--wait`, `sync run` prints the sync log id and the `sync changes` command that
 follows it. With `--wait` it polls until the sync ends and prints a summary such as
-`Synced Micro Club in 42s: 1204 members (+12, -3), 58 roles`.
+`Synced Micro Club in 42s: 1204 members (+12, -3), 58 roles`. With `--wait --json`,
+stdout contains only the final raw status response; progress and the human summary are omitted.
 
 | Exit code | Meaning                                     |
 | --------- | ------------------------------------------- |

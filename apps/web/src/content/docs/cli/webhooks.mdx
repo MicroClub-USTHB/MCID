@@ -14,6 +14,7 @@ mcid-cli webhook create ./schema.json \
   --name "Contact form" --roles 123456789012345678 \
   --accept-origin https://portal.example.com --profile prod
 mcid-cli webhook list --profile prod
+mcid-cli webhook list --profile prod -o csv --all
 mcid-cli webhook get contact-form --profile prod
 mcid-cli webhook roles set contact-form --roles 987654321098765432 --profile prod
 mcid-cli webhook rotate-secret contact-form --profile prod
@@ -32,10 +33,16 @@ mcid-cli webhook submission contact-form <submission-id> --profile prod
 mcid-cli webhook docs contact-form --profile prod
 ```
 
+The submissions list supports `--limit`, `--page`, `--all`, `--quiet`, and CSV or JSON
+output. JSON now returns raw API submission records in an array instead of flattened
+records; scripts using the previous JSON shape need to read fields from `data`.
+
 `submissions export` is a real nested command, so `webhook submissions export X`
-exports webhook X instead of looking for a webhook named "export". Exports are written
-with owner-only file permissions and refuse to overwrite an existing `--file` without
-`--force`.
+exports webhook X instead of looking for a webhook named "export". The export fails
+rather than silently truncating when the 20,000-row safety limit is exceeded. It refuses
+to overwrite a file without `--force`. A forced destination must be a regular file
+without other hard links and, on POSIX, already have mode `0600`; symlinks are rejected.
+Windows file ACLs are not checked.
 
 ## Test your webhook from the terminal
 
