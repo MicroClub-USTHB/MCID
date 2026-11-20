@@ -16,6 +16,23 @@ export interface ListPaging {
   all?: boolean | undefined;
 }
 
+export interface ListOutputFlags {
+  json?: boolean | undefined;
+  quiet?: boolean | undefined;
+  output?: string | undefined;
+}
+
+/** Full set of list flags (#228), without duplicating options a command already has. */
+export function addFullListOptions(command: Command): Command {
+  addListPaging(command);
+  const has = (flag: string) => command.options.some((o) => o.long === flag || o.short === flag);
+  if (!has('-q')) command.option('-q, --quiet', 'Only print IDs');
+  if (!has('-o'))
+    command.option('-o, --output <format>', 'Output format (table|json|csv)', 'table');
+  if (!has('--json')) command.option('--json', 'Output as raw JSON');
+  return command;
+}
+
 /** Adds the shared `--limit`, `--page` and `--all` options to a list command (#228). */
 export function addListPaging(command: Command): Command {
   return command

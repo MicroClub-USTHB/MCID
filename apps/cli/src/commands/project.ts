@@ -25,7 +25,13 @@ import {
   printTable,
   toCsv,
 } from '../lib/output.js';
-import { addListPaging, pageRows, type ListPaging } from '../lib/help.js';
+import {
+  addFullListOptions,
+  addListPaging,
+  type ListOutputFlags,
+  pageRows,
+  type ListPaging,
+} from '../lib/help.js';
 import { promptConfirm, promptInput } from '../lib/prompts.js';
 import { resolveProject, resolveServer } from '../lib/resolver.js';
 import {
@@ -518,34 +524,50 @@ export function registerProjectCommand(program: Command): void {
     .command('redirect-uri')
     .description('Manage allowed OAuth redirect URIs');
 
-  redirectUriCmd
-    .command('list <project>')
-    .description('List allowed redirect URIs for a project')
+  addFullListOptions(
+    redirectUriCmd
+      .command('list <project>')
+      .description('List allowed redirect URIs for a project'),
+  )
     .option('--profile <name>', 'Profile to use')
-    .option('--json', 'Output as JSON')
-    .action(async (projectIdOrName: string, options: { profile?: string; json?: boolean }) => {
-      try {
-        const client = await getClient(options.profile);
-        const resolved = await resolveProject(client, projectIdOrName);
-        const project = await client.get<ProjectRecord>(`/admin/projects/${resolved.id}`);
-        const uris = project.redirectUri ? project.redirectUri.split(',').filter(Boolean) : [];
+    .action(
+      async (
+        projectIdOrName: string,
+        options: { profile?: string } & ListPaging & ListOutputFlags,
+      ) => {
+        try {
+          const client = await getClient(options.profile);
+          const resolved = await resolveProject(client, projectIdOrName);
+          const project = await client.get<ProjectRecord>(`/admin/projects/${resolved.id}`);
+          const uris = project.redirectUri ? project.redirectUri.split(',').filter(Boolean) : [];
+          const format = listOutputFormat(options);
+          const rows = pageRows(uris, options).map((uri) => ({ uri }));
 
-        if (options.json) {
-          printJson(uris);
-          return;
-        }
+          if (format === 'json') {
+            printJson(rows.map((row) => row.uri));
+            return;
+          }
+          if (format === 'quiet') {
+            printQuiet(rows.map((row) => row.uri));
+            return;
+          }
+          if (format === 'csv') {
+            process.stdout.write(toCsv(rows as unknown as Record<string, unknown>[], ['uri']));
+            return;
+          }
 
-        if (uris.length === 0) {
-          process.stdout.write(colors.dim('No redirect URIs configured.\n'));
-          return;
+          if (rows.length === 0) {
+            process.stdout.write(colors.dim('No redirect URIs configured.\n'));
+            return;
+          }
+          for (const row of rows) {
+            process.stdout.write(`- ${row.uri}\n`);
+          }
+        } catch (err) {
+          exitWithError('project redirect-uri list', err);
         }
-        for (const uri of uris) {
-          process.stdout.write(`- ${uri}\n`);
-        }
-      } catch (err) {
-        exitWithError('project redirect-uri list', err);
-      }
-    });
+      },
+    );
 
   redirectUriCmd
     .command('add <project> <url>')
@@ -702,51 +724,67 @@ export function registerProjectCommand(program: Command): void {
     .command('access')
     .description('Manage project server access and permissions');
 
-  accessCmd
-    .command('list <project>')
-    .description('List servers granted to a project')
+  addFullListOptions(
+    accessCmd.command('list <project>').description('List servers granted to a project'),
+  )
     .option('--profile <name>', 'Profile to use')
-    .option('--json', 'Output as JSON')
-    .action(async (projectIdOrName: string, options: { profile?: string; json?: boolean }) => {
-      try {
-        const client = await getClient(options.profile);
-        const resolved = await resolveProject(client, projectIdOrName);
-        const servers = await client.get<
-          { serverId: string; scopes: string[]; operations?: Record<string, boolean> }[]
-        >(`/admin/projects/${resolved.id}/servers`);
+    .action(
+      async (
+        projectIdOrName: string,
+        options: { profile?: string } & ListPaging & ListOutputFlags,
+      ) => {
+        try {
+          const client = await getClient(options.profile);
+          const resolved = await resolveProject(client, projectIdOrName);
+          const servers = await client.get<
+            { serverId: string; scopes: string[]; operations?: Record<string, boolean> }[]
+          >(`/admin/projects/${resolved.id}/servers`);
+          const format = listOutputFormat(options);
+          const rows = pageRows(servers, options);
 
-        if (options.json) {
-          printJson(servers);
-          return;
-        }
+          if (format === 'json') {
+            printJson(rows);
+            return;
+          }
+          if (format === 'quiet') {
+            printQuiet(rows.map((row) => row.serverId));
+            return;
+          }
+          if (format === 'csv') {
+            process.stdout.write(
+              toCsv(rows as unknown as Record<string, unknown>[], ['serverId', 'scopes']),
+            );
+            return;
+          }
 
-        printTable({
-          columns: [
-            { header: 'SERVER ID', key: 'serverId', format: (v) => colors.dim(String(v)) },
-            {
-              header: 'SCOPES',
-              key: 'scopes',
-              format: (v) => (Array.isArray(v) ? v.join(', ') : '-'),
-            },
-            {
-              header: 'OPERATIONS',
-              format: (_, r) => {
-                if (!r.operations) return colors.dim('defaults');
-                return (
-                  Object.entries(r.operations)
-                    .filter(([, active]) => active)
-                    .map(([op]) => op)
-                    .join(', ') || colors.dim('none')
-                );
+          printTable({
+            columns: [
+              { header: 'SERVER ID', key: 'serverId', format: (v) => colors.dim(String(v)) },
+              {
+                header: 'SCOPES',
+                key: 'scopes',
+                format: (v) => (Array.isArray(v) ? v.join(', ') : '-'),
               },
-            },
-          ],
-          data: servers as unknown as Record<string, unknown>[],
-        });
-      } catch (err) {
-        exitWithError('project access list', err);
-      }
-    });
+              {
+                header: 'OPERATIONS',
+                format: (_, r) => {
+                  if (!r.operations) return colors.dim('defaults');
+                  return (
+                    Object.entries(r.operations)
+                      .filter(([, active]) => active)
+                      .map(([op]) => op)
+                      .join(', ') || colors.dim('none')
+                  );
+                },
+              },
+            ],
+            data: rows as unknown as Record<string, unknown>[],
+          });
+        } catch (err) {
+          exitWithError('project access list', err);
+        }
+      },
+    );
 
   accessCmd
     .command('grant <project> <server>')

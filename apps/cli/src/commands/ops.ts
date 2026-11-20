@@ -24,7 +24,13 @@ import {
   toCsv,
   writeExportFile,
 } from '../lib/output.js';
-import { type ListPaging, pageRows } from '../lib/help.js';
+import {
+  addFullListOptions,
+  type ListOutputFlags,
+  type ListPaging,
+  pageRows,
+} from '../lib/help.js';
+import { promptIfMissing } from '../lib/prompts.js';
 import { resolveMember, resolveProject, resolveServer } from '../lib/resolver.js';
 import { parseSince } from '../lib/time.js';
 import { colors, formatSparkline } from '../lib/tui.js';
@@ -259,10 +265,9 @@ export function registerOpsCommand(program: Command): void {
   // ── audit ──────────────────────────────────────────────────────────
   const auditCmd = program.command('audit').description('Inspect audit logs of admin activities');
 
-  auditCmd
-    .command('list')
-    .alias('ls')
-    .description('List recent audit log entries')
+  addFullListOptions(
+    auditCmd.command('list').alias('ls').description('List recent audit log entries'),
+  )
     .option('--actor <member>', 'Filter by admin actor')
     .option('--action <category>', `Filter by action category (${AUDIT_CATEGORIES.join(', ')})`)
     .option('--resource <resource>', 'Filter by resource/entity type')
@@ -270,18 +275,20 @@ export function registerOpsCommand(program: Command): void {
     .option('--until <date>', 'End date')
     .option('--follow', 'Poll for new entries continuously')
     .option('--profile <name>', 'Profile to use')
-    .option('--json', 'Output as JSON')
     .action(
-      async (options: {
-        actor?: string;
-        action?: string;
-        resource?: string;
-        since?: string;
-        until?: string;
-        follow?: boolean;
-        profile?: string;
-        json?: boolean;
-      }) => {
+      async (
+        options: {
+          actor?: string;
+          action?: string;
+          resource?: string;
+          since?: string;
+          until?: string;
+          follow?: boolean;
+          profile?: string;
+          json?: boolean;
+        } & ListPaging &
+          ListOutputFlags,
+      ) => {
         try {
           const client = await getClient(options.profile);
 
@@ -302,10 +309,28 @@ export function registerOpsCommand(program: Command): void {
               : rows;
           };
 
-          const logs = await fetchLogs();
+          const allLogs = await fetchLogs();
+          const format = listOutputFormat(options);
+          const logs = pageRows(allLogs, options);
 
-          if (options.json && !options.follow) {
+          if (format === 'json' && !options.follow) {
             printJson(await fetchRaw());
+            return;
+          }
+          if (format === 'quiet' && !options.follow) {
+            printQuiet(logs.map((row) => String(row.id)));
+            return;
+          }
+          if (format === 'csv' && !options.follow) {
+            process.stdout.write(
+              toCsv(logs as unknown as Record<string, unknown>[], [
+                'id',
+                'timestamp',
+                'actor',
+                'action',
+                'entity',
+              ]),
+            );
             return;
           }
 
@@ -779,7 +804,7 @@ export function registerOpsCommand(program: Command): void {
     .alias('ls')
     .description('List Discord webhooks for a project')
     .option('-o, --output <format>', 'Output format (table|json|csv)', 'table')
-    .requiredOption('--project <project>', 'Project name or ID')
+    .option('--project <project>', 'Project name or ID (omit to pick interactively)')
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as JSON')
     .option('-q, --quiet', 'Only print webhook IDs')
@@ -799,7 +824,18 @@ export function registerOpsCommand(program: Command): void {
         try {
           const format = listOutputFormat(options);
           const client = await getClient(options.profile);
-          const resolved = await resolveProject(client, options.project);
+          const projectArg = await promptIfMissing({
+            value: options.project,
+            flag: '--project <project>',
+            message: 'Project',
+            choices: async () => {
+              const projects = await client.get<{ id: string; name: string }[]>('/admin/projects', {
+                resource: 'project',
+              });
+              return projects.map((p) => ({ name: p.name, value: p.id }));
+            },
+          });
+          const resolved = await resolveProject(client, String(projectArg));
           // The endpoint returns {webhooks, total, limit, offset}; page until done.
           const pageSize = 100;
           const allWebhooks: Record<string, unknown>[] = [];

@@ -1,7 +1,30 @@
+import type { Command } from 'commander';
 import { afterEach, describe, expect, it } from 'vitest';
-import { cleanupCliTest, runCli } from '../test-support/cli-harness.js';
+import { buildProgram, cleanupCliTest, runCli } from '../test-support/cli-harness.js';
 
 afterEach(cleanupCliTest);
+
+describe('list command surface', () => {
+  it('every visible list command has paging, quiet, csv and json flags', () => {
+    const problems: string[] = [];
+    const walk = (command: Command, path: string): void => {
+      const full = path ? `${path} ${command.name()}` : command.name();
+      if (command.name() === 'list' || command.name() === 'ls') {
+        const flags = new Set(
+          command.options.flatMap((option) =>
+            [option.long, option.short].filter((flag): flag is string => Boolean(flag)),
+          ),
+        );
+        for (const flag of ['--limit', '--page', '--all', '-q', '-o', '--json']) {
+          if (!flags.has(flag)) problems.push(`${full} missing ${flag}`);
+        }
+      }
+      for (const child of command.commands) walk(child, full);
+    };
+    walk(buildProgram(), '');
+    expect(problems).toEqual([]);
+  });
+});
 
 describe('list output validation', () => {
   it.each([
