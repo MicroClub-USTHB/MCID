@@ -9,7 +9,7 @@ import { ApiClient } from '../lib/client.js';
 import { formatDate, printJson, printKeyValue, printSuccess } from '../lib/output.js';
 import { resolveMember, resolveProject, resolveServer } from '../lib/resolver.js';
 import { startCallbackListener } from '../login-flow.js';
-import { promptConfirm } from '../lib/prompts.js';
+import { promptConfirm, promptIfMissing } from '../lib/prompts.js';
 import { colors } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
 
@@ -30,7 +30,7 @@ export function registerDevCommand(program: Command): void {
   devCmd
     .command('sso')
     .description('Test SSO authorization flow end to end with a local callback listener')
-    .requiredOption('--project <project>', 'Target project name or ID')
+    .option('--project <project>', 'Target project name or ID (omit to pick interactively)')
     .option('--server <server>', 'Discord server to authenticate against')
     .option('--port <port>', 'Local callback listener port (default 3100)', '3100')
     .option(
@@ -59,14 +59,24 @@ export function registerDevCommand(program: Command): void {
           const port = parseInt(options.port, 10);
           const redirectUri = `http://localhost:${port}/callback`;
 
+          const adminClient = await getAdminClient(options.profile);
+          const projectArg = await promptIfMissing({
+            value: options.project,
+            flag: '--project <project>',
+            message: 'Target project',
+            choices: async () => {
+              const projects = await adminClient.get<{ id: string; name: string }[]>(
+                '/admin/projects',
+                { resource: 'project' },
+              );
+              return projects.map((p) => ({ name: p.name, value: p.id }));
+            },
+          });
+
           // 1. Resolve project key and base URL
           const keyInfo = await resolveProjectKey(options.apiKey, options.profile);
-          if (!options.project) {
-            throw new CliError('dev sso requires --project <project>', ExitCode.Usage);
-          }
-          const adminClient = await getAdminClient(options.profile);
           const baseUrl = keyInfo.baseUrl || adminClient.origin;
-          const project = await resolveProject(adminClient, options.project);
+          const project = await resolveProject(adminClient, String(projectArg));
           const projectInfo = await adminClient.get<{ redirectUri?: string | null }>(
             `/admin/projects/${project.id}`,
           );
@@ -317,6 +327,12 @@ export function registerDevCommand(program: Command): void {
     options: { token?: string; profile?: string; reveal?: boolean; json?: boolean },
   ): Promise<void> => {
     try {
+      if (!options.reveal) {
+        throw new CliError(
+          'Token refresh requires --reveal: it invalidates the old tokens and returns the new pair once',
+          ExitCode.Usage,
+        );
+      }
       const cfg = await loadConfig(configPath());
       const profile = resolveProfileName(cfg, options.profile);
       const baseUrl = normalizeBaseUrl(
@@ -358,6 +374,7 @@ export function registerDevCommand(program: Command): void {
     cmd
       .requiredOption('--token <sessionToken>', 'Active session token')
       .option('--profile <name>', 'Profile to use')
+      .option('--reveal', 'Explicitly display the new one-time token pair')
       .option('--json', 'Output as JSON');
 
   tokenRefreshOptions(tokenCmd.command('refresh <refreshToken>'))

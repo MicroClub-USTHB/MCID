@@ -17,7 +17,11 @@ export const COMMAND_EXAMPLES: Record<string, readonly string[]> = {
   'profile use': ['mcid-cli profile use prod', 'mcid-cli profile use local'],
   'profile remove': ['mcid-cli profile remove local', 'mcid-cli profile remove old-staging'],
   'config path': ['mcid-cli config path', 'mcid-cli config path | xargs cat'],
-  'config show': ['mcid-cli config show', 'mcid-cli config show --profile prod'],
+  'config show': [
+    'mcid-cli config show',
+    'mcid-cli config show --profile prod',
+    'mcid-cli config show --json',
+  ],
   'schema init': [
     'mcid-cli schema init form.json',
     'mcid-cli schema init contact.json --template recruitment',
@@ -290,8 +294,8 @@ export const COMMAND_EXAMPLES: Record<string, readonly string[]> = {
     'mcid-cli dev token validate $TOKEN --api-key $MCID_API_KEY',
   ],
   'dev token refresh': [
-    'mcid-cli dev token refresh $REFRESH_TOKEN --token $TOKEN',
-    'mcid-cli dev token refresh $REFRESH_TOKEN --token $TOKEN --json',
+    'mcid-cli dev token refresh $REFRESH_TOKEN --token $TOKEN --reveal',
+    'mcid-cli dev token refresh $REFRESH_TOKEN --token $TOKEN --json --reveal',
   ],
   'dev check': [
     'mcid-cli dev check @alice projects.read',

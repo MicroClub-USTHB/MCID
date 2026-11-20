@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { exitWithError } from '../errors.js';
+import { addFullListOptions } from '../lib/help.js';
 import {
   defaultProfileDeps,
   profileAdd,
@@ -13,16 +14,15 @@ export function registerProfileCommand(program: Command): void {
     .command('profile')
     .description('Manage named MCID profiles (base URL + session)');
 
-  profile
-    .command('list')
-    .description('List configured profiles')
-    .action(async () => {
+  addFullListOptions(profile.command('list').description('List configured profiles')).action(
+    async (options: Record<string, unknown>) => {
       try {
-        await profileList(defaultProfileDeps());
+        await profileList(defaultProfileDeps(), options);
       } catch (err) {
         exitWithError('profile list', err);
       }
-    });
+    },
+  );
 
   profile
     .command('add <name>')

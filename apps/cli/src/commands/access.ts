@@ -1,7 +1,5 @@
 import { Command } from 'commander';
 import { ACCESS_LEVELS, ACCESS_RESOURCES, isAccessLevel, isAccessResource } from '@mcid/contracts';
-import { configPath, loadConfig, resolveProfileName } from '../config.js';
-import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
 import { confirmAction } from '../lib/confirm.js';
 import {
@@ -9,11 +7,10 @@ import {
   normalizeAccessOverrides,
   normalizeAccessRoles,
 } from '../lib/api-normalize.js';
-import { ApiClient } from '../lib/client.js';
+import { ApiClient, getClient } from '../lib/client.js';
 import { printJson, printKeyValue, printSuccess, printTable } from '../lib/output.js';
 import { didYouMean, resolveMember } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
-import { resolveSession } from '../session.js';
 
 /**
  * The change a grant PUT will apply, as `resource: before → after` — the
@@ -504,11 +501,4 @@ export function registerAccessCommand(program: Command): void {
         exitWithError('access overrides', err);
       }
     });
-}
-
-async function getClient(profileFlag?: string): Promise<ApiClient> {
-  const config = await loadConfig(configPath());
-  const profileName = resolveProfileName(config, profileFlag);
-  const session = await resolveSession(config, profileName, defaultKeyProvider());
-  return new ApiClient(session);
 }

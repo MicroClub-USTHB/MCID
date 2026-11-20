@@ -1,7 +1,6 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { lstat, open } from 'node:fs/promises';
 import { Command } from 'commander';
-import { configPath, loadConfig, resolveProfileName } from '../config.js';
-import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
 import {
   isProjectKeyActive,
@@ -11,11 +10,12 @@ import {
   normalizeProjectKeyInfo,
   unwrapArray,
 } from '../lib/api-normalize.js';
-import { ApiClient } from '../lib/client.js';
+import { getClient } from '../lib/client.js';
 import { confirmAction, confirmDestructive } from '../lib/confirm.js';
 import {
   formatAge,
   formatDate,
+  listOutputFormat,
   printJson,
   printKeyValue,
   printQuiet,
@@ -23,7 +23,13 @@ import {
   printTable,
   toCsv,
 } from '../lib/output.js';
-import { addListPaging, pageRows, type ListPaging } from '../lib/help.js';
+import {
+  addFullListOptions,
+  addListPaging,
+  type ListOutputFlags,
+  pageRows,
+  type ListPaging,
+} from '../lib/help.js';
 import { promptConfirm, promptInput } from '../lib/prompts.js';
 import { resolveProject, resolveServer } from '../lib/resolver.js';
 import {
@@ -33,7 +39,6 @@ import {
   PROJECT_SCOPES,
 } from '@mcid/contracts';
 import { colors } from '../lib/tui.js';
-import { resolveSession } from '../session.js';
 
 interface ProjectRecord {
   id: string;
@@ -47,6 +52,102 @@ interface ProjectRecord {
   createdAt?: string;
   updatedAt?: string;
   serversCount?: number;
+}
+
+interface EnvDestination {
+  exists: boolean;
+  content: string;
+  dev?: number;
+  ino?: number;
+}
+
+/** Check before project creation so a predictable file error cannot strand a key. */
+async function inspectEnvDestination(path: string, force: boolean): Promise<EnvDestination> {
+  let stat;
+  try {
+    stat = await lstat(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { exists: false, content: '' };
+    throw error;
+  }
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) {
+    throw new CliError(
+      'Environment output must be a regular file with no additional hard links',
+      ExitCode.Rejected,
+    );
+  }
+  if (process.platform !== 'win32' && (stat.mode & 0o777) !== 0o600) {
+    throw new CliError(
+      'Existing environment file must have mode 0600 before it can receive a key',
+      ExitCode.Rejected,
+    );
+  }
+  const handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  try {
+    const opened = await handle.stat();
+    if (
+      !opened.isFile() ||
+      opened.nlink !== 1 ||
+      opened.ino !== stat.ino ||
+      opened.dev !== stat.dev ||
+      (process.platform !== 'win32' && (opened.mode & 0o777) !== 0o600)
+    ) {
+      throw new CliError('Environment file changed during validation', ExitCode.Rejected);
+    }
+    const content = await handle.readFile('utf8');
+    if (/^\s*MCID_API_KEY\s*=/m.test(content) && !force) {
+      throw new CliError(
+        `File "${path}" already contains MCID_API_KEY\n  hint: pass --force to overwrite`,
+        ExitCode.Rejected,
+      );
+    }
+    return { exists: true, content, dev: opened.dev, ino: opened.ino };
+  } finally {
+    await handle.close();
+  }
+}
+
+async function writeEnvDestination(
+  path: string,
+  dest: EnvDestination,
+  content: string,
+): Promise<void> {
+  const noFollow = constants.O_NOFOLLOW ?? 0;
+  const flags = dest.exists
+    ? constants.O_RDWR | noFollow
+    : constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | noFollow;
+  const handle = await open(path, flags, 0o600);
+  try {
+    const stat = await handle.stat();
+    if (
+      !stat.isFile() ||
+      stat.nlink !== 1 ||
+      (process.platform !== 'win32' && (stat.mode & 0o777) !== 0o600)
+    ) {
+      throw new CliError('Environment output is not a private regular file', ExitCode.Rejected);
+    }
+    if (dest.exists) {
+      if (
+        stat.dev !== dest.dev ||
+        stat.ino !== dest.ino ||
+        (await handle.readFile('utf8')) !== dest.content
+      ) {
+        throw new CliError(
+          'Environment file changed after validation; save the key and retry manually',
+          ExitCode.Rejected,
+        );
+      }
+      await handle.truncate(0);
+    }
+    const bytes = Buffer.from(content, 'utf8');
+    for (let offset = 0; offset < bytes.length;) {
+      const result = await handle.write(bytes, offset, bytes.length - offset, offset);
+      if (result.bytesWritten === 0) throw new Error('Could not write environment file');
+      offset += result.bytesWritten;
+    }
+  } finally {
+    await handle.close();
+  }
 }
 
 export function registerProjectCommand(program: Command): void {
@@ -64,6 +165,7 @@ export function registerProjectCommand(program: Command): void {
     } & ListPaging,
   ) => {
     try {
+      const outFormat = listOutputFormat(options);
       const client = await getClient(options.profile);
       const allProjects = await client.get<ProjectRecord[]>('/admin/projects', {
         resource: 'project',
@@ -71,12 +173,11 @@ export function registerProjectCommand(program: Command): void {
 
       const projects = pageRows(allProjects, options);
 
-      if (options.quiet) {
+      if (outFormat === 'quiet') {
         printQuiet(projects.map((p) => p.id));
         return;
       }
 
-      const outFormat = options.json ? 'json' : options.output || 'table';
       if (outFormat === 'json') {
         printJson(projects);
         return;
@@ -202,6 +303,12 @@ export function registerProjectCommand(program: Command): void {
         json?: boolean;
       }) => {
         try {
+          if (options.json && !options.reveal) {
+            throw new CliError(
+              'Project creation with --json requires --reveal: the API key is returned only once',
+              ExitCode.Usage,
+            );
+          }
           const client = await getClient(options.profile);
 
           let name = options.name;
@@ -245,6 +352,10 @@ export function registerProjectCommand(program: Command): void {
             throw new CliError('Project name is required (--name <name>)', ExitCode.Usage);
           }
 
+          const envDestination = options.envOut
+            ? await inspectEnvDestination(options.envOut, Boolean(options.force))
+            : undefined;
+
           // Resolve before creating anything, so a typo cannot leave a half-set-up project.
           const grantServers = [];
           for (const serverArg of serverArgs ?? []) {
@@ -252,8 +363,8 @@ export function registerProjectCommand(program: Command): void {
           }
 
           const commaUris = redirectUris ? redirectUris.join(',') : undefined;
-          let redirectUriError: string | undefined;
-          const grantErrors: string[] = [];
+          let redirectUriError = false;
+          let grantErrors = 0;
           // The API returns `{ apiKey, project }`, not a flattened project.
           const res = normalizeCreatedProject<ProjectRecord>(
             await client.post('/admin/projects', {
@@ -268,8 +379,9 @@ export function registerProjectCommand(program: Command): void {
               await client.patch(`/admin/projects/${project.id}/redirect-uri`, {
                 redirectUri: commaUris,
               });
-            } catch (err) {
-              redirectUriError = err instanceof Error ? err.message : String(err);
+            } catch {
+              // Server-provided error text can contain credentials or other private data.
+              redirectUriError = true;
             }
             if (!redirectUriError) project.redirectUri = commaUris;
           }
@@ -277,44 +389,44 @@ export function registerProjectCommand(program: Command): void {
           for (const server of grantServers) {
             try {
               await client.put(`/admin/projects/${project.id}/servers/${server.id}`, { scopes });
-            } catch (err) {
-              grantErrors.push(
-                `${server.name}: ${err instanceof Error ? err.message : String(err)}`,
-              );
+            } catch {
+              grantErrors++;
             }
           }
 
           if (options.json) {
-            // The key is unrecoverable after this; masking it here would lose
-            // the only copy, so --json always includes it in full.
+            // Output the one-time key even when later setup or file writing fails.
             printJson(res, true);
-            return;
+          } else {
+            printSuccess(
+              `Project "${colors.bold(project.name)}" created (id: ${project.id})`,
+              `mcid-cli project key show ${project.id}`,
+            );
           }
 
-          printSuccess(
-            `Project "${colors.bold(project.name)}" created (id: ${project.id})`,
-            `mcid-cli project key show ${project.id}`,
-          );
-
-          for (const grantError of grantErrors) {
+          if (grantErrors > 0) {
             process.stderr.write(
-              `${colors.red('!')} Project was created, but granting server access failed: ${grantError}\n` +
-                `  hint: retry with \`mcid-cli project access grant ${project.id} <server> --scope ${scopes.join(' ')}\`\n`,
+              `${colors.red('!')} Project was created, but granting server access failed for ${grantErrors} server(s).\n` +
+                `  hint: check the project access list and retry with \`mcid-cli project access grant ${project.id} <server> --scope ${scopes.join(' ')}\`\n`,
             );
           }
 
           if (redirectUriError) {
             process.stderr.write(
-              `${colors.red('!')} Project was created, but redirect URI setup failed: ${redirectUriError}\n` +
+              `${colors.red('!')} Project was created, but redirect URI setup failed.\n` +
                 `  hint: save the API key below, then retry with \`mcid-cli project redirect-uri add ${project.id} <url>\`\n`,
             );
           }
 
-          process.stdout.write('\n');
-          process.stdout.write(
-            `${colors.bold('API Key')} (save this now; it will not be shown again):\n`,
-          );
-          process.stdout.write(`  ${colors.green(res.apiKey)}\n\n`);
+          if (grantErrors > 0 || redirectUriError) process.exitCode = ExitCode.Rejected;
+
+          if (!options.json) {
+            process.stdout.write('\n');
+            process.stdout.write(
+              `${colors.bold('API Key')} (save this now; it will not be shown again):\n`,
+            );
+            process.stdout.write(`  ${colors.green(res.apiKey)}\n\n`);
+          }
 
           const primaryUri =
             redirectUris && redirectUris[0] ? redirectUris[0] : 'http://localhost:3000/callback';
@@ -324,30 +436,24 @@ export function registerProjectCommand(program: Command): void {
             `MCID_REDIRECT_URI=${primaryUri}`,
           ].join('\n');
 
-          if (options.envOut) {
-            let existing = '';
-            try {
-              existing = await readFile(options.envOut, 'utf8');
-            } catch {
-              // file doesn't exist
-            }
-
+          if (options.envOut && envDestination) {
+            const existing = envDestination.content;
             const hasApiKey = /^\s*MCID_API_KEY\s*=/m.test(existing);
-            if (hasApiKey && !options.force) {
-              throw new CliError(
-                `File "${options.envOut}" already contains MCID_API_KEY\n  hint: pass --force to overwrite`,
-                ExitCode.Rejected,
-              );
-            }
-
             const newContent = hasApiKey
               ? `${existing.replace(/^\s*MCID_API_KEY\s*=.*$/m, `MCID_API_KEY=${res.apiKey}`).trimEnd()}\n`
               : existing
                 ? `${existing.trimEnd()}\n\n${envBlock}\n`
                 : `${envBlock}\n`;
-            await writeFile(options.envOut, newContent, { encoding: 'utf8', mode: 0o600 });
-            printSuccess(`Saved environment configuration to ${options.envOut}`);
-          } else {
+            try {
+              await writeEnvDestination(options.envOut, envDestination, newContent);
+            } catch (err) {
+              process.stderr.write(
+                'Project was created, but the environment file could not be saved. Save the API key from the output and repair the file manually.\n',
+              );
+              throw err;
+            }
+            if (!options.json) printSuccess(`Saved environment configuration to ${options.envOut}`);
+          } else if (!options.json) {
             process.stdout.write(`${colors.dim('.env configuration block:')}\n`);
             process.stdout.write(`${envBlock}\n`);
           }
@@ -415,34 +521,50 @@ export function registerProjectCommand(program: Command): void {
     .command('redirect-uri')
     .description('Manage allowed OAuth redirect URIs');
 
-  redirectUriCmd
-    .command('list <project>')
-    .description('List allowed redirect URIs for a project')
+  addFullListOptions(
+    redirectUriCmd
+      .command('list <project>')
+      .description('List allowed redirect URIs for a project'),
+  )
     .option('--profile <name>', 'Profile to use')
-    .option('--json', 'Output as JSON')
-    .action(async (projectIdOrName: string, options: { profile?: string; json?: boolean }) => {
-      try {
-        const client = await getClient(options.profile);
-        const resolved = await resolveProject(client, projectIdOrName);
-        const project = await client.get<ProjectRecord>(`/admin/projects/${resolved.id}`);
-        const uris = project.redirectUri ? project.redirectUri.split(',').filter(Boolean) : [];
+    .action(
+      async (
+        projectIdOrName: string,
+        options: { profile?: string } & ListPaging & ListOutputFlags,
+      ) => {
+        try {
+          const format = listOutputFormat(options);
+          const client = await getClient(options.profile);
+          const resolved = await resolveProject(client, projectIdOrName);
+          const project = await client.get<ProjectRecord>(`/admin/projects/${resolved.id}`);
+          const uris = project.redirectUri ? project.redirectUri.split(',').filter(Boolean) : [];
+          const rows = pageRows(uris, options).map((uri) => ({ uri }));
 
-        if (options.json) {
-          printJson(uris);
-          return;
-        }
+          if (format === 'json') {
+            printJson(rows.map((row) => row.uri));
+            return;
+          }
+          if (format === 'quiet') {
+            printQuiet(rows.map((row) => row.uri));
+            return;
+          }
+          if (format === 'csv') {
+            process.stdout.write(toCsv(rows as unknown as Record<string, unknown>[], ['uri']));
+            return;
+          }
 
-        if (uris.length === 0) {
-          process.stdout.write(colors.dim('No redirect URIs configured.\n'));
-          return;
+          if (rows.length === 0) {
+            process.stdout.write(colors.dim('No redirect URIs configured.\n'));
+            return;
+          }
+          for (const row of rows) {
+            process.stdout.write(`- ${row.uri}\n`);
+          }
+        } catch (err) {
+          exitWithError('project redirect-uri list', err);
         }
-        for (const uri of uris) {
-          process.stdout.write(`- ${uri}\n`);
-        }
-      } catch (err) {
-        exitWithError('project redirect-uri list', err);
-      }
-    });
+      },
+    );
 
   redirectUriCmd
     .command('add <project> <url>')
@@ -599,51 +721,67 @@ export function registerProjectCommand(program: Command): void {
     .command('access')
     .description('Manage project server access and permissions');
 
-  accessCmd
-    .command('list <project>')
-    .description('List servers granted to a project')
+  addFullListOptions(
+    accessCmd.command('list <project>').description('List servers granted to a project'),
+  )
     .option('--profile <name>', 'Profile to use')
-    .option('--json', 'Output as JSON')
-    .action(async (projectIdOrName: string, options: { profile?: string; json?: boolean }) => {
-      try {
-        const client = await getClient(options.profile);
-        const resolved = await resolveProject(client, projectIdOrName);
-        const servers = await client.get<
-          { serverId: string; scopes: string[]; operations?: Record<string, boolean> }[]
-        >(`/admin/projects/${resolved.id}/servers`);
+    .action(
+      async (
+        projectIdOrName: string,
+        options: { profile?: string } & ListPaging & ListOutputFlags,
+      ) => {
+        try {
+          const format = listOutputFormat(options);
+          const client = await getClient(options.profile);
+          const resolved = await resolveProject(client, projectIdOrName);
+          const servers = await client.get<
+            { serverId: string; scopes: string[]; operations?: Record<string, boolean> }[]
+          >(`/admin/projects/${resolved.id}/servers`);
+          const rows = pageRows(servers, options);
 
-        if (options.json) {
-          printJson(servers);
-          return;
-        }
+          if (format === 'json') {
+            printJson(rows);
+            return;
+          }
+          if (format === 'quiet') {
+            printQuiet(rows.map((row) => row.serverId));
+            return;
+          }
+          if (format === 'csv') {
+            process.stdout.write(
+              toCsv(rows as unknown as Record<string, unknown>[], ['serverId', 'scopes']),
+            );
+            return;
+          }
 
-        printTable({
-          columns: [
-            { header: 'SERVER ID', key: 'serverId', format: (v) => colors.dim(String(v)) },
-            {
-              header: 'SCOPES',
-              key: 'scopes',
-              format: (v) => (Array.isArray(v) ? v.join(', ') : '-'),
-            },
-            {
-              header: 'OPERATIONS',
-              format: (_, r) => {
-                if (!r.operations) return colors.dim('defaults');
-                return (
-                  Object.entries(r.operations)
-                    .filter(([, active]) => active)
-                    .map(([op]) => op)
-                    .join(', ') || colors.dim('none')
-                );
+          printTable({
+            columns: [
+              { header: 'SERVER ID', key: 'serverId', format: (v) => colors.dim(String(v)) },
+              {
+                header: 'SCOPES',
+                key: 'scopes',
+                format: (v) => (Array.isArray(v) ? v.join(', ') : '-'),
               },
-            },
-          ],
-          data: servers as unknown as Record<string, unknown>[],
-        });
-      } catch (err) {
-        exitWithError('project access list', err);
-      }
-    });
+              {
+                header: 'OPERATIONS',
+                format: (_, r) => {
+                  if (!r.operations) return colors.dim('defaults');
+                  return (
+                    Object.entries(r.operations)
+                      .filter(([, active]) => active)
+                      .map(([op]) => op)
+                      .join(', ') || colors.dim('none')
+                  );
+                },
+              },
+            ],
+            data: rows as unknown as Record<string, unknown>[],
+          });
+        } catch (err) {
+          exitWithError('project access list', err);
+        }
+      },
+    );
 
   accessCmd
     .command('grant <project> <server>')
@@ -851,11 +989,4 @@ export function registerProjectCommand(program: Command): void {
         exitWithError('project access log', err);
       }
     });
-}
-
-async function getClient(profileFlag?: string): Promise<ApiClient> {
-  const config = await loadConfig(configPath());
-  const profileName = resolveProfileName(config, profileFlag);
-  const session = await resolveSession(config, profileName, defaultKeyProvider());
-  return new ApiClient(session);
 }
