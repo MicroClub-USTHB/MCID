@@ -1,6 +1,4 @@
 import { Command } from 'commander';
-import { configPath, loadConfig, resolveProfileName } from '../config.js';
-import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
 import {
   normalizeAuditLogs,
@@ -9,8 +7,9 @@ import {
   normalizeRoleStats,
   normalizeServerStats,
   normalizeUsage,
+  unwrapArray,
 } from '../lib/api-normalize.js';
-import { ApiClient } from '../lib/client.js';
+import { ApiClient, getClient } from '../lib/client.js';
 import { confirmAction, confirmDestructive } from '../lib/confirm.js';
 import {
   formatAge,
@@ -34,7 +33,6 @@ import { promptIfMissing } from '../lib/prompts.js';
 import { resolveMember, resolveProject, resolveServer } from '../lib/resolver.js';
 import { parseSince } from '../lib/time.js';
 import { colors, formatSparkline } from '../lib/tui.js';
-import { resolveSession } from '../session.js';
 
 interface HealthResponse {
   api: { status: string; uptime: number; responseTime: number };
@@ -314,7 +312,7 @@ export function registerOpsCommand(program: Command): void {
           const logs = pageRows(allLogs, options);
 
           if (format === 'json' && !options.follow) {
-            printJson(await fetchRaw());
+            printJson(pageRows(unwrapArray(await fetchRaw(), ['logs']), options));
             return;
           }
           if (format === 'quiet' && !options.follow) {
@@ -959,11 +957,4 @@ async function auditFilters(
   if (options.since) params.set('dateFrom', parseSince(options.since, '--since'));
   if (options.until) params.set('dateTo', parseSince(options.until, '--until'));
   return params;
-}
-
-async function getClient(profileFlag?: string): Promise<ApiClient> {
-  const config = await loadConfig(configPath());
-  const profileName = resolveProfileName(config, profileFlag);
-  const session = await resolveSession(config, profileName, defaultKeyProvider());
-  return new ApiClient(session);
 }

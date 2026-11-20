@@ -104,6 +104,32 @@ describe('writeExportFile', () => {
 });
 
 describe('JSON secret redaction', () => {
+  it('keeps public key fields while redacting credential-shaped names', () => {
+    const output = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      printJson({
+        levels: [{ key: 'read', description: 'Read access' }],
+        nested: {
+          apiKey: 'tiny',
+          refresh_token: 'other',
+          password: 'pw',
+          secretCount: 2,
+        },
+      });
+      expect(JSON.parse(String(output.mock.calls[0]?.[0]))).toEqual({
+        levels: [{ key: 'read', description: 'Read access' }],
+        nested: {
+          apiKey: '[REDACTED]',
+          refresh_token: '[REDACTED]',
+          password: '[REDACTED]',
+          secretCount: 2,
+        },
+      });
+    } finally {
+      output.mockRestore();
+    }
+  });
+
   it('redacts short and nested secret values without exposing prefixes', () => {
     const output = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     try {

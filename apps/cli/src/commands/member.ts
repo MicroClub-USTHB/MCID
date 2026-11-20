@@ -1,8 +1,8 @@
 import { Command } from 'commander';
 import { configPath, loadConfig, normalizeBaseUrl, resolveProfileName } from '../config.js';
-import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
-import { ApiClient } from '../lib/client.js';
+import { ApiClient, getClient } from '../lib/client.js';
+import { positiveInt } from '../lib/help.js';
 import {
   formatAge,
   formatDate,
@@ -17,7 +17,6 @@ import {
 import { normalizeMemberDetail, normalizeMemberList, unwrapArray } from '../lib/api-normalize.js';
 import { resolveMember, resolveRole, resolveServer } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
-import { resolveSession } from '../session.js';
 import { resolveProjectKey } from './dev.js';
 
 function sourceOf(
@@ -62,25 +61,8 @@ export function registerMemberCommand(program: Command): void {
       const outFormat = listOutputFormat(options);
       const client = await getClient(options.profile);
 
-      const limitText = options.limit ?? '30';
-      const pageText = options.page ?? '1';
-      if (!/^[0-9]+$/.test(limitText) || !/^[0-9]+$/.test(pageText)) {
-        throw new CliError('--limit and --page must be positive whole numbers', ExitCode.Usage);
-      }
-      const limit = Number(limitText);
-      const page = Number(pageText);
-      if (
-        !Number.isSafeInteger(limit) ||
-        limit < 1 ||
-        limit > 100 ||
-        !Number.isSafeInteger(page) ||
-        page < 1
-      ) {
-        throw new CliError(
-          '--limit must be 1–100 and --page must be a positive whole number',
-          ExitCode.Usage,
-        );
-      }
+      const limit = positiveInt(options.limit, 30, '--limit', 100);
+      const page = positiveInt(options.page, 1, '--page');
 
       const resolved =
         !options.crossServer || options.server || options.role?.length
@@ -456,11 +438,4 @@ async function resolveRoleIds(
   const ids: string[] = [];
   for (const role of roles ?? []) ids.push((await resolveRole(client, serverId, role)).id);
   return ids;
-}
-
-async function getClient(profileFlag?: string): Promise<ApiClient> {
-  const config = await loadConfig(configPath());
-  const profileName = resolveProfileName(config, profileFlag);
-  const session = await resolveSession(config, profileName, defaultKeyProvider());
-  return new ApiClient(session);
 }

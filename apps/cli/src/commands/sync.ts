@@ -1,6 +1,4 @@
 import { Command } from 'commander';
-import { configPath, loadConfig, resolveProfileName } from '../config.js';
-import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
 import {
   normalizeSyncChanges,
@@ -8,7 +6,7 @@ import {
   normalizeSyncStatus,
   unwrapArray,
 } from '../lib/api-normalize.js';
-import { ApiClient } from '../lib/client.js';
+import { ApiClient, getClient } from '../lib/client.js';
 import {
   formatAge,
   listOutputFormat,
@@ -18,10 +16,9 @@ import {
   printTable,
   toCsv,
 } from '../lib/output.js';
-import { type ListPaging } from '../lib/help.js';
+import { type ListPaging, positiveInt } from '../lib/help.js';
 import { resolveServer } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
-import { resolveSession } from '../session.js';
 
 export function registerSyncCommand(program: Command): void {
   const syncCmd = program
@@ -280,16 +277,8 @@ export function registerSyncCommand(program: Command): void {
           const format = listOutputFormat(options);
           const client = await getClient(options.profile);
           const resolved = await resolveServer(client, options.server);
-          const limit = Number(options.limit ?? 30);
-          const page = Number(options.page ?? 1);
-          if (
-            !Number.isSafeInteger(limit) ||
-            limit < 1 ||
-            !Number.isSafeInteger(page) ||
-            page < 1
-          ) {
-            throw new CliError('--limit and --page must be positive whole numbers', ExitCode.Usage);
-          }
+          const limit = positiveInt(options.limit, 30, '--limit');
+          const page = positiveInt(options.page, 1, '--page');
           const start = options.all ? 0 : (page - 1) * limit;
           if (!Number.isSafeInteger(start)) {
             throw new CliError('Requested page is too large', ExitCode.Usage);
@@ -460,11 +449,4 @@ async function memberDeltas(client: ApiClient, syncLogId: string): Promise<strin
   } catch {
     return '';
   }
-}
-
-async function getClient(profileFlag?: string): Promise<ApiClient> {
-  const config = await loadConfig(configPath());
-  const profileName = resolveProfileName(config, profileFlag);
-  const session = await resolveSession(config, profileName, defaultKeyProvider());
-  return new ApiClient(session);
 }

@@ -1,8 +1,6 @@
 import { constants } from 'node:fs';
 import { lstat, open } from 'node:fs/promises';
 import { Command } from 'commander';
-import { configPath, loadConfig, resolveProfileName } from '../config.js';
-import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
 import {
   isProjectKeyActive,
@@ -12,7 +10,7 @@ import {
   normalizeProjectKeyInfo,
   unwrapArray,
 } from '../lib/api-normalize.js';
-import { ApiClient } from '../lib/client.js';
+import { getClient } from '../lib/client.js';
 import { confirmAction, confirmDestructive } from '../lib/confirm.js';
 import {
   formatAge,
@@ -41,7 +39,6 @@ import {
   PROJECT_SCOPES,
 } from '@mcid/contracts';
 import { colors } from '../lib/tui.js';
-import { resolveSession } from '../session.js';
 
 interface ProjectRecord {
   id: string;
@@ -536,11 +533,11 @@ export function registerProjectCommand(program: Command): void {
         options: { profile?: string } & ListPaging & ListOutputFlags,
       ) => {
         try {
+          const format = listOutputFormat(options);
           const client = await getClient(options.profile);
           const resolved = await resolveProject(client, projectIdOrName);
           const project = await client.get<ProjectRecord>(`/admin/projects/${resolved.id}`);
           const uris = project.redirectUri ? project.redirectUri.split(',').filter(Boolean) : [];
-          const format = listOutputFormat(options);
           const rows = pageRows(uris, options).map((uri) => ({ uri }));
 
           if (format === 'json') {
@@ -734,12 +731,12 @@ export function registerProjectCommand(program: Command): void {
         options: { profile?: string } & ListPaging & ListOutputFlags,
       ) => {
         try {
+          const format = listOutputFormat(options);
           const client = await getClient(options.profile);
           const resolved = await resolveProject(client, projectIdOrName);
           const servers = await client.get<
             { serverId: string; scopes: string[]; operations?: Record<string, boolean> }[]
           >(`/admin/projects/${resolved.id}/servers`);
-          const format = listOutputFormat(options);
           const rows = pageRows(servers, options);
 
           if (format === 'json') {
@@ -992,11 +989,4 @@ export function registerProjectCommand(program: Command): void {
         exitWithError('project access log', err);
       }
     });
-}
-
-async function getClient(profileFlag?: string): Promise<ApiClient> {
-  const config = await loadConfig(configPath());
-  const profileName = resolveProfileName(config, profileFlag);
-  const session = await resolveSession(config, profileName, defaultKeyProvider());
-  return new ApiClient(session);
 }

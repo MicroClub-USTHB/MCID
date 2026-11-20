@@ -35,6 +35,20 @@ describe('missing required arguments in a non-interactive terminal', () => {
     expect(result.stderr).toContain('--base-url');
   });
 
+  it('an omitted required variadic argument is not treated as an empty list', async () => {
+    const result = await runCli(['dev', 'check', '@alice']);
+    expect(result.exitCode).toBe(64);
+    expect(result.stderr).toMatch(/permissions/);
+    expect(result.requests).toEqual([]);
+  });
+
+  it('role permissions add with no permissions fails before any request', async () => {
+    const result = await runCli(['role', 'permissions', 'add', 'Lead']);
+    expect(result.exitCode).toBe(64);
+    expect(result.stderr).toMatch(/permissions/);
+    expect(result.requests).toEqual([]);
+  });
+
   it('webhook create fails with a usage error naming --name before any request', async () => {
     const result = await runCli([
       'webhook',

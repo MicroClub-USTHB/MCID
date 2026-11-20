@@ -1,8 +1,6 @@
 import { Command } from 'commander';
-import { configPath, loadConfig, resolveProfileName } from '../config.js';
-import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
-import { ApiClient } from '../lib/client.js';
+import { getClient } from '../lib/client.js';
 import { confirmDestructive } from '../lib/confirm.js';
 import {
   formatAge,
@@ -18,7 +16,6 @@ import {
 import { addListPaging, pageRows, type ListPaging } from '../lib/help.js';
 import { resolveServer } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
-import { resolveSession } from '../session.js';
 
 interface ServerRecord {
   id: string;
@@ -478,11 +475,4 @@ export function registerServerCommand(program: Command): void {
         }
       },
     );
-}
-
-async function getClient(profileFlag?: string): Promise<ApiClient> {
-  const config = await loadConfig(configPath());
-  const profileName = resolveProfileName(config, profileFlag);
-  const session = await resolveSession(config, profileName, defaultKeyProvider());
-  return new ApiClient(session);
 }

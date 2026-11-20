@@ -241,12 +241,18 @@ function maskSecrets(obj: unknown): void {
   }
   const rec = obj as Record<string, unknown>;
   for (const [k, v] of Object.entries(rec)) {
+    // Only credential-shaped names are secret. A bare `key` is a public
+    // identifier in the access catalog and permission DTOs, so it stays.
+    const name = k.toLowerCase().replace(/[_-]/g, '');
     if (
-      k.toLowerCase().includes('secret') ||
-      k.toLowerCase().includes('token') ||
-      k.toLowerCase() === 'key' ||
-      k.toLowerCase() === 'apikey' ||
-      k.toLowerCase() === 'api_key'
+      name === 'apikey' ||
+      name === 'accesstoken' ||
+      name === 'refreshtoken' ||
+      name === 'sessiontoken' ||
+      name === 'secret' ||
+      name === 'password' ||
+      name.endsWith('secret') ||
+      name.endsWith('token')
     ) {
       if (v !== null && v !== undefined) rec[k] = '[REDACTED]';
     } else if (typeof v === 'object' && v !== null) {

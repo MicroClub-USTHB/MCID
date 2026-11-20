@@ -4,7 +4,8 @@ import { configPath, loadConfig, resolveProfileName } from '../config.js';
 import { defaultKeyProvider, decrypt, webhookSecretContext } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
 import { unwrapArray } from '../lib/api-normalize.js';
-import { ApiClient } from '../lib/client.js';
+import { getClient } from '../lib/client.js';
+import { positiveInt } from '../lib/help.js';
 import { promptIfMissing } from '../lib/prompts.js';
 import { signBody } from '../lib/signature.js';
 import {
@@ -22,7 +23,6 @@ import { resolveWebhook } from '../lib/resolver.js';
 import { parseSince } from '../lib/time.js';
 import { buildExamplePayload, validatePayload, type FormSchema } from '@mcid/form-schema';
 import { colors } from '../lib/tui.js';
-import { resolveSession } from '../session.js';
 import {
   defaultWebhookDeps,
   webhookCreate,
@@ -365,18 +365,8 @@ export function registerWebhookCommand(program: Command): void {
   ): Promise<void> => {
     try {
       const outFormat = listOutputFormat(options);
-      const limit = Number(options.limit);
-      const pageNumber = Number(options.page ?? '1');
-      if (
-        !/^\d+$/.test(options.limit) ||
-        !/^\d+$/.test(options.page ?? '1') ||
-        !Number.isSafeInteger(limit) ||
-        limit < 1 ||
-        !Number.isSafeInteger(pageNumber) ||
-        pageNumber < 1
-      ) {
-        throw new CliError('--limit and --page must be positive whole numbers', ExitCode.Usage);
-      }
+      const limit = positiveInt(options.limit, 30, '--limit');
+      const pageNumber = positiveInt(options.page, 1, '--page');
       const start = options.all ? 0 : (pageNumber - 1) * limit;
       if (!Number.isSafeInteger(start))
         throw new CliError('Requested page is too large', ExitCode.Usage);
@@ -736,13 +726,6 @@ async function resolveWebhookId(
 ): Promise<string> {
   const client = await getClient(profileFlag);
   return (await resolveWebhook(client, idOrSlug)).id;
-}
-
-async function getClient(profileFlag?: string): Promise<ApiClient> {
-  const config = await loadConfig(configPath());
-  const profileName = resolveProfileName(config, profileFlag);
-  const session = await resolveSession(config, profileName, defaultKeyProvider());
-  return new ApiClient(session);
 }
 
 async function getStoredSigningSecret(

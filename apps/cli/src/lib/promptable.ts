@@ -96,7 +96,10 @@ export function enablePromptableArgs(program: Command): void {
       const list: PromptSpec[] = [];
 
       child.registeredArguments.forEach((arg, index) => {
-        if (!arg.required || isForbidden(arg.name())) return;
+        // Commander supplies [] for an omitted variadic positional, which
+        // would bypass the "missing" check below. Keep those required so
+        // scripts fail immediately instead of running with an empty list.
+        if (!arg.required || arg.variadic || isForbidden(arg.name())) return;
         arg.required = false;
         list.push({ kind: kindFor(arg.name()), flag: `<${arg.name()}>`, index });
       });

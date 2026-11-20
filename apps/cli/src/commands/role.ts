@@ -1,10 +1,8 @@
 import { Command } from 'commander';
-import { configPath, loadConfig, resolveProfileName } from '../config.js';
-import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
 import { confirmAction } from '../lib/confirm.js';
 import { normalizeRoleStats, unwrapArray } from '../lib/api-normalize.js';
-import { ApiClient } from '../lib/client.js';
+import { getClient } from '../lib/client.js';
 import {
   listOutputFormat,
   printJson,
@@ -23,7 +21,6 @@ import {
 } from '../lib/help.js';
 import { resolveRole, resolveServer } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
-import { resolveSession } from '../session.js';
 
 interface RolePermissionItem {
   id: number;
@@ -169,12 +166,9 @@ export function registerRoleCommand(program: Command): void {
           const list = pageRows(res.permissions || [], options);
           const format = listOutputFormat(options);
           if (format === 'json') {
-            // `key` here is a public permission identifier, not a credential.
             // Project onto the documented DTO so unexpected fields cannot leak.
-            printJson(
-              list.map(({ id, key, description }) => ({ id, key, description })),
-              true,
-            );
+            // `key` is a public permission identifier and is no longer redacted.
+            printJson(list.map(({ id, key, description }) => ({ id, key, description })));
             return;
           }
           if (format === 'quiet') {
@@ -442,11 +436,4 @@ export function registerRoleCommand(program: Command): void {
         }
       },
     );
-}
-
-async function getClient(profileFlag?: string): Promise<ApiClient> {
-  const config = await loadConfig(configPath());
-  const profileName = resolveProfileName(config, profileFlag);
-  const session = await resolveSession(config, profileName, defaultKeyProvider());
-  return new ApiClient(session);
 }

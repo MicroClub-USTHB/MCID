@@ -41,11 +41,20 @@ export function addListPaging(command: Command): Command {
     .option('--all', 'Show every row, not just one page');
 }
 
-function positiveInt(value: string | undefined, fallback: number, flag: string): number {
+/** Shared validator for `--limit` / `--page` values. */
+export function positiveInt(
+  value: string | undefined,
+  fallback: number,
+  flag: string,
+  max?: number,
+): number {
   if (value === undefined) return fallback;
   const parsed = Number(value);
   if (!/^[0-9]+$/.test(value) || !Number.isSafeInteger(parsed) || parsed < 1) {
     throw new CliError(`${flag} must be a positive whole number`, ExitCode.Usage);
+  }
+  if (max !== undefined && parsed > max) {
+    throw new CliError(`${flag} must be at most ${max}`, ExitCode.Usage);
   }
   return parsed;
 }
