@@ -1,4 +1,4 @@
-CREATE TABLE "member_identities" (
+CREATE TABLE IF NOT EXISTS "member_identities" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"member_id" varchar(255) NOT NULL,
 	"provider" varchar(32) NOT NULL,
@@ -10,8 +10,13 @@ CREATE TABLE "member_identities" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "inbound_webhooks" ADD COLUMN "identity_mapping" jsonb;--> statement-breakpoint
-ALTER TABLE "member_identities" ADD CONSTRAINT "member_identities_member_id_members_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."members"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE UNIQUE INDEX "uq_member_identities_member_provider" ON "member_identities" USING btree ("member_id","provider");--> statement-breakpoint
-CREATE UNIQUE INDEX "uq_member_identities_provider_handle" ON "member_identities" USING btree ("provider","handle");--> statement-breakpoint
-CREATE INDEX "idx_member_identities_provider" ON "member_identities" USING btree ("provider");
+ALTER TABLE "inbound_webhooks" ADD COLUMN IF NOT EXISTS "identity_mapping" jsonb;--> statement-breakpoint
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'member_identities_member_id_members_id_fk' AND conrelid = 'public.member_identities'::regclass) THEN
+    ALTER TABLE "member_identities" ADD CONSTRAINT "member_identities_member_id_members_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."members"("id") ON DELETE cascade ON UPDATE no action;
+  END IF;
+END $$;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "uq_member_identities_member_provider" ON "member_identities" USING btree ("member_id","provider");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "uq_member_identities_provider_handle" ON "member_identities" USING btree ("provider","handle");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_member_identities_provider" ON "member_identities" USING btree ("provider");
