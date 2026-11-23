@@ -91,6 +91,7 @@ describe('InboundWebhooksService drafts', () => {
             : fallback,
       } as never,
       {} as never,
+      { assertLinkable: jest.fn(), link: jest.fn() } as never,
     );
   };
 

@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
   IsBoolean,
+  IsIn,
   IsObject,
   IsOptional,
   IsString,
@@ -9,6 +10,33 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ValidateNested } from 'class-validator';
+import { IDENTITY_MAPPING_PROVIDERS } from '../identity-mapping';
+
+export class IdentityMappingDto {
+  @ApiProperty({ example: 'github', enum: IDENTITY_MAPPING_PROVIDERS })
+  @IsString()
+  @IsIn(IDENTITY_MAPPING_PROVIDERS)
+  provider!: string;
+
+  @ApiProperty({
+    description:
+      'Payload path holding the Discord member id. Use `step.field` for a stepped schema.',
+    example: 'profile.discordId',
+  })
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/)
+  memberIdField!: string;
+
+  @ApiProperty({
+    description: 'Payload path holding the username on the provider.',
+    example: 'profile.github',
+  })
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/)
+  handleField!: string;
+}
 
 export class CreateInboundWebhookDto {
   @ApiProperty({ description: 'The project this webhook belongs to.' })
@@ -103,4 +131,16 @@ export class CreateInboundWebhookDto {
   @IsOptional()
   @IsBoolean()
   allowRoleInheritance?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Link an account from each accepted submission: the member comes from one field, ' +
+      'the username from another. Submissions with an unknown member or an invalid ' +
+      'username are refused.',
+    type: IdentityMappingDto,
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => IdentityMappingDto)
+  identityMapping?: IdentityMappingDto;
 }

@@ -42,6 +42,7 @@ describe('buildOpenApiDocument', () => {
       'Authentication',
       'Authentication (SSO)',
       'Channels',
+      'Identities',
       'Inbound Webhooks (Admin)',
       'Inbound Webhooks (Ingest)',
       'Inbound Webhooks (Project)',

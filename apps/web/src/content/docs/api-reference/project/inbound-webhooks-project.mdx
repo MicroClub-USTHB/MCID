@@ -190,6 +190,7 @@ Same fields as a list item. Every read is audited. Requires the `read_inbound_su
 | `acceptedOrigins` | `array of string` | no | Origins permitted to call this webhook. Empty = no check. |
 | `allowRoleInheritance` | `boolean` | no | When true, a member can also read this webhook's submissions through role inheritance: a role they hold on the main server that is the source of an enabled inheritance rule covering the server of a granted role counts as that granted role, matched by role name. Off by default: data access should be explicit. Default: `false`. |
 | `allowedRoleIds` | `array of string` | no | Discord role IDs permitted to READ submissions. When omitted, the configured default reader roles are used (MC Executive unless changed in the inbound webhook settings); when given, exactly these roles are used. At least one role must result. |
+| `identityMapping` | `IdentityMappingDto` | no | Link an account from each accepted submission: the member comes from one field, the username from another. Submissions with an unknown member or an invalid username are refused. |
 | `name` | `string` | yes |  |
 | `rejectUnknownFields` | `boolean` | no | Default: `true`. |
 | `requireSignature` | `boolean` | no | Default: `true`. |
@@ -203,6 +204,14 @@ Same fields as a list item. Every read is audited. Requires the `read_inbound_su
 | `id` | `string` | yes |  |
 | `secret` | `string` | yes | The signing secret. Shown once; no later read returns it. |
 | `slug` | `string` | yes |  |
+
+### IdentityMappingDto schema
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `handleField` | `string` | yes | Payload path holding the username on the provider. |
+| `memberIdField` | `string` | yes | Payload path holding the Discord member id. Use `step.field` for a stepped schema. |
+| `provider` | `"github"` | yes |  |
 
 ### ProjectInboundWebhookListDto schema
 

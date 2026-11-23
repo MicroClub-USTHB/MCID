@@ -62,6 +62,7 @@ describe('InboundWebhooksService.ingest', () => {
           name === 'app.inboundWebhookEncryptionKey' ? key : fallback,
       } as never,
       {} as never,
+      { assertLinkable: jest.fn(), link: jest.fn() } as never,
     );
   };
 
