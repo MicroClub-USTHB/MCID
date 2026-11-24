@@ -835,6 +835,14 @@
             },
             "type": "array"
           },
+          "identityMapping": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/IdentityMappingDto"
+              }
+            ],
+            "description": "Link an account from each accepted submission: the member comes from one field, the username from another. Submissions with an unknown member or an invalid username are refused."
+          },
           "name": {
             "example": "Recruitment 2026",
             "maxLength": 255,
@@ -991,6 +999,14 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "identityMapping": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/IdentityMappingDto"
+              }
+            ],
+            "description": "Link an account from each accepted submission: the member comes from one field, the username from another. Submissions with an unknown member or an invalid username are refused."
           },
           "name": {
             "example": "Recruitment 2026",
@@ -1602,6 +1618,36 @@
         "required": [
           "messages",
           "hasMore"
+        ],
+        "type": "object"
+      },
+      "IdentityMappingDto": {
+        "additionalProperties": false,
+        "properties": {
+          "handleField": {
+            "description": "Payload path holding the username on the provider.",
+            "example": "profile.github",
+            "pattern": "/^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*$/",
+            "type": "string"
+          },
+          "memberIdField": {
+            "description": "Payload path holding the Discord member id. Use `step.field` for a stepped schema.",
+            "example": "profile.discordId",
+            "pattern": "/^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*$/",
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "github"
+            ],
+            "example": "github",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "memberIdField",
+          "handleField"
         ],
         "type": "object"
       },
@@ -3526,6 +3572,15 @@
           "allowRoleInheritance": {
             "description": "Let role inheritance rules grant read access to this webhook. See the create request for the rule.",
             "type": "boolean"
+          },
+          "identityMapping": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/IdentityMappingDto"
+              }
+            ],
+            "description": "Set the identity mapping, or send null to remove it.",
+            "nullable": true
           },
           "isActive": {
             "type": "boolean"
@@ -8840,6 +8895,53 @@
         "summary": "Validate session token (project-scoped)",
         "tags": [
           "Authentication"
+        ]
+      }
+    },
+    "/api/identities": {
+      "get": {
+        "description": "Members who linked an account on the provider, optionally only those holding one of the given Discord roles (e.g. a department role).",
+        "operationId": "IdentitiesController_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "enum": [
+                "github"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Comma-separated Discord role ids; any one is enough.",
+            "in": "query",
+            "name": "roleIds",
+            "required": false,
+            "schema": {
+              "items": {
+                "pattern": "/^\\d{17,20}$/",
+                "type": "string"
+              },
+              "maxItems": 25,
+              "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ],
+        "summary": "List linked accounts for a provider",
+        "tags": [
+          "Identities"
         ]
       }
     },

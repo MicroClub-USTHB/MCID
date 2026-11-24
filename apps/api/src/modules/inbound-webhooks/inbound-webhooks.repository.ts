@@ -39,6 +39,7 @@ import type {
   InboundWebhookSettingsRow,
 } from '../../database/entities';
 import type { FormSchema } from '@mcid/form-schema';
+import type { IdentityMapping } from './identity-mapping';
 
 /** What a query runs on: the pool, or the transaction of a storage key lock. */
 type Executor = Pick<DrizzleDB, 'select' | 'selectDistinct' | 'insert'>;
@@ -59,6 +60,7 @@ export interface InboundWebhookRow {
   requireSignature: boolean;
   rejectUnknownFields: boolean;
   allowRoleInheritance: boolean;
+  identityMapping: IdentityMapping | null;
   isActive: boolean;
   submissionCount: number;
   lastSubmissionAt: Date | null;
@@ -77,6 +79,7 @@ const PUBLIC_COLUMNS = {
   requireSignature: inboundWebhooks.requireSignature,
   rejectUnknownFields: inboundWebhooks.rejectUnknownFields,
   allowRoleInheritance: inboundWebhooks.allowRoleInheritance,
+  identityMapping: inboundWebhooks.identityMapping,
   isActive: inboundWebhooks.isActive,
   submissionCount: inboundWebhooks.submissionCount,
   lastSubmissionAt: inboundWebhooks.lastSubmissionAt,
@@ -94,6 +97,7 @@ export interface CreateInboundWebhookData {
   requireSignature: boolean;
   rejectUnknownFields: boolean;
   allowRoleInheritance: boolean;
+  identityMapping: IdentityMapping | null;
   createdBy: string | null;
   allowedRoleIds: string[];
 }
@@ -147,6 +151,7 @@ export class InboundWebhooksRepository {
           requireSignature: data.requireSignature,
           rejectUnknownFields: data.rejectUnknownFields,
           allowRoleInheritance: data.allowRoleInheritance,
+          identityMapping: data.identityMapping,
           createdBy: data.createdBy,
         })
         .returning(PUBLIC_COLUMNS);
@@ -290,6 +295,7 @@ export class InboundWebhooksRepository {
       requireSignature: boolean;
       rejectUnknownFields: boolean;
       allowRoleInheritance: boolean;
+      identityMapping: IdentityMapping | null;
       isActive: boolean;
     }>,
   ): Promise<InboundWebhookRow | null> {

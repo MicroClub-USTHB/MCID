@@ -25,6 +25,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { AdminWebhooksModule } from './modules/admin-webhooks/admin-webhooks.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { StatsModule } from './modules/stats/stats.module';
+import { IdentitiesApiModule } from './modules/identities/identities-api.module';
 import { InboundWebhooksModule } from './modules/inbound-webhooks/inbound-webhooks.module';
 import { ProjectRolesModule } from './modules/project-roles/project-roles.module';
 import { IdempotencyModule } from './modules/idempotency/idempotency.module';
@@ -64,6 +65,7 @@ import { AuditLoggingMiddleware } from './modules/audit/middleware/audit-logging
     AuditModule,
     StatsModule,
     InboundWebhooksModule,
+    IdentitiesApiModule,
     ProjectRolesModule,
     IdempotencyModule,
     ProjectScheduledEventsModule,

@@ -54,6 +54,7 @@ describe('InboundWebhooksService.createForProject', () => {
               : fallback,
       } as never,
       {} as never,
+      { assertLinkable: jest.fn(), link: jest.fn() } as never,
     );
   });
 

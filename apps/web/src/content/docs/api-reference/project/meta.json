@@ -6,6 +6,7 @@
     "authentication",
     "authentication-sso",
     "channels",
+    "identities",
     "inbound-webhooks-ingest",
     "inbound-webhooks-project",
     "members",
