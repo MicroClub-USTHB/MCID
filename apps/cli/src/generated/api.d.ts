@@ -1456,6 +1456,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/identities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List linked accounts for a provider
+         * @description Members who linked an account on the provider, optionally only those holding one of the given Discord roles (e.g. a department role).
+         */
+        get: operations["IdentitiesController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/inbound-webhooks": {
         parameters: {
             query?: never;
@@ -2823,6 +2843,8 @@ export interface components {
              *     ]
              */
             allowedRoleIds?: string[];
+            /** @description Link an account from each accepted submission: the member comes from one field, the username from another. Submissions with an unknown member or an invalid username are refused. */
+            identityMapping?: components["schemas"]["IdentityMappingDto"];
             /** @example Recruitment 2026 */
             name: string;
             /** @description The project this webhook belongs to. */
@@ -2921,6 +2943,8 @@ export interface components {
              *     ]
              */
             allowedRoleIds?: string[];
+            /** @description Link an account from each accepted submission: the member comes from one field, the username from another. Submissions with an unknown member or an invalid username are refused. */
+            identityMapping?: components["schemas"]["IdentityMappingDto"];
             /** @example Recruitment 2026 */
             name: string;
             /** @default true */
@@ -3255,6 +3279,23 @@ export interface components {
              */
             hasMore: boolean;
             messages: components["schemas"]["MessageDto"][];
+        };
+        IdentityMappingDto: {
+            /**
+             * @description Payload path holding the username on the provider.
+             * @example profile.github
+             */
+            handleField: string;
+            /**
+             * @description Payload path holding the Discord member id. Use `step.field` for a stepped schema.
+             * @example profile.discordId
+             */
+            memberIdField: string;
+            /**
+             * @example github
+             * @enum {string}
+             */
+            provider: "github";
         };
         ImpactPreviewDto: {
             /**
@@ -4240,6 +4281,8 @@ export interface components {
             acceptedOrigins?: string[];
             /** @description Let role inheritance rules grant read access to this webhook. See the create request for the rule. */
             allowRoleInheritance?: boolean;
+            /** @description Set the identity mapping, or send null to remove it. */
+            identityMapping?: components["schemas"]["IdentityMappingDto"] | null;
             isActive?: boolean;
             name?: string;
             rejectUnknownFields?: boolean;
@@ -8093,6 +8136,27 @@ export interface operations {
             };
             /** @description Too many validation requests — retry after a short delay. */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    IdentitiesController_list: {
+        parameters: {
+            query: {
+                provider: "github";
+                /** @description Comma-separated Discord role ids; any one is enough. */
+                roleIds?: string[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

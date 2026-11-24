@@ -23,6 +23,7 @@ describe('InboundWebhooksService.listSubmissionsForProject', () => {
     {} as never,
     {} as never,
     {} as never,
+    { assertLinkable: jest.fn(), link: jest.fn() } as never,
   );
 
   beforeEach(() => {
@@ -76,6 +77,7 @@ describe('InboundWebhooksService.getSubmissionForProject', () => {
     {} as never,
     {} as never,
     {} as never,
+    { assertLinkable: jest.fn(), link: jest.fn() } as never,
   );
 
   beforeEach(() => {

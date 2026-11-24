@@ -74,3 +74,4 @@ export function select(_arg0: {
 }) {
   throw new Error('Function not implemented.');
 }
+export * from './member-identity.entity';

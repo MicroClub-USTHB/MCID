@@ -46,6 +46,8 @@ import {
 import { InboundWebhookFilesService } from './files/inbound-webhook-files.service';
 import { PreviewInboundWebhookSchemaDto } from './dto/preview-inbound-webhook-schema.dto';
 import { UpdateInboundWebhookDto } from './dto/update-inbound-webhook.dto';
+import { IdentitiesService } from '../identities/identities.service';
+import { readPayloadPath, type IdentityMapping } from './identity-mapping';
 
 export interface CreateInboundWebhookResult {
   webhook: InboundWebhookRow;
@@ -68,6 +70,7 @@ export interface PreparedWebhookData {
   requireSignature: boolean;
   rejectUnknownFields: boolean;
   allowRoleInheritance: boolean;
+  identityMapping: IdentityMapping | null;
   allowedRoleIds: string[];
   actor: string | null;
 }
@@ -119,6 +122,7 @@ export class InboundWebhooksService {
     private readonly auditRepository: AuditRepository,
     private readonly redisService: RedisService,
     private readonly configService: ConfigService,
+    private readonly identities: IdentitiesService,
     private readonly files: InboundWebhookFilesService,
   ) {}
 
@@ -160,6 +164,7 @@ export class InboundWebhooksService {
       requireSignature: dto.requireSignature ?? true,
       rejectUnknownFields: dto.rejectUnknownFields ?? true,
       allowRoleInheritance: dto.allowRoleInheritance ?? false,
+      identityMapping: dto.identityMapping ?? null,
       allowedRoleIds,
       actor,
     };
@@ -181,6 +186,7 @@ export class InboundWebhooksService {
         requireSignature: prepared.requireSignature,
         rejectUnknownFields: prepared.rejectUnknownFields,
         allowRoleInheritance: prepared.allowRoleInheritance,
+        identityMapping: prepared.identityMapping,
         createdBy: prepared.actor,
         allowedRoleIds: prepared.allowedRoleIds,
       },
@@ -295,6 +301,9 @@ export class InboundWebhooksService {
       patch.allowRoleInheritance = dto.allowRoleInheritance;
     }
     if (dto.isActive !== undefined) patch.isActive = dto.isActive;
+    if (dto.identityMapping !== undefined) {
+      patch.identityMapping = dto.identityMapping;
+    }
 
     const updated = await this.repository.update(id, patch);
     if (!updated) throw new NotFoundException('Inbound webhook not found');
@@ -796,6 +805,8 @@ export class InboundWebhooksService {
   ) {
     await this.assertWithinRateLimit(webhook.id, ctx.projectId);
     const result = await this.checkPayload(webhook, body);
+    // Refuse a bad link before anything is stored, so the caller sees why.
+    const link = await this.resolveIdentityLink(webhook, result.value);
 
     const submission = await this.repository
       .insertSubmission({
@@ -809,6 +820,7 @@ export class InboundWebhooksService {
       })
       .catch(rethrowFileLost);
 
+    await this.applyIdentityLink(link);
     return this.received(webhook, submission, result.fileIds.length);
   }
 
@@ -920,6 +932,7 @@ export class InboundWebhooksService {
       // A step never sent is absent from the data, so its required fields
       // fail here, and a step whose condition is false is skipped.
       const result = await this.checkPayload(webhook, draft.data);
+      const link = await this.resolveIdentityLink(webhook, result.value);
 
       try {
         const submission = await this.repository.insertSubmission({
@@ -932,6 +945,7 @@ export class InboundWebhooksService {
           userAgent: ctx.userAgent,
           fileIds: result.fileIds,
         });
+        await this.applyIdentityLink(link);
         return await this.received(
           webhook,
           submission,
@@ -978,6 +992,49 @@ export class InboundWebhooksService {
     }
     await this.repository.expireDraft(draftId);
     return new GoneException('This draft has expired');
+  }
+
+  /**
+   * With an identity mapping, the submission must name a real member and a
+   * valid, unclaimed username. Without one this does nothing.
+   */
+  private async resolveIdentityLink(
+    webhook: InboundWebhookRow,
+    payload: Record<string, unknown>,
+  ): Promise<{ memberId: string; provider: string; handle: string } | null> {
+    const mapping = webhook.identityMapping;
+    if (!mapping) return null;
+
+    const memberId = readPayloadPath(payload, mapping.memberIdField);
+    const rawHandle = readPayloadPath(payload, mapping.handleField);
+    if (typeof memberId !== 'string' || typeof rawHandle !== 'string') {
+      throw new UnprocessableEntityException({
+        statusCode: 422,
+        error: 'ValidationFailed',
+        errors: [
+          {
+            path: `${mapping.memberIdField}, ${mapping.handleField}`,
+            code: 'IDENTITY_FIELDS_MISSING',
+            message: 'Both the member id and the username are required.',
+          },
+        ],
+      });
+    }
+
+    const handle = await this.identities.assertLinkable(
+      memberId,
+      mapping.provider,
+      rawHandle,
+    );
+    return { memberId, provider: mapping.provider, handle };
+  }
+
+  private async applyIdentityLink(
+    link: { memberId: string; provider: string; handle: string } | null,
+  ): Promise<void> {
+    if (link) {
+      await this.identities.link(link.memberId, link.provider, link.handle);
+    }
   }
 
   private assertOriginAllowed(

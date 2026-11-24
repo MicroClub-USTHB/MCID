@@ -1,6 +1,7 @@
 import { Module, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { DatabaseModule } from '../../database/database.module';
 import { RedisModule } from '../../common/redis/redis.module';
+import { IdentitiesModule } from '../identities/identities.module';
 import { AuditModule } from '../audit/audit.module';
 
 import { InboundWebhooksController } from './inbound-webhooks.controller';
@@ -17,7 +18,7 @@ import { InboundWebhookRetentionService } from './retention/inbound-webhook-rete
 import { STORAGE_ADAPTER } from './files/storage.adapter';
 
 @Module({
-  imports: [DatabaseModule, RedisModule, AuditModule],
+  imports: [DatabaseModule, RedisModule, AuditModule, IdentitiesModule],
   controllers: [
     InboundWebhooksController,
     InboundWebhookIngestController,
