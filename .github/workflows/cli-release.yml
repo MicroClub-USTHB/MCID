@@ -1,0 +1,55 @@
+name: Release mcid-cli
+
+# Pushing a tag like v1.1.0 publishes apps/cli to npm. The tag must match the
+# version in apps/cli/package.json. Needs the repository secret NPM_TOKEN
+# (an npm automation token that can publish `mcid-cli`).
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  NODE_VERSION: "24"
+  PNPM_VERSION: "10.28.1"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The tag must match the package version
+        run: |
+          version="$(node -p "require('./apps/cli/package.json').version")"
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match apps/cli/package.json version ${version}"
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+          registry-url: "https://registry.npmjs.org"
+
+      - run: pnpm install --frozen-lockfile
+
+      # prepublishOnly runs lint, typecheck, tests and the build for mcid-cli.
+      - name: Publish to npm
+        working-directory: apps/cli
+        run: pnpm publish --no-git-checks --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" --title "mcid-cli ${GITHUB_REF_NAME}" --notes "See apps/cli/CHANGELOG.md" --verify-tag
