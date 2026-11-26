@@ -10,6 +10,8 @@ interface RedirectUriStepProps {
   isSubmitting?: boolean;
   submitLabel?: string;
   onSubmit: (redirectUri: string) => void;
+  /** When set, the step can be skipped (API-key-only projects never use OAuth). */
+  onSkip?: () => void;
 }
 
 function splitUris(value: string): string[] {
@@ -32,13 +34,15 @@ function isValidUri(uri: string): boolean {
  * Step 2 of project creation. The backend only accepts the redirect URI via a
  * separate `PATCH /admin/projects/:id/redirect-uri` after the project exists,
  * so this runs after step 1. A comma-separated list is stored as-is and must
- * match `GET /auth/authorize` values exactly.
+ * match `GET /auth/authorize` values exactly. A project with no redirect URI
+ * is valid: it just cannot use OAuth login (`/auth/authorize` refuses it).
  */
 function RedirectUriStep({
   projectId,
   isSubmitting = false,
   submitLabel = 'Finish',
   onSubmit,
+  onSkip,
 }: RedirectUriStepProps) {
   const [value, setValue] = useState('');
   const [error, setError] = useState<string | undefined>(undefined);
@@ -77,9 +81,22 @@ function RedirectUriStep({
         placeholder="https://app.example.com/auth/callback, https://app.example.com/oauth2/callback"
         disabled={isSubmitting}
       />
-      <McButton type="submit" size="md" disabled={isSubmitting} className="self-end">
-        {isSubmitting ? 'Saving…' : submitLabel}
-      </McButton>
+      <div className="flex items-center justify-end gap-2">
+        {onSkip && (
+          <McButton
+            type="button"
+            variant="tertiary"
+            size="md"
+            disabled={isSubmitting}
+            onClick={onSkip}
+          >
+            Skip for now
+          </McButton>
+        )}
+        <McButton type="submit" size="md" disabled={isSubmitting}>
+          {isSubmitting ? 'Saving…' : submitLabel}
+        </McButton>
+      </div>
     </form>
   );
 }
