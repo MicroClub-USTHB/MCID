@@ -103,3 +103,13 @@ pnpm install
 pnpm --filter mcid-cli dev -- --help
 pnpm turbo run lint typecheck test --filter=mcid-cli
 ```
+
+## Releasing
+
+Bump `version` in `package.json`, move the `[Unreleased]` notes in `CHANGELOG.md` under the new version, merge to `main`, then push the tag:
+
+```bash
+git tag v1.1.0 && git push origin v1.1.0
+```
+
+The `Release mcid-cli` workflow checks that the tag matches `package.json`, runs lint, typecheck, tests and the build, and publishes to npm. It needs the repository secret `NPM_TOKEN`.
