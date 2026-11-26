@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `webhook create` and `webhook update` take `--identity-provider`, `--identity-member-field` and `--identity-handle-field` to link an account from each submission (all three together), and `webhook update --clear-identity` removes the mapping.
 - `--limit`, `--page` and `--all` (30 rows by default) on `project list`, `server list`, `role list`, `sync logs`, `webhook list` and `discord-webhook list`; `-q` and `--json` on the lists that lacked them.
 - `project create --server <server...> [--scope ...]` grants server access, and the wizard offers the main server.
 - `sync run --wait` prints member deltas (`+N, -M`) and exits with code `6` on timeout.
