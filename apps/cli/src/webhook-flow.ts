@@ -29,6 +29,7 @@ import {
   updateInboundWebhook,
   type InboundWebhook,
   type CreateInboundWebhookBody,
+  type IdentityMapping,
   type InboundWebhookPatch,
 } from './mcid.js';
 import { precheckSchema } from './schema/custom-rules.js';
@@ -196,6 +197,54 @@ export interface WebhookUpdateOptions {
   name?: string;
   active?: boolean;
   inactive?: boolean;
+  identityProvider?: string;
+  identityMemberField?: string;
+  identityHandleField?: string;
+  /** Remove the identity mapping. */
+  clearIdentity?: boolean;
+}
+
+/** Identity-mapping flags, shared by `webhook create` and `webhook update`. */
+export interface IdentityFlags {
+  identityProvider?: string;
+  identityMemberField?: string;
+  identityHandleField?: string;
+}
+
+const IDENTITY_PROVIDERS: readonly IdentityMapping['provider'][] = ['github'];
+
+/**
+ * The mapping the three `--identity-*` flags describe, or undefined when none is given. They go
+ * together: a half-specified mapping fails here instead of as an opaque 400 from MCID.
+ */
+export function parseIdentityMapping(flags: IdentityFlags): IdentityMapping | undefined {
+  const { identityProvider, identityMemberField, identityHandleField } = flags;
+  const given = [identityProvider, identityMemberField, identityHandleField].filter(
+    (value) => value !== undefined,
+  );
+  if (given.length === 0) return undefined;
+  if (given.length < 3) {
+    throw new CliError(
+      '--identity-provider, --identity-member-field and --identity-handle-field go together; pass all three',
+      ExitCode.PrecheckFailed,
+    );
+  }
+  const provider = identityProvider!.trim().toLowerCase();
+  if (!IDENTITY_PROVIDERS.includes(provider as IdentityMapping['provider'])) {
+    throw new CliError(
+      `--identity-provider must be one of: ${IDENTITY_PROVIDERS.join(', ')}`,
+      ExitCode.PrecheckFailed,
+    );
+  }
+  const memberIdField = identityMemberField!.trim();
+  const handleField = identityHandleField!.trim();
+  if (memberIdField === '' || handleField === '') {
+    throw new CliError(
+      '--identity-member-field and --identity-handle-field cannot be empty',
+      ExitCode.PrecheckFailed,
+    );
+  }
+  return { provider: provider as IdentityMapping['provider'], memberIdField, handleField };
 }
 
 /** Argument checks that must pass before any file read, config read, or network call. */
@@ -203,14 +252,23 @@ function checkUpdateFlags(options: WebhookUpdateOptions): void {
   if (options.active && options.inactive) {
     throw new CliError('--active and --inactive cannot be used together', ExitCode.PrecheckFailed);
   }
+  const mapping = parseIdentityMapping(options);
+  if (options.clearIdentity && mapping !== undefined) {
+    throw new CliError(
+      '--clear-identity cannot be combined with the --identity-* flags',
+      ExitCode.PrecheckFailed,
+    );
+  }
   if (
     options.schema === undefined &&
     options.name === undefined &&
     !options.active &&
-    !options.inactive
+    !options.inactive &&
+    mapping === undefined &&
+    !options.clearIdentity
   ) {
     throw new CliError(
-      'nothing to update; pass --schema, --name, --active, or --inactive',
+      'nothing to update; pass --schema, --name, --active, --inactive, the --identity-* flags, or --clear-identity',
       ExitCode.PrecheckFailed,
     );
   }
@@ -227,6 +285,9 @@ export async function webhookUpdate(
   if (options.schema !== undefined) patch.schema = await readCheckedSchema(options.schema, deps);
   if (options.active) patch.isActive = true;
   if (options.inactive) patch.isActive = false;
+  const mapping = parseIdentityMapping(options);
+  if (mapping !== undefined) patch.identityMapping = mapping;
+  if (options.clearIdentity) patch.identityMapping = null;
 
   const session = await loadSession(options.profile, deps);
   const webhook = await updateInboundWebhook(session, id, patch);
@@ -351,7 +412,7 @@ export async function webhookSecretGet(
   }
 }
 
-export interface WebhookCreateOptions {
+export interface WebhookCreateOptions extends IdentityFlags {
   /** Required: a state-changing command never falls back to the active profile (CLAUDE.md). */
   profile: string;
   name: string;
@@ -482,6 +543,7 @@ export async function webhookCreate(
 ): Promise<void> {
   const allowedRoleIds = parseRoleIds(options.roles);
   const slug = resolveSlug(options);
+  const identityMapping = parseIdentityMapping(options);
   const schema = await readCheckedSchema(schemaPath, deps);
 
   const session = await loadSession(options.profile, deps);
@@ -494,6 +556,7 @@ export async function webhookCreate(
     allowedRoleIds,
   };
   if (options.acceptOrigin.length > 0) body.acceptedOrigins = options.acceptOrigin;
+  if (identityMapping !== undefined) body.identityMapping = identityMapping;
   // Get the encryption key before MCID issues a secret it will never show again.
   await deps.keys.keyForWrite();
   const created = await createInboundWebhook(session, body);

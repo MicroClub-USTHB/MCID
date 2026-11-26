@@ -8,10 +8,12 @@ import { CliError, ExitCode } from './errors.js';
 import { fixedKeys } from './test-support/keys.js';
 import {
   maskSecret,
+  parseIdentityMapping,
   slugFromName,
   webhookCreate,
   webhookRotateSecret,
   webhookSecretGet,
+  webhookUpdate,
   type WebhookDeps,
 } from './webhook-flow.js';
 
@@ -302,5 +304,87 @@ describe('webhookSecretGet', () => {
       deps(await twoSecrets(keys), keys, []),
     ).catch((e: unknown) => e);
     expect((err as CliError).exitCode).toBe(ExitCode.NotFound);
+  });
+});
+
+describe('parseIdentityMapping', () => {
+  it('returns undefined when no identity flag is given', () => {
+    expect(parseIdentityMapping({})).toBeUndefined();
+  });
+
+  it('builds the mapping from the three flags', () => {
+    expect(
+      parseIdentityMapping({
+        identityProvider: 'GitHub',
+        identityMemberField: ' profile.discordId ',
+        identityHandleField: 'profile.github',
+      }),
+    ).toEqual({
+      provider: 'github',
+      memberIdField: 'profile.discordId',
+      handleField: 'profile.github',
+    });
+  });
+
+  it('refuses a half-specified mapping', () => {
+    expect(() => parseIdentityMapping({ identityProvider: 'github' })).toThrow(/pass all three/);
+    expect(() =>
+      parseIdentityMapping({ identityMemberField: 'a.b', identityHandleField: 'a.c' }),
+    ).toThrow(/pass all three/);
+  });
+
+  it('refuses an unknown provider and empty paths', () => {
+    expect(() =>
+      parseIdentityMapping({
+        identityProvider: 'gitlab',
+        identityMemberField: 'a.b',
+        identityHandleField: 'a.c',
+      }),
+    ).toThrow(/must be one of: github/);
+    expect(() =>
+      parseIdentityMapping({
+        identityProvider: 'github',
+        identityMemberField: ' ',
+        identityHandleField: 'a.c',
+      }),
+    ).toThrow(/cannot be empty/);
+  });
+});
+
+describe('webhookUpdate identity flags', () => {
+  const deps = {
+    configPath: '/nonexistent/config.json',
+    keys: fixedKeys(),
+    out: () => {},
+    info: () => {},
+    isInteractive: false,
+    ask: async () => '',
+  } as WebhookDeps;
+
+  it('refuses --clear-identity together with the --identity-* flags, before any network call', async () => {
+    const err = await webhookUpdate(
+      'wh-1',
+      {
+        profile: 'prod',
+        clearIdentity: true,
+        identityProvider: 'github',
+        identityMemberField: 'a.b',
+        identityHandleField: 'a.c',
+      },
+      deps,
+    ).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(CliError);
+    expect((err as CliError).exitCode).toBe(ExitCode.PrecheckFailed);
+  });
+
+  it('counts the identity flags as something to update', async () => {
+    const err = await webhookUpdate('wh-1', { profile: 'prod' }, deps).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect((err as CliError).message).toMatch(/--identity-\* flags/);
   });
 });

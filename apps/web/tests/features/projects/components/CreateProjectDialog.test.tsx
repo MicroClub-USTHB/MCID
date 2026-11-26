@@ -106,6 +106,39 @@ describe('CreateProjectDialog', () => {
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
   });
 
+  it('lets the redirect URI step be skipped without calling the backend', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const onOpenChange = vi.fn();
+    const patchSpy = vi.fn();
+    server.use(
+      http.get(`${API_URL}/servers`, () => HttpResponse.json(servers)),
+      http.post(`${API_URL}/admin/projects`, () =>
+        HttpResponse.json({ apiKey: 'mcid_live_key', project: projectDto })
+      ),
+      http.patch(`${API_URL}/admin/projects/:id/redirect-uri`, async ({ request }) => {
+        patchSpy(await request.json());
+        return HttpResponse.json({ projectId: 'proj_1', redirectUri: '' });
+      })
+    );
+
+    render(<CreateProjectDialog open onOpenChange={onOpenChange} />, { wrapper });
+
+    await userEvent.type(screen.getByLabelText('Project name'), 'Bot One');
+    await waitFor(() => screen.getByRole('checkbox', { name: 'Grant access to Main' }));
+    await userEvent.click(screen.getByRole('button', { name: /create project/i }));
+
+    await screen.findByText(/this is the only time/i);
+    await userEvent.click(screen.getByRole('button', { name: /i've saved the key/i }));
+
+    await userEvent.click(await screen.findByRole('button', { name: /skip for now/i }));
+
+    await waitFor(() => {
+      expect(push).toHaveBeenCalledWith('/dashboard/projects/proj_1');
+    });
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(patchSpy).not.toHaveBeenCalled();
+  });
+
   it('rejects an invalid redirect URI before hitting the backend', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const onOpenChange = vi.fn();

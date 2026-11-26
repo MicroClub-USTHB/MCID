@@ -37,6 +37,12 @@ Prefer `X-API-Key`. The query form is accepted by the guard, but most endpoints 
 
 Send the key from your backend only. It must never reach a browser. Browsers use the member's session token or the SSO cookie, as described in [Login with Micro Club](/docs/integrate/sso). Cross-origin browser calls can carry the `X-API-Key` header, but that does not make it safe to ship the key to one.
 
+## A key without a redirect URI
+
+The admin panel creates a project in two steps: the project and its key, then a redirect URI. The second step is optional (**Skip for now**). A project that only calls the API with its key, for example a server-side read such as `GET /api/identities`, never signs members in, so it has no use for a redirect URI.
+
+A project with no redirect URI works for every key-authenticated call. The login endpoints (`/auth/authorize`, `/auth/sso/authorize`) answer `invalid_redirect_uri` for it, so no member can sign in through that project until an admin adds an address with `PATCH /admin/projects/:id/redirect-uri`.
+
 ## Rotate and revoke
 
 An admin can act on a key in the admin panel:

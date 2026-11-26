@@ -98,6 +98,14 @@ function CreateProjectDialog({
     );
   }
 
+  // No redirect URI: the project works with its API key only. It can add one
+  // later; until then `/auth/authorize` (OAuth login) refuses it.
+  function handleSkipRedirect() {
+    if (!projectId) return;
+    onOpenChange(false);
+    router.push(`/dashboard/projects/${projectId}`);
+  }
+
   const createError = getMutationError(createMutation);
   const redirectError = getMutationError(redirectMutation);
 
@@ -109,7 +117,7 @@ function CreateProjectDialog({
             <>
               <McDialogTitle>Create project</McDialogTitle>
               <McDialogDescription>
-                Step 1 of 2 — create the project first, then set its redirect URI.
+                Step 1 of 2 — create the project first, then (optionally) set its redirect URI.
               </McDialogDescription>
             </>
           )}
@@ -118,13 +126,18 @@ function CreateProjectDialog({
               <McDialogTitle>
                 {createdWebhook ? 'Credentials generated' : 'API key created'}
               </McDialogTitle>
-              <McDialogDescription>You&apos;ll set the redirect URI next.</McDialogDescription>
+              <McDialogDescription>
+                You can set the redirect URI next, or skip it.
+              </McDialogDescription>
             </>
           )}
           {step === 'redirect-uri' && (
             <>
               <McDialogTitle>Set redirect URI</McDialogTitle>
-              <McDialogDescription>Step 2 of 2 — done after this.</McDialogDescription>
+              <McDialogDescription>
+                Step 2 of 2 — optional. Only needed to sign users in with MCID (OAuth). Skip it for
+                a project that only calls the API with its key.
+              </McDialogDescription>
             </>
           )}
         </McDialogHeader>
@@ -158,6 +171,7 @@ function CreateProjectDialog({
             <RedirectUriStep
               projectId={projectId}
               onSubmit={handleFinishRedirect}
+              onSkip={handleSkipRedirect}
               isSubmitting={redirectMutation.isPending}
             />
           </>

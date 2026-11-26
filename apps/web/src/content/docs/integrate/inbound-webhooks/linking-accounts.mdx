@@ -28,6 +28,16 @@ Add `identityMapping` when you create or update the webhook. It names the payloa
 
 A path addresses the stored payload. A stepped schema uses `step.field`, a flat one uses `field`. Send `null` on update to remove the mapping.
 
+From the terminal, pass the same three values to [mcid-cli](/docs/cli/webhooks) when you create or update the webhook:
+
+```bash
+mcid-cli webhook update github-link \
+  --identity-provider github \
+  --identity-member-field profile.discordId \
+  --identity-handle-field profile.github --profile prod
+mcid-cli webhook update github-link --clear-identity --profile prod
+```
+
 ## What happens on a submission
 
 MCID checks the link before it stores anything, so the caller sees the reason and nothing is half saved.
