@@ -306,6 +306,25 @@ describe('access roles grid', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('No role has an admin access grant yet.');
   });
+
+  it('says no non-root role has a grant when only a root role has access', async () => {
+    const result = await runCli(['access', 'roles'], {
+      routes: baseRoutes({
+        'GET /admin/access/roles': () =>
+          json([
+            { ...adminRole, grants: {} },
+            { id: '2', name: 'Executive', root: true, grants: {} },
+          ]),
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('(root)');
+    expect(result.stdout).toContain(
+      'No non-root role has an admin access grant yet. Root roles hold manage on every resource.',
+    );
+    expect(result.stdout).not.toContain('No role has an admin access grant yet.');
+  });
 });
 
 describe('access help', () => {

@@ -147,6 +147,17 @@ export function buildRoleGrid(
   return { resources, rows };
 }
 
+/**
+ * Shown when the grid has no resource columns. Columns come only from
+ * non-root grants, so with a root role listed "No role has a grant" would be
+ * wrong: a root role holds manage on every resource.
+ */
+export function emptyRoleGridMessage(roles: Array<{ root: boolean }>): string {
+  return roles.some((role) => role.root)
+    ? 'No non-root role has an admin access grant yet. Root roles hold manage on every resource.'
+    : 'No role has an admin access grant yet.';
+}
+
 /** `override set by @alice 2d ago`, with whatever parts the API sent. */
 export function describeOverrideSource(source: OverrideSource): string {
   let text = 'override';
@@ -312,7 +323,7 @@ export function registerAccessCommand(program: Command): void {
           data: grid.rows,
         });
         if (grid.resources.length === 0) {
-          process.stdout.write(colors.dim('\nNo role has an admin access grant yet.\n'));
+          process.stdout.write(colors.dim(`\n${emptyRoleGridMessage(roles)}\n`));
         }
       } catch (err) {
         exitWithError('access roles', err);
