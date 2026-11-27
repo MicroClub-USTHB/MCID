@@ -202,6 +202,12 @@ export function registerProjectCommand(program: Command): void {
         json?: boolean;
       }) => {
         try {
+          if (options.json && !options.reveal) {
+            throw new CliError(
+              'Project creation with --json requires --reveal: the API key is returned only once',
+              ExitCode.Usage,
+            );
+          }
           const client = await getClient(options.profile);
 
           let name = options.name;
@@ -252,8 +258,8 @@ export function registerProjectCommand(program: Command): void {
           }
 
           const commaUris = redirectUris ? redirectUris.join(',') : undefined;
-          let redirectUriError: string | undefined;
-          const grantErrors: string[] = [];
+          let redirectUriError = false;
+          let grantErrors = 0;
           // The API returns `{ apiKey, project }`, not a flattened project.
           const res = normalizeCreatedProject<ProjectRecord>(
             await client.post('/admin/projects', {
@@ -268,8 +274,9 @@ export function registerProjectCommand(program: Command): void {
               await client.patch(`/admin/projects/${project.id}/redirect-uri`, {
                 redirectUri: commaUris,
               });
-            } catch (err) {
-              redirectUriError = err instanceof Error ? err.message : String(err);
+            } catch {
+              // Server-provided error text can contain credentials or other private data.
+              redirectUriError = true;
             }
             if (!redirectUriError) project.redirectUri = commaUris;
           }
@@ -277,44 +284,44 @@ export function registerProjectCommand(program: Command): void {
           for (const server of grantServers) {
             try {
               await client.put(`/admin/projects/${project.id}/servers/${server.id}`, { scopes });
-            } catch (err) {
-              grantErrors.push(
-                `${server.name}: ${err instanceof Error ? err.message : String(err)}`,
-              );
+            } catch {
+              grantErrors++;
             }
           }
 
           if (options.json) {
-            // The key is unrecoverable after this; masking it here would lose
-            // the only copy, so --json always includes it in full.
+            // Output the one-time key even when later setup or file writing fails.
             printJson(res, true);
-            return;
+          } else {
+            printSuccess(
+              `Project "${colors.bold(project.name)}" created (id: ${project.id})`,
+              `mcid-cli project key show ${project.id}`,
+            );
           }
 
-          printSuccess(
-            `Project "${colors.bold(project.name)}" created (id: ${project.id})`,
-            `mcid-cli project key show ${project.id}`,
-          );
-
-          for (const grantError of grantErrors) {
+          if (grantErrors > 0) {
             process.stderr.write(
-              `${colors.red('!')} Project was created, but granting server access failed: ${grantError}\n` +
-                `  hint: retry with \`mcid-cli project access grant ${project.id} <server> --scope ${scopes.join(' ')}\`\n`,
+              `${colors.red('!')} Project was created, but granting server access failed for ${grantErrors} server(s).\n` +
+                `  hint: check the project access list and retry with \`mcid-cli project access grant ${project.id} <server> --scope ${scopes.join(' ')}\`\n`,
             );
           }
 
           if (redirectUriError) {
             process.stderr.write(
-              `${colors.red('!')} Project was created, but redirect URI setup failed: ${redirectUriError}\n` +
+              `${colors.red('!')} Project was created, but redirect URI setup failed.\n` +
                 `  hint: save the API key below, then retry with \`mcid-cli project redirect-uri add ${project.id} <url>\`\n`,
             );
           }
 
-          process.stdout.write('\n');
-          process.stdout.write(
-            `${colors.bold('API Key')} (save this now; it will not be shown again):\n`,
-          );
-          process.stdout.write(`  ${colors.green(res.apiKey)}\n\n`);
+          if (grantErrors > 0 || redirectUriError) process.exitCode = ExitCode.Rejected;
+
+          if (!options.json) {
+            process.stdout.write('\n');
+            process.stdout.write(
+              `${colors.bold('API Key')} (save this now; it will not be shown again):\n`,
+            );
+            process.stdout.write(`  ${colors.green(res.apiKey)}\n\n`);
+          }
 
           const primaryUri =
             redirectUris && redirectUris[0] ? redirectUris[0] : 'http://localhost:3000/callback';
@@ -346,8 +353,8 @@ export function registerProjectCommand(program: Command): void {
                 ? `${existing.trimEnd()}\n\n${envBlock}\n`
                 : `${envBlock}\n`;
             await writeFile(options.envOut, newContent, { encoding: 'utf8', mode: 0o600 });
-            printSuccess(`Saved environment configuration to ${options.envOut}`);
-          } else {
+            if (!options.json) printSuccess(`Saved environment configuration to ${options.envOut}`);
+          } else if (!options.json) {
             process.stdout.write(`${colors.dim('.env configuration block:')}\n`);
             process.stdout.write(`${envBlock}\n`);
           }
