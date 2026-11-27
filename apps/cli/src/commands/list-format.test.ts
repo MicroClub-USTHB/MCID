@@ -34,6 +34,7 @@ describe('list output validation', () => {
     ['member', 'list'],
     ['sync', 'logs'],
     ['webhook', 'list'],
+    ['audit', 'list'],
     ['discord-webhook', 'list', '--project', 'Portal'],
   ])('rejects an unknown output format for %s %s', async (...command) => {
     const result = await runCli([...command, '-o', 'xml']);
@@ -49,6 +50,7 @@ describe('list format conflicts', () => {
     ['member', 'list'],
     ['sync', 'logs'],
     ['webhook', 'list'],
+    ['audit', 'list'],
     ['discord-webhook', 'list', '--project', 'Portal'],
   ])('rejects conflicting JSON and CSV flags for %s %s', async (...command) => {
     const result = await runCli([...command, '--json', '-o', 'csv']);

@@ -286,6 +286,7 @@ export function registerOpsCommand(program: Command): void {
           ListOutputFlags,
       ) => {
         try {
+          const format = listOutputFormat(options);
           const client = await getClient(options.profile);
 
           const filters = await auditFilters(client, options);
@@ -306,7 +307,6 @@ export function registerOpsCommand(program: Command): void {
           };
 
           const allLogs = await fetchLogs();
-          const format = listOutputFormat(options);
           const logs = pageRows(allLogs, options);
 
           if (format === 'json' && !options.follow) {
