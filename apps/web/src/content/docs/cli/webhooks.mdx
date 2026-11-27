@@ -24,6 +24,22 @@ mcid-cli webhook rotate-secret contact-form --profile prod
 later without anyone pasting secrets around. The secret is printed in plain text only
 with `--reveal`.
 
+## Link accounts from submissions
+
+A webhook can record an account a member holds elsewhere, such as their GitHub username
+([linking accounts](/docs/integrate/inbound-webhooks/linking-accounts)). Name the payload field that
+holds the member id and the one that holds the username; pass all three flags together:
+
+```bash
+mcid-cli webhook create ./schema.json --name "GitHub link" --roles 123456789012345678 \
+  --identity-provider github \
+  --identity-member-field profile.discordId \
+  --identity-handle-field profile.github --profile prod
+mcid-cli webhook update github-link --identity-provider github \
+  --identity-member-field profile.discordId --identity-handle-field profile.github --profile prod
+mcid-cli webhook update github-link --clear-identity --profile prod
+```
+
 ## Submissions
 
 ```bash

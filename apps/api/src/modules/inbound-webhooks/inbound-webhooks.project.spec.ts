@@ -29,6 +29,7 @@ describe('InboundWebhooksService project update and rotation', () => {
             : fallback,
       } as never,
       {} as never,
+      { assertLinkable: jest.fn(), link: jest.fn() } as never,
     );
   });
 

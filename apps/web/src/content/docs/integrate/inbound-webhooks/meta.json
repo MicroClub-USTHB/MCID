@@ -6,6 +6,7 @@
     "schemas",
     "signing-and-sending",
     "reading-submissions",
+    "linking-accounts",
     "errors-and-limits"
   ]
 }

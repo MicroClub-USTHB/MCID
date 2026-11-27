@@ -1,0 +1,62 @@
+---
+title: 'Inbound webhooks: linking accounts'
+description: 'Turn a submitted username into a member account link, and read the links back by Discord role.'
+---
+
+A webhook can do more than store what it receives. With an **identity mapping**, each accepted submission also records an account that a member holds on another service, such as their GitHub username. A project can then ask MCID which members linked an account and which Discord roles they hold, for example to build a department leaderboard.
+
+## Where the links are stored
+
+Links live in their own table, `member_identities`, not on the member. Only members who link an account have a row. Each row holds the member, a provider, and the username on that provider.
+
+- A member has at most one account per provider.
+- An account can be linked to only one member.
+- `github` is the only provider today. A new provider is one entry in `identity-providers.ts`, with no schema change.
+- A link made through a webhook is taken on trust. `verified_at` stays empty, which leaves room for a proof step later.
+
+## Setting the mapping
+
+Add `identityMapping` when you create or update the webhook. It names the payload field that holds the member id and the one that holds the username.
+
+```json
+{
+  "provider": "github",
+  "memberIdField": "profile.discordId",
+  "handleField": "profile.github"
+}
+```
+
+A path addresses the stored payload. A stepped schema uses `step.field`, a flat one uses `field`. Send `null` on update to remove the mapping.
+
+From the terminal, pass the same three values to [mcid-cli](/docs/cli/webhooks) when you create or update the webhook:
+
+```bash
+mcid-cli webhook update github-link \
+  --identity-provider github \
+  --identity-member-field profile.discordId \
+  --identity-handle-field profile.github --profile prod
+mcid-cli webhook update github-link --clear-identity --profile prod
+```
+
+## What happens on a submission
+
+MCID checks the link before it stores anything, so the caller sees the reason and nothing is half saved.
+
+- A missing field, or a username that is not valid for the provider, is refused with a 400 or a 422.
+- A member id that does not exist is a 404.
+- A username already linked to another member is a 409.
+- Otherwise the submission is stored and the link is saved. Submitting again replaces the member's username for that provider.
+
+The mapping is applied whether the submission comes in one request or from a draft that is submitted at the end.
+
+## Reading the links
+
+Your project reads them with its API key.
+
+```bash
+GET /api/identities?provider=github&roleIds=123456789012345678,234567890123456789
+```
+
+`roleIds` is optional. When it is set, only members who hold at least one of those Discord roles are returned. Each entry has the member id, the username, and whether the link is verified. For the exact fields, see [Identities](/docs/api-reference/project/identities).
+
+Source: `apps/api/src/modules/identities/identities.service.ts`, `apps/api/src/modules/identities/identities.controller.ts`, `apps/api/src/modules/identities/identity-providers.ts`, `apps/api/src/modules/inbound-webhooks/identity-mapping.ts`, `apps/api/src/modules/inbound-webhooks/inbound-webhooks.service.ts`, `apps/api/src/database/entities/member-identity.entity.ts`.

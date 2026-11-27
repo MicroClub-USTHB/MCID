@@ -9,7 +9,7 @@ These endpoints are for the backends and browsers of Micro Club projects. A back
 
 The endpoints the admin dashboard uses are in the [Admin API](/docs/api-reference/admin/overview).
 
-49 endpoints in 10 groups.
+50 endpoints in 11 groups.
 
 ## Authentication
 
@@ -45,6 +45,12 @@ The endpoints the admin dashboard uses are in the [Admin API](/docs/api-referenc
 | `POST` | `/api/servers/{serverId}/channels/{channelId}/invites` | [Create a channel invite](/docs/api-reference/project/channels#create-a-channel-invite) |
 | `GET` | `/api/servers/{serverId}/channels/{channelId}/messages` | [Get recent messages from a channel](/docs/api-reference/project/channels#get-recent-messages-from-a-channel) |
 | `POST` | `/api/servers/{serverId}/channels/{channelId}/messages` | [Send a message to a Discord channel](/docs/api-reference/project/channels#send-a-message-to-a-discord-channel) |
+
+## Identities
+
+| Method | Path | Summary |
+| --- | --- | --- |
+| `GET` | `/api/identities` | [List linked accounts for a provider](/docs/api-reference/project/identities#list-linked-accounts-for-a-provider) |
 
 ## Inbound Webhooks (Ingest)
 

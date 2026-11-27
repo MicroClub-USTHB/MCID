@@ -1,6 +1,6 @@
 {
   "name": "mcid-cli",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "The MCID command-line client: authenticate with Discord, manage projects, servers, members, sync, and inbound webhooks from the terminal",
   "keywords": [
     "mcid",

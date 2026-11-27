@@ -385,11 +385,23 @@ export async function getInboundWebhook(session: Session, id: string): Promise<I
   );
 }
 
+/**
+ * `IdentityMappingDto`: links an account from each accepted submission. The member comes from
+ * `memberIdField` and the username from `handleField` (payload paths, `step.field` for a stepped schema).
+ */
+export interface IdentityMapping {
+  provider: 'github';
+  memberIdField: string;
+  handleField: string;
+}
+
 /** The `UpdateInboundWebhookDto` fields mcid-cli sends; only the ones being changed are included. */
 export interface InboundWebhookPatch {
   name?: string;
   schema?: Record<string, unknown>;
   isActive?: boolean;
+  /** `null` removes the mapping. */
+  identityMapping?: IdentityMapping | null;
 }
 
 /** PATCH /admin/inbound-webhooks/:id → the updated webhook (400 → exit 2, 404 → exit 4). */
@@ -440,6 +452,7 @@ export interface CreateInboundWebhookBody {
   schema: Record<string, unknown>;
   allowedRoleIds: string[];
   acceptedOrigins?: string[];
+  identityMapping?: IdentityMapping;
 }
 
 /** MCID's `CreateInboundWebhookResult`; `signingSecret` is returned this once and never again. */

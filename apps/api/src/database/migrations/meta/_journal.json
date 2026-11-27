@@ -113,6 +113,13 @@
       "when": 1794985300000,
       "tag": "0015_project_scheduled_events",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1795476711851,
+      "tag": "0016_member_identities",
+      "breakpoints": true
     }
   ]
 }

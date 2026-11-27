@@ -12,6 +12,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { projects } from './project.entity';
 import type { FormSchema } from '@mcid/form-schema';
+import type { IdentityMapping } from '../../modules/inbound-webhooks/identity-mapping';
 
 /**
  * An MCID-owned HTTP endpoint that ACCEPTS structured submissions from an
@@ -51,6 +52,11 @@ export const inboundWebhooks = pgTable(
     allowRoleInheritance: boolean('allow_role_inheritance')
       .default(false)
       .notNull(),
+    /**
+     * Optional: copy a field of each accepted submission into
+     * `member_identities` (e.g. a submitted GitHub username).
+     */
+    identityMapping: jsonb('identity_mapping').$type<IdentityMapping>(),
     isActive: boolean('is_active').default(true).notNull(),
     submissionCount: integer('submission_count').default(0).notNull(),
     lastSubmissionAt: timestamp('last_submission_at', { withTimezone: true }),

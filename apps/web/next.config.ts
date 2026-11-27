@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { NextConfig } from 'next';
 import { createMDX } from 'fumadocs-mdx/next';
 
@@ -7,6 +8,10 @@ const withMDX = createMDX();
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Self-contained server in .next/standalone for the Docker image (apps/web/Dockerfile).
+  output: 'standalone',
+  // Trace from the monorepo root so workspace packages and pnpm's hoisted store are included.
+  outputFileTracingRoot: path.join(__dirname, '../..'),
   reactStrictMode: true,
   turbopack: {
     // The generated collection; its types live in src/features/docs/collections.d.ts.

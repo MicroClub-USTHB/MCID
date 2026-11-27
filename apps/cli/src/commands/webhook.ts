@@ -59,6 +59,15 @@ export function registerWebhookCommand(program: Command): void {
     .option('--accept-origin <origin>', 'accepted origin (repeatable)', collect, [])
     .option('--slug <slug>', 'URL-safe id, unique in the project (default: derived from --name)')
     .option('--reveal', 'print the signing secret in plain text')
+    .option('--identity-provider <provider>', 'link an account from each submission (github)')
+    .option(
+      '--identity-member-field <path>',
+      'payload path of the Discord member id, e.g. profile.discordId',
+    )
+    .option(
+      '--identity-handle-field <path>',
+      'payload path of the username on the provider, e.g. profile.github',
+    )
     .requiredOption('--profile <name>', 'profile to create on')
     .action(async (schemaPath: string, options: WebhookCreateOptions) => {
       try {
@@ -80,6 +89,16 @@ export function registerWebhookCommand(program: Command): void {
     .option('--name <name>', 'new display name')
     .option('--active', 'mark the webhook active')
     .option('--inactive', 'mark the webhook inactive')
+    .option('--identity-provider <provider>', 'link an account from each submission (github)')
+    .option(
+      '--identity-member-field <path>',
+      'payload path of the Discord member id, e.g. profile.discordId',
+    )
+    .option(
+      '--identity-handle-field <path>',
+      'payload path of the username on the provider, e.g. profile.github',
+    )
+    .option('--clear-identity', 'remove the identity mapping')
     .requiredOption('--profile <name>', 'profile to update on')
     .action(async (idOrSlug: string, options: WebhookUpdateOptions) => {
       try {

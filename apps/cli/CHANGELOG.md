@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-26
+
 ### Added
 
+- `webhook create` and `webhook update` take `--identity-provider`, `--identity-member-field` and `--identity-handle-field` to link an account from each submission (all three together), and `webhook update --clear-identity` removes the mapping.
 - `--limit`, `--page` and `--all` (30 rows by default) on `project list`, `server list`, `role list`, `sync logs`, `webhook list` and `discord-webhook list`; `-q` and `--json` on the lists that lacked them.
 - `project create --server <server...> [--scope ...]` grants server access, and the wizard offers the main server.
 - `sync run --wait` prints member deltas (`+N, -M`) and exits with code `6` on timeout.
@@ -117,5 +120,6 @@ First release. The CLI covers MCID Inbound Webhooks: logging in as an admin, wri
 - The login callback is checked against the OAuth state, and control characters are stripped from printed errors.
 - Config writes are locked so parallel commands cannot lose secrets, and a profile that holds signing secrets cannot be pointed at another MCID.
 
-[Unreleased]: https://github.com/MicroClub-USTHB/MCID/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/MicroClub-USTHB/MCID/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/MicroClub-USTHB/MCID/releases/tag/v1.1.0
 [0.1.0]: https://github.com/MicroClub-USTHB/MCID/releases/tag/v0.1.0

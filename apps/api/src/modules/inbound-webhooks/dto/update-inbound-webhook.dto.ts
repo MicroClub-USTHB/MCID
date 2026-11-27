@@ -8,6 +8,9 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ValidateNested } from 'class-validator';
+import { IdentityMappingDto } from './create-inbound-webhook.dto';
 
 export class UpdateInboundWebhookDto {
   @ApiPropertyOptional()
@@ -53,4 +56,14 @@ export class UpdateInboundWebhookDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Set the identity mapping, or send null to remove it.',
+    type: IdentityMappingDto,
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => IdentityMappingDto)
+  identityMapping?: IdentityMappingDto | null;
 }
