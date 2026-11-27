@@ -323,6 +323,31 @@ describeIf('/api/admin/access and level enforcement (e2e)', () => {
     ]);
   });
 
+  it('says who set an override and when in the effective access', async () => {
+    await http()
+      .put(`/api/admin/access/members/${dev.memberId}`)
+      .set('Authorization', as(root.bearerToken))
+      .send({ grants: { settings: 'read' } })
+      .expect(200);
+
+    const res = await http()
+      .get(`/api/admin/access/members/${dev.memberId}/effective`)
+      .set('Authorization', as(root.bearerToken))
+      .expect(200);
+
+    expect(res.body.access.settings).toEqual({
+      level: 'read',
+      source: {
+        type: 'override',
+        setBy: { memberId: root.memberId, username: 'testadmin' },
+        setAt: expect.any(String),
+      },
+    });
+    expect(
+      Number.isNaN(Date.parse(res.body.access.settings.source.setAt)),
+    ).toBe(false);
+  });
+
   it('returns the member profile with the effective access, and 404 for an unknown member', async () => {
     const res = await http()
       .get(`/api/admin/access/members/${dev.memberId}/effective`)

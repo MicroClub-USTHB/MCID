@@ -15,6 +15,7 @@ import {
   type AccessResource,
   type GrantLevel,
 } from '../../common/permissions/catalog';
+import type { EffectiveAccess } from '../../common/permissions/resolve-access';
 import type { ClientInfo } from '../../common/utils/client-info.util';
 import { AuditService } from '../audit/audit.service';
 import { PermissionCacheService } from '../permissions/permission-cache.service';
@@ -198,8 +199,49 @@ export class AdminAccessGrantsService {
         profile.displayName ?? profile.globalName ?? profile.username,
       avatar: profile.avatar,
       root,
-      access,
+      access: root ? access : await this.withOverrideAuthors(memberId, access),
     };
+  }
+
+  /**
+   * Adds who set each override and when to its source, so `access explain`
+   * can say "override set by @alice 2d ago". The cached effective access
+   * stays lean; this is read only for the explain view.
+   */
+  private async withOverrideAuthors(memberId: string, access: EffectiveAccess) {
+    const hasOverride = Object.values(access).some(
+      (entry) => entry.source.type === 'override',
+    );
+    if (!hasOverride) return access;
+
+    const authors = new Map(
+      (await this.repository.findMemberOverrideAuthors(memberId)).map((a) => [
+        a.resource,
+        a,
+      ]),
+    );
+    return Object.fromEntries(
+      Object.entries(access).map(([resource, entry]) => {
+        const author =
+          entry.source.type === 'override'
+            ? authors.get(resource as AccessResource)
+            : undefined;
+        if (!author) return [resource, entry];
+        return [
+          resource,
+          {
+            ...entry,
+            source: {
+              type: 'override' as const,
+              setBy: author.setById
+                ? { memberId: author.setById, username: author.setByUsername }
+                : null,
+              setAt: author.setAt.toISOString(),
+            },
+          },
+        ];
+      }),
+    );
   }
 
   /**

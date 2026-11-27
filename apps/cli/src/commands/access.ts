@@ -10,7 +10,7 @@ import {
   normalizeAccessRoles,
 } from '../lib/api-normalize.js';
 import { ApiClient } from '../lib/client.js';
-import { printJson, printKeyValue, printSuccess, printTable } from '../lib/output.js';
+import { formatAge, printJson, printKeyValue, printSuccess, printTable } from '../lib/output.js';
 import { didYouMean, resolveMember } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
 import { resolveSession } from '../session.js';
@@ -98,9 +98,65 @@ interface EffectiveAccessResponse {
         type: 'root' | 'override' | 'role';
         roleId?: string;
         roleName?: string;
+        /** Override only: the admin who last set it, null when unknown. */
+        setBy?: { memberId: string; username: string | null } | null;
+        /** Override only: ISO time it was last set. */
+        setAt?: string;
       };
     }
   >;
+}
+
+type OverrideSource = NonNullable<EffectiveAccessResponse['access'][string]['source']>;
+
+/** A level, coloured by strength; `none` is a dim dash so grants stand out. */
+function formatLevel(level: string): string {
+  if (level === 'manage') return colors.magenta('manage');
+  if (level === 'write') return colors.green('write');
+  if (level === 'read') return colors.cyan('read');
+  return colors.dim('-');
+}
+
+/**
+ * `access roles` as a role-by-resource grid. Only resources that some
+ * non-root role grants get a column, in catalog order, so the table stays
+ * narrow; a root role holds manage on all of them.
+ */
+export function buildRoleGrid(
+  roles: Array<{ id: string; name: string; root: boolean; grants: Record<string, string> }>,
+): { resources: string[]; rows: Record<string, unknown>[] } {
+  const granted = new Set<string>();
+  for (const role of roles) {
+    if (role.root) continue;
+    for (const [resource, level] of Object.entries(role.grants)) {
+      if (level !== 'none') granted.add(resource);
+    }
+  }
+  const resources = [
+    ...ACCESS_RESOURCES.filter((r) => granted.has(r)),
+    // Resources the API knows but this CLI build does not, at the end
+    ...[...granted].filter((r) => !(ACCESS_RESOURCES as readonly string[]).includes(r)).sort(),
+  ];
+  const rows = roles.map((role) => {
+    const row: Record<string, unknown> = { id: role.id, name: role.name, root: role.root };
+    for (const resource of resources) {
+      row[resource] = role.root ? 'manage' : (role.grants[resource] ?? 'none');
+    }
+    return row;
+  });
+  return { resources, rows };
+}
+
+/** `override set by @alice 2d ago`, with whatever parts the API sent. */
+export function describeOverrideSource(source: OverrideSource): string {
+  let text = 'override';
+  if (source.setBy) {
+    text += ` set by ${source.setBy.username ? `@${source.setBy.username}` : source.setBy.memberId}`;
+  } else if (source.setAt) {
+    text += ' set';
+  }
+  if (source.setAt) text += ` ${formatAge(source.setAt)}`;
+  return text;
 }
 
 export function registerAccessCommand(program: Command): void {
@@ -190,7 +246,7 @@ export function registerAccessCommand(program: Command): void {
               const roleName = info.source.roleName ?? (roleId ? roleNames.get(roleId) : undefined);
               sourceText = `from role "${roleName || roleId || 'role'}"`;
             } else if (info.source.type === 'override') {
-              sourceText = 'member override';
+              sourceText = describeOverrideSource(info.source);
             }
           }
 
@@ -237,25 +293,27 @@ export function registerAccessCommand(program: Command): void {
         }
 
         const roles = normalizeAccessRoles(raw);
+        const grid = buildRoleGrid(roles);
 
         printTable({
           columns: [
-            { header: 'ROLE', key: 'name', format: (v) => colors.bold(String(v)) },
-            { header: 'ROLE ID', key: 'id', format: (v) => colors.dim(String(v)) },
             {
-              header: 'GRANTS',
-              format: (_, r) => {
-                const g = r['grants'] as Record<string, string> | undefined;
-                if (!g || Object.keys(g).length === 0) return colors.dim('none');
-                return Object.entries(g)
-                  .filter(([, lvl]) => lvl !== 'none')
-                  .map(([res, lvl]) => `${res}:${lvl}`)
-                  .join(', ');
-              },
+              header: 'ROLE',
+              key: 'name',
+              format: (v, r) =>
+                colors.bold(String(v)) + (r['root'] ? ` ${colors.magenta('(root)')}` : ''),
             },
+            ...grid.resources.map((resource) => ({
+              header: resource.toUpperCase(),
+              key: resource,
+              format: (v: unknown) => formatLevel(String(v)),
+            })),
           ],
-          data: roles as unknown as Record<string, unknown>[],
+          data: grid.rows,
         });
+        if (grid.resources.length === 0) {
+          process.stdout.write(colors.dim('\nNo role has an admin access grant yet.\n'));
+        }
       } catch (err) {
         exitWithError('access roles', err);
       }
