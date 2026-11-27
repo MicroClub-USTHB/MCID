@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Every list command takes `--limit`, `--page`, `--all`, `-q`, `-o table|json|csv` and `--json`, including `profile list`, `audit list` and `webhook submissions`. `config show` accepts `--json`.
+- `pnpm --filter mcid-cli test:bin` tests the built bundle: both bin aliases, `--help`, the getting-started screen and the usage exit code.
+
 ### Changed
+
+- A conflicting output pair (`--json` with `-o csv`, or `-q` with JSON or CSV) or an unknown `-o` value exits with code `64` before any request.
+- `webhook submissions --page` and `--all` page on the API (`--limit` is at most 200), so later pages are no longer empty.
 
 - `access explain` names who set an override and when (`override set by @alice 2d ago`). It needs an API that returns `setBy` and `setAt` on override sources; an older API still shows `override`.
 - `access roles` prints a role by resource grid, with a column for each resource that some role grants. `--json` is unchanged.

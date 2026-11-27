@@ -54,8 +54,10 @@ mcid-cli project list --profile staging
 - **Destructive commands confirm first.** Type the resource name to proceed, or pass
   `--yes`. An aborted confirmation exits with code 2, so scripts never treat a cancel
   as success.
-- **Output formats are uniform.** List commands accept `--json`, `-o csv` and `-q`
-  (ids only) where marked. Errors print one line to stderr and the process exits with
+- **Output formats are uniform.** Every list command accepts `--limit` (30 by
+  default, 100 for `member list`), `--page`, `--all`, `--json`, `-o table|json|csv` and `-q` (IDs only). A
+  conflicting pair such as `--json -o csv` is rejected with exit code 64 before any
+  request. Errors print one line to stderr and the process exits with
   the code the command documents (`2` rejected, `3` auth, `4` not found, `5`
   unexpected, `6` a `--wait` timed out, `64` usage).
 - **`--debug` is global.** It prints request timings, retry hints and error stacks to
