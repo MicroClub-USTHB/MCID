@@ -28,6 +28,7 @@ import {
   type ListPaging,
   pageRows,
 } from '../lib/help.js';
+import { promptIfMissing } from '../lib/prompts.js';
 import { resolveMember, resolveProject, resolveServer } from '../lib/resolver.js';
 import { parseSince } from '../lib/time.js';
 import { colors, formatSparkline } from '../lib/tui.js';
@@ -800,7 +801,7 @@ export function registerOpsCommand(program: Command): void {
     .alias('ls')
     .description('List Discord webhooks for a project')
     .option('-o, --output <format>', 'Output format (table|json|csv)', 'table')
-    .requiredOption('--project <project>', 'Project name or ID')
+    .option('--project <project>', 'Project name or ID (omit to pick interactively)')
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as JSON')
     .option('-q, --quiet', 'Only print webhook IDs')
@@ -820,7 +821,18 @@ export function registerOpsCommand(program: Command): void {
         try {
           const format = listOutputFormat(options);
           const client = await getClient(options.profile);
-          const resolved = await resolveProject(client, options.project);
+          const projectArg = await promptIfMissing({
+            value: options.project,
+            flag: '--project <project>',
+            message: 'Project',
+            choices: async () => {
+              const projects = await client.get<{ id: string; name: string }[]>('/admin/projects', {
+                resource: 'project',
+              });
+              return projects.map((p) => ({ name: p.name, value: p.id }));
+            },
+          });
+          const resolved = await resolveProject(client, String(projectArg));
           // The endpoint returns {webhooks, total, limit, offset}; page until done.
           const pageSize = 100;
           const allWebhooks: Record<string, unknown>[] = [];

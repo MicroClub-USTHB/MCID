@@ -235,3 +235,52 @@ export async function promptConfirm(options: PromptConfirmOptions): Promise<bool
   const lower = raw.trim().toLowerCase();
   return lower === 'y' || lower === 'yes';
 }
+
+export interface PromptIfMissingDeps {
+  input: (options: PromptInputOptions) => Promise<string>;
+  select: <T>(options: PromptSelectOptions<T>) => Promise<T>;
+}
+
+const defaultPromptDeps: PromptIfMissingDeps = { input: promptInput, select: promptSelect };
+
+export interface PromptIfMissingOptions<T = string> {
+  /** The supplied argument, or undefined/empty when it was omitted. */
+  value: string | undefined;
+  /** Flag shown in the non-TTY usage error, e.g. `--project <project>`. */
+  flag: string;
+  message: string;
+  /** When given, a searchable picker is used instead of free text. */
+  choices?: SelectChoice<T>[] | (() => Promise<SelectChoice<T>[]>);
+  /** Injectable for tests; defaults to the real readline prompts. */
+  deps?: PromptIfMissingDeps;
+}
+
+/** Fill in an omitted required argument on a TTY; fail fast with a usage error otherwise. */
+export async function promptIfMissing<T = string>(
+  options: PromptIfMissingOptions<T>,
+): Promise<string | T> {
+  if (options.value !== undefined && options.value.trim() !== '') return options.value;
+
+  if (!process.stdin.isTTY) {
+    throw new CliError(
+      `Missing required argument ${options.flag}; pass it explicitly in a non-interactive terminal`,
+      ExitCode.Usage,
+    );
+  }
+
+  const { input, select } = options.deps ?? defaultPromptDeps;
+  const supplied =
+    typeof options.choices === 'function' ? await options.choices() : options.choices;
+  if (supplied) {
+    if (supplied.length === 0) {
+      throw new CliError(`No choices available for ${options.flag}`, ExitCode.NotFound);
+    }
+    if (supplied.length === 1) return supplied[0]!.value;
+    return select<T>({ message: options.message, choices: supplied });
+  }
+
+  return input({
+    message: options.message,
+    validate: (value) => value.trim().length > 0 || 'a value is required',
+  });
+}

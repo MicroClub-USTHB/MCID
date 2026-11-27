@@ -17,6 +17,7 @@ import {
   printTable,
   toCsv,
 } from '../lib/output.js';
+import { promptIfMissing } from '../lib/prompts.js';
 import { resolveWebhook } from '../lib/resolver.js';
 import { parseSince } from '../lib/time.js';
 import { buildExamplePayload, validatePayload, type FormSchema } from '@mcid/form-schema';
@@ -48,7 +49,7 @@ export function registerWebhookCommand(program: Command): void {
   webhook
     .command('create <schema-path>')
     .description('Create a webhook on MCID from a schema file and store its signing secret')
-    .requiredOption('--name <name>', 'webhook display name')
+    .option('--name <name>', 'webhook display name (omit to type interactively)')
     .option('--project <project>', 'owning MCID project id or name (omit to pick interactively)')
     .requiredOption(
       '--roles <roleIds>',
@@ -69,7 +70,12 @@ export function registerWebhookCommand(program: Command): void {
     .requiredOption('--profile <name>', 'profile to create on')
     .action(async (schemaPath: string, options: WebhookCreateOptions) => {
       try {
-        await webhookCreate(schemaPath, options, defaultWebhookDeps());
+        const name = await promptIfMissing({
+          value: options.name,
+          flag: '--name <name>',
+          message: 'Webhook name',
+        });
+        await webhookCreate(schemaPath, { ...options, name: String(name) }, defaultWebhookDeps());
       } catch (err) {
         exitWithError('webhook create', err);
       }
