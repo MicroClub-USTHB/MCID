@@ -1,25 +1,28 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
 import { Command } from 'commander';
 import { configPath, loadConfig, resolveProfileName } from '../config.js';
 import { defaultKeyProvider, decrypt, webhookSecretContext } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
 import { unwrapArray } from '../lib/api-normalize.js';
-import { ApiClient } from '../lib/client.js';
+import { getClient } from '../lib/client.js';
+import { positiveInt } from '../lib/help.js';
+import { promptIfMissing } from '../lib/prompts.js';
 import { signBody } from '../lib/signature.js';
 import {
   formatAge,
+  listOutputFormat,
   printJson,
+  printQuiet,
   printKeyValue,
   printSuccess,
   printTable,
   toCsv,
+  writeExportFile,
 } from '../lib/output.js';
 import { resolveWebhook } from '../lib/resolver.js';
 import { parseSince } from '../lib/time.js';
 import { buildExamplePayload, validatePayload, type FormSchema } from '@mcid/form-schema';
 import { colors } from '../lib/tui.js';
-import { resolveSession } from '../session.js';
 import {
   defaultWebhookDeps,
   webhookCreate,
@@ -47,7 +50,7 @@ export function registerWebhookCommand(program: Command): void {
   webhook
     .command('create <schema-path>')
     .description('Create a webhook on MCID from a schema file and store its signing secret')
-    .requiredOption('--name <name>', 'webhook display name')
+    .option('--name <name>', 'webhook display name (omit to type interactively)')
     .option('--project <project>', 'owning MCID project id or name (omit to pick interactively)')
     .requiredOption(
       '--roles <roleIds>',
@@ -68,7 +71,12 @@ export function registerWebhookCommand(program: Command): void {
     .requiredOption('--profile <name>', 'profile to create on')
     .action(async (schemaPath: string, options: WebhookCreateOptions) => {
       try {
-        await webhookCreate(schemaPath, options, defaultWebhookDeps());
+        const name = await promptIfMissing({
+          value: options.name,
+          flag: '--name <name>',
+          message: 'Webhook name',
+        });
+        await webhookCreate(schemaPath, { ...options, name: String(name) }, defaultWebhookDeps());
       } catch (err) {
         exitWithError('webhook create', err);
       }
@@ -105,6 +113,7 @@ export function registerWebhookCommand(program: Command): void {
     .command('list')
     .alias('ls')
     .description('List webhooks')
+    .option('-o, --output <format>', 'output format (table|json|csv)', 'table')
     .option('--project <projectId>', 'filter by project id')
     .option('--profile <name>', 'profile to use')
     .option('--json', 'emit machine-readable JSON')
@@ -350,7 +359,10 @@ export function registerWebhookCommand(program: Command): void {
     cmd
       .option('--since <date>', 'Filter submissions since (ISO timestamp or 30m, 24h, 7d)')
       .option('--until <date>', 'Filter submissions until (ISO timestamp or 30m, 24h, 7d)')
-      .option('--limit <n>', 'Maximum submissions to return (default 30)', '30')
+      .option('--limit <n>', 'Rows per page (default 30)', '30')
+      .option('--page <n>', 'Page number (default 1)')
+      .option('--all', 'Show every submission')
+      .option('-q, --quiet', 'Only print submission IDs')
       .option('--columns <cols>', 'Comma-separated columns to display')
       .option('--profile <name>', 'Profile to use')
       .option('--json', 'Output as JSON')
@@ -361,32 +373,57 @@ export function registerWebhookCommand(program: Command): void {
       since?: string;
       until?: string;
       limit: string;
+      page?: string;
+      all?: boolean;
+      quiet?: boolean;
       columns?: string;
       profile?: string;
       json?: boolean;
-      output?: 'table' | 'json' | 'csv';
+      output?: string;
     },
   ): Promise<void> => {
     try {
-      const client = await getClient(options.profile);
-      const resolved = await resolveWebhook(client, webhookArg);
-
-      const params = new URLSearchParams({ limit: options.limit });
+      const outFormat = listOutputFormat(options);
+      const limit = positiveInt(options.limit, 30, '--limit');
+      const pageNumber = positiveInt(options.page, 1, '--page');
+      const start = options.all ? 0 : (pageNumber - 1) * limit;
+      if (!Number.isSafeInteger(start))
+        throw new CliError('Requested page is too large', ExitCode.Usage);
+      const params = new URLSearchParams();
       if (options.since) params.set('dateFrom', parseSince(options.since, '--since'));
       if (options.until) params.set('dateTo', parseSince(options.until, '--until'));
-
-      const raw = await client.get(
-        `/inbound-webhooks/${resolved.id}/submissions?${params.toString()}`,
-      );
-      const flattened = unwrapArray<Record<string, unknown>>(raw, ['submissions', 'data']).map(
-        flattenSubmission,
-      );
-
-      const outFormat = options.json ? 'json' : options.output || 'table';
+      const client = await getClient(options.profile);
+      const resolved = await resolveWebhook(client, webhookArg);
+      const rows: Record<string, unknown>[] = [];
+      for (;;) {
+        const chunkSize = Math.min(200, options.all ? 200 : limit - rows.length);
+        const offset = start + rows.length;
+        params.set('limit', String(chunkSize));
+        params.set('offset', String(offset));
+        const raw = await client.get(
+          `/inbound-webhooks/${resolved.id}/submissions?${params.toString()}`,
+        );
+        const chunk = unwrapArray<Record<string, unknown>>(raw, ['submissions', 'data']);
+        rows.push(...chunk);
+        const total =
+          raw && typeof raw === 'object' && 'total' in raw ? Number(raw.total) : undefined;
+        if (
+          chunk.length === 0 ||
+          chunk.length < chunkSize ||
+          (total !== undefined && Number.isFinite(total) && offset + chunk.length >= total) ||
+          (!options.all && rows.length >= limit)
+        )
+          break;
+      }
       if (outFormat === 'json') {
-        printJson(flattened);
+        printJson(rows);
         return;
       }
+      if (outFormat === 'quiet') {
+        printQuiet(rows.map((row) => String(row.id)));
+        return;
+      }
+      const flattened = rows.map(flattenSubmission);
       if (outFormat === 'csv') {
         const cols = options.columns ? options.columns.split(',') : undefined;
         process.stdout.write(toCsv(flattened, cols));
@@ -487,6 +524,13 @@ export function registerWebhookCommand(program: Command): void {
         },
       ) => {
         try {
+          if (
+            options.output !== undefined &&
+            options.output !== 'csv' &&
+            options.output !== 'json'
+          ) {
+            throw new CliError('--output must be csv or json', ExitCode.Usage);
+          }
           const client = await getClient(options.profile);
           const resolved = await resolveWebhook(client, webhookArg);
           const pageSize = 200;
@@ -504,6 +548,12 @@ export function registerWebhookCommand(program: Command): void {
             if (page.length < pageSize || (total !== undefined && rows.length >= total)) {
               break;
             }
+            if (offset + pageSize >= pageSize * 100) {
+              throw new CliError(
+                'Export would be incomplete: the 20,000 submission safety limit was reached',
+                ExitCode.Rejected,
+              );
+            }
           }
 
           const flattened = rows.map(flattenSubmission);
@@ -513,14 +563,8 @@ export function registerWebhookCommand(program: Command): void {
             options.file ||
             `submissions-${resolved.slug}-${new Date().toISOString().slice(0, 10)}.${format}`;
 
-          if (options.file && !options.force && existsSync(options.file)) {
-            throw new CliError(
-              `File "${options.file}" already exists\n  hint: pass --force to overwrite`,
-              ExitCode.Rejected,
-            );
-          }
-          // Submissions can hold personal information: owner-only mode.
-          await writeFile(target, content, { encoding: 'utf8', mode: 0o600 });
+          // Submissions can hold personal information: use the shared safe writer.
+          await writeExportFile(target, content, options.force);
           printSuccess(`Exported ${flattened.length} submission(s) to ${target}`);
         } catch (err) {
           exitWithError('webhook submissions export', err);
@@ -701,13 +745,6 @@ async function resolveWebhookId(
 ): Promise<string> {
   const client = await getClient(profileFlag);
   return (await resolveWebhook(client, idOrSlug)).id;
-}
-
-async function getClient(profileFlag?: string): Promise<ApiClient> {
-  const config = await loadConfig(configPath());
-  const profileName = resolveProfileName(config, profileFlag);
-  const session = await resolveSession(config, profileName, defaultKeyProvider());
-  return new ApiClient(session);
 }
 
 async function getStoredSigningSecret(

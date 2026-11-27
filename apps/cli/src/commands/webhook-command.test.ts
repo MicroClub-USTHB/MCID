@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { cleanupCliTest, json, runCli } from '../test-support/cli-harness.js';
@@ -29,6 +29,56 @@ describe('webhook settings set', () => {
 });
 
 describe('webhook submissions', () => {
+  it('pages server-side and emits raw JSON records', async () => {
+    const rows = [
+      { id: 'one', data: { name: 'A' } },
+      { id: 'two', data: { name: 'B' }, extra: 7 },
+    ];
+    const result = await runCli(
+      ['webhook', 'submissions', 'list', 'contact-form', '--limit', '1', '--page', '2', '--json'],
+      {
+        routes: baseRoutes({
+          [`GET /inbound-webhooks/${WEBHOOK_ID}/submissions`]: (url) => {
+            const offset = Number(url.searchParams.get('offset'));
+            return json({ submissions: rows.slice(offset, offset + 1), total: rows.length });
+          },
+        }),
+      },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual([rows[1]]);
+    expect(result.requests.find((r) => r.path.endsWith('/submissions'))?.query['offset']).toBe('1');
+  });
+
+  it('follows pages for --all and supports quiet IDs', async () => {
+    const rows = Array.from({ length: 205 }, (_, i) => ({ id: `sub-${i}`, data: {} }));
+    const result = await runCli(['webhook', 'submissions', 'contact-form', '--all', '--quiet'], {
+      routes: baseRoutes({
+        [`GET /inbound-webhooks/${WEBHOOK_ID}/submissions`]: (url) => {
+          const offset = Number(url.searchParams.get('offset'));
+          const limit = Number(url.searchParams.get('limit'));
+          return json({ submissions: rows.slice(offset, offset + limit), total: rows.length });
+        },
+      }),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.trim().split('\n')).toHaveLength(205);
+    expect(result.stdout).toContain('sub-204');
+  });
+
+  it('rejects invalid paging and output flags before requests', async () => {
+    for (const options of [
+      ['--limit', '0'],
+      ['--page', '1.5'],
+      ['-o', 'yaml'],
+      ['--json', '-o', 'csv'],
+    ]) {
+      const result = await runCli(['webhook', 'submissions', 'list', 'contact-form', ...options]);
+      expect(result.exitCode).toBe(64);
+      expect(result.requests).toHaveLength(0);
+    }
+  });
+
   it('converts --since durations to an ISO dateFrom', async () => {
     const result = await runCli(['webhook', 'submissions', 'contact-form', '--since', '24h'], {
       routes: baseRoutes({
@@ -48,6 +98,50 @@ describe('webhook submissions', () => {
 });
 
 describe('webhook submissions export (nested grammar)', () => {
+  it('fails rather than silently exporting an incomplete result at the safety limit', async () => {
+    const target = join(await mkdtemp(join(tmpdir(), 'mcid-export-limit-')), 'subs.csv');
+    const result = await runCli(
+      ['webhook', 'submissions', 'export', 'contact-form', '--file', target],
+      {
+        routes: baseRoutes({
+          [`GET /inbound-webhooks/${WEBHOOK_ID}/submissions`]: (url) => {
+            const offset = Number(url.searchParams.get('offset'));
+            const rows = Array.from({ length: 200 }, (_, i) => ({ id: `${offset + i}`, data: {} }));
+            return json({ submissions: rows, total: 20001 });
+          },
+        }),
+      },
+    );
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain('incomplete');
+    await expect(readFile(target, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('rejects invalid export formats before making requests', async () => {
+    const result = await runCli(['webhook', 'submissions', 'export', 'contact-form', '-o', 'yaml']);
+    expect(result.exitCode).toBe(64);
+    expect(result.requests).toHaveLength(0);
+  });
+
+  it.skipIf(process.platform === 'win32')('does not follow a forced export symlink', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mcid-export-link-'));
+    const target = join(dir, 'report.csv');
+    const link = join(dir, 'link.csv');
+    await writeFile(target, 'unchanged', { mode: 0o600 });
+    await symlink(target, link);
+    const result = await runCli(
+      ['webhook', 'submissions', 'export', 'contact-form', '--file', link, '--force'],
+      {
+        routes: baseRoutes({
+          [`GET /inbound-webhooks/${WEBHOOK_ID}/submissions`]: () =>
+            json({ submissions: [], total: 0 }),
+        }),
+      },
+    );
+    expect(result.exitCode).not.toBe(0);
+    expect(await readFile(target, 'utf8')).toBe('unchanged');
+  });
+
   it('runs the export when invoked as two tokens: submissions export <webhook>', async () => {
     const target = join(await mkdtemp(join(tmpdir(), 'mcid-export-')), 'subs.csv');
     const result = await runCli(

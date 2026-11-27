@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanupCliTest, json, runCli } from '../test-support/cli-harness.js';
 import { baseRoutes, MAIN_SERVER_ID, mainServer, PROJECT_ID } from '../test-support/fixtures.js';
@@ -32,26 +35,30 @@ describe('settings reset', () => {
 
 describe('audit export filters', () => {
   it('forwards the same filters as audit list', async () => {
-    const result = await runCli(
-      [
-        'audit',
-        'export',
-        '--action',
-        'access',
-        '--since',
-        '2026-10-01',
-        '--file',
-        '/dev/null',
-        '--force',
-      ],
-      { routes: baseRoutes({ 'GET /admin/audit/logs/export': () => json([{ id: '1' }]) }) },
-    );
+    const dir = await mkdtemp(join(tmpdir(), 'mcid-audit-export-'));
+    try {
+      const result = await runCli(
+        [
+          'audit',
+          'export',
+          '--action',
+          'access',
+          '--since',
+          '2026-10-01',
+          '--file',
+          join(dir, 'audit.csv'),
+        ],
+        { routes: baseRoutes({ 'GET /admin/audit/logs/export': () => json([{ id: '1' }]) }) },
+      );
 
-    expect(result.exitCode).toBe(0);
-    const get = result.requests.find((r) => r.path === '/admin/audit/logs/export');
-    expect(get?.query['actionType']).toBe('access');
-    expect(get?.query['dateFrom']).toBe('2026-10-01');
-    expect(get?.query['limit']).toBeUndefined();
+      expect(result.exitCode).toBe(0);
+      const get = result.requests.find((r) => r.path === '/admin/audit/logs/export');
+      expect(get?.query['actionType']).toBe('access');
+      expect(get?.query['dateFrom']).toBe('2026-10-01');
+      expect(get?.query['limit']).toBeUndefined();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('rejects an unknown category before any request', async () => {

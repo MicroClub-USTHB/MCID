@@ -1,11 +1,12 @@
 import { Command } from 'commander';
 import { configPath, loadConfig, normalizeBaseUrl, resolveProfileName } from '../config.js';
-import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
-import { ApiClient } from '../lib/client.js';
+import { ApiClient, getClient } from '../lib/client.js';
+import { positiveInt } from '../lib/help.js';
 import {
   formatAge,
   formatDate,
+  listOutputFormat,
   printJson,
   printQuiet,
   printSuccess,
@@ -16,7 +17,6 @@ import {
 import { normalizeMemberDetail, normalizeMemberList, unwrapArray } from '../lib/api-normalize.js';
 import { resolveMember, resolveRole, resolveServer } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
-import { resolveSession } from '../session.js';
 import { resolveProjectKey } from './dev.js';
 
 function sourceOf(
@@ -58,33 +58,56 @@ export function registerMemberCommand(program: Command): void {
     quiet?: boolean;
   }) => {
     try {
+      const outFormat = listOutputFormat(options);
       const client = await getClient(options.profile);
 
+      const limit = positiveInt(options.limit, 30, '--limit', 100);
+      const page = positiveInt(options.page, 1, '--page');
+
+      const resolved =
+        !options.crossServer || options.server || options.role?.length
+          ? await resolveServer(client, options.server)
+          : undefined;
+      const roleIds = resolved ? await resolveRoleIds(client, resolved.id, options.role) : [];
+      const rawMembers: Record<string, unknown>[] = [];
+      for (let current = options.all ? 1 : page; ; current += 1) {
+        const params = new URLSearchParams({ page: String(current), limit: String(limit) });
+        if (resolved) params.set('serverId', resolved.id);
+        if (options.search) params.set('search', options.search);
+        if (options.joinedAfter) params.set('joinedAfter', options.joinedAfter);
+        for (const roleId of roleIds) params.append('roleId', roleId);
+        const path = options.crossServer ? '/admin/members/cross-server' : '/admin/members';
+        const raw = await client.get<{ data: Record<string, unknown>[]; totalPages: number }>(
+          `${path}?${params.toString()}`,
+        );
+        const rows = unwrapArray<Record<string, unknown>>(raw, ['data']);
+        rawMembers.push(...rows);
+        if (!options.all && current < raw.totalPages) {
+          process.stderr.write(`More members are available; use --page ${current + 1} or --all.\n`);
+        }
+        if (!options.all || rows.length === 0 || current >= raw.totalPages) break;
+      }
+      const members = normalizeMemberList(rawMembers);
+
       if (options.crossServer) {
-        const raw = await client.get('/admin/members/cross-server');
-        const res = normalizeMemberList(raw);
-
-        if (options.quiet) {
-          printQuiet(res.map((m) => m.memberId));
+        if (outFormat === 'quiet') {
+          printQuiet(members.map((m) => m.memberId));
           return;
         }
-        if (options.json || options.output === 'json') {
-          printJson(raw);
+        if (outFormat === 'json') {
+          printJson(rawMembers);
           return;
         }
-
-        const crossServerRows = res.map((m) => ({
+        const crossServerRows = members.map((m) => ({
           memberId: m.memberId,
           username: m.username,
           serversCount: m.serversCount,
           servers: m.serverNames.join(', '),
         }));
-
-        if (options.output === 'csv') {
+        if (outFormat === 'csv') {
           process.stdout.write(toCsv(crossServerRows));
           return;
         }
-
         printTable({
           columns: [
             { header: 'DISCORD ID', key: 'memberId', format: (v) => colors.dim(String(v)) },
@@ -97,36 +120,13 @@ export function registerMemberCommand(program: Command): void {
         return;
       }
 
-      const resolved = await resolveServer(client, options.server);
-      const roleIds = await resolveRoleIds(client, resolved.id, options.role);
-      // The API defaults to 20 rows per page; ask for a full page and page
-      // through with --all instead of silently truncating.
-      const limit = Math.min(100, Math.max(1, Number(options.limit ?? 100) || 100));
-      const page = Math.max(1, Number(options.page ?? 1) || 1);
-      const members: ReturnType<typeof normalizeMemberList> = [];
-      for (let current = page; ; current += 1) {
-        const params = new URLSearchParams({
-          serverId: resolved.id,
-          page: String(current),
-          limit: String(limit),
-        });
-        if (options.search) params.set('search', options.search);
-        if (options.joinedAfter) params.set('joinedAfter', options.joinedAfter);
-        for (const roleId of roleIds) params.append('roleId', roleId);
-        const raw = await client.get(`/admin/members?${params.toString()}`);
-        const pageRows = normalizeMemberList(raw);
-        members.push(...pageRows);
-        if (!options.all || pageRows.length < limit) break;
-      }
-
-      if (options.quiet) {
+      if (outFormat === 'quiet') {
         printQuiet(members.map((m) => m.memberId));
         return;
       }
 
-      const outFormat = options.json ? 'json' : options.output || 'table';
       if (outFormat === 'json') {
-        printJson(members);
+        printJson(rawMembers);
         return;
       }
 
@@ -174,9 +174,9 @@ export function registerMemberCommand(program: Command): void {
     .option('--role <role...>', 'Filter by role name or ID')
     .option('--search <query>', 'Search username, nickname, or ID')
     .option('--joined-after <date>', 'Filter members joined after ISO date')
-    .option('--limit <n>', 'Rows per page, 1-100 (default 100)')
-    .option('--page <n>', 'Page number to start from (default 1)')
-    .option('--all', 'Fetch every page, not just the first')
+    .option('--limit <n>', 'Rows per page, 1-100 (default 30)')
+    .option('--page <n>', 'Page number (default 1)')
+    .option('--all', 'Fetch every page, starting from the first')
     .option('--cross-server', 'Show members across all servers')
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as JSON')
@@ -438,11 +438,4 @@ async function resolveRoleIds(
   const ids: string[] = [];
   for (const role of roles ?? []) ids.push((await resolveRole(client, serverId, role)).id);
   return ids;
-}
-
-async function getClient(profileFlag?: string): Promise<ApiClient> {
-  const config = await loadConfig(configPath());
-  const profileName = resolveProfileName(config, profileFlag);
-  const session = await resolveSession(config, profileName, defaultKeyProvider());
-  return new ApiClient(session);
 }
