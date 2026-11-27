@@ -16,10 +16,16 @@ mcid-cli member permissions @alice --project portal
 mcid-cli member export --role "Dev Lead" --file leads.csv
 ```
 
+- `member list` defaults to 30 rows; use `--limit` (1-100), `--page`, or `--all`
+  to fetch all pages starting at page one. The same options and filters work with
+  `--cross-server`. JSON output is an array of raw API member records rather than
+  the previous response wrapper or normalized table rows.
 - A member is a Discord ID or `@username`. An unknown member is an error, not a guess.
 - `--role` takes a role name or ID and is resolved on the chosen server.
 - `member export` accepts the same `--role`, `--search` and `--joined-after` filters as
-  the list, writes owner-only files and refuses to replace a file without `--force`.
+  the list and refuses to replace a file without `--force`. An existing destination must
+  be a regular file with no other hard links; on POSIX it must already have mode `0600`.
+  Symlinks are rejected. Windows file ACLs are not checked.
 - `member permissions` calls the permission API as a project, so pass `--project` or
   `--api-key`.
 
@@ -32,6 +38,10 @@ mcid-cli role permissions list "Dev Lead"
 mcid-cli role permissions add "Dev Lead" projects.read --dry-run
 mcid-cli role permissions add "Dev Lead" projects.read --yes
 ```
+
+`role list --json` returns an array of raw API role records for the selected page. Use
+`--limit` and `--page` to select a page, or `--all` to return every role. Scripts that
+previously consumed an API response wrapper should read the array instead.
 
 `role permissions add` and `remove` always show the impact first, for example how many
 members the change affects. `--dry-run` stops after the preview, and `--yes` applies it
@@ -48,3 +58,5 @@ A rule copies the source role's permissions to the target servers (`--target-sco
 or `selected`). The API has no target role, so the command takes the source role only.
 
 Source: `apps/cli/src/commands/member.ts`, `apps/cli/src/commands/role.ts`.
+
+> File-safety limits: the hard-link and mode checks are best-effort with a TOCTOU window. Concurrent writers are not locked out, and a write failure after truncation can leave a partial file. Windows ACLs are not checked.

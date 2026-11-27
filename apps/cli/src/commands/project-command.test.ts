@@ -1,8 +1,11 @@
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, chmod, symlink, link } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { configPath } from '../config.js';
 import { cleanupCliTest, json, runCli } from '../test-support/cli-harness.js';
 import { baseRoutes, MAIN_SERVER_ID, PROJECT_ID, projectRecord } from '../test-support/fixtures.js';
+import { expectOwnerOnlyMode } from '../test-support/fs.js';
 
 afterEach(cleanupCliTest);
 
@@ -120,6 +123,24 @@ describe('project create', () => {
     expect(result.stdout).not.toContain('[REDACTED]');
   });
 
+  it('writes --env-out with JSON and retains the one-time key in output', async () => {
+    const tmp = await mkdtemp(join(tmpdir(), 'mcid-json-create-'));
+    const target = join(tmp, '.env');
+    const result = await runCli(
+      ['project', 'create', '--name', 'Portal', '--json', '--reveal', '--env-out', target],
+      {
+        routes: baseRoutes({
+          'POST /admin/projects': () =>
+            json({ apiKey: 'mcid_live_onceonlykey123', project: projectRecord }, 201),
+        }),
+      },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout).apiKey).toBe('mcid_live_onceonlykey123');
+    expect(await readFile(target, 'utf8')).toContain('MCID_API_KEY=mcid_live_onceonlykey123');
+    await expectOwnerOnlyMode(target);
+  });
+
   it('returns the key and a nonzero exit when setup fails after creation', async () => {
     const result = await runCli(
       [
@@ -152,6 +173,80 @@ describe('project create', () => {
     expect(result.stderr).not.toContain('mcid_live_onceonlykey123');
   });
 
+  it('rejects an existing key before sending the create request', async () => {
+    const tmp = await mkdtemp(join(tmpdir(), 'mcid-preflight-'));
+    const target = join(tmp, '.env');
+    await writeFile(target, 'MCID_API_KEY=old\n', { mode: 0o600 });
+    const result = await runCli(['project', 'create', '--name', 'Portal', '--env-out', target], {
+      routes: baseRoutes({
+        'POST /admin/projects': () =>
+          json({ apiKey: 'mcid_live_onceonlykey123', project: projectRecord }, 201),
+      }),
+    });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.requests.some((r) => r.method === 'POST')).toBe(false);
+    expect(await readFile(target, 'utf8')).toBe('MCID_API_KEY=old\n');
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'rejects an insecure or symlinked env file before creating a project',
+    async () => {
+      const tmp = await mkdtemp(join(tmpdir(), 'mcid-preflight-'));
+      const target = join(tmp, '.env');
+      await writeFile(target, 'OTHER=value\n', { mode: 0o600 });
+      await chmod(target, 0o644);
+      const insecure = await runCli(['project', 'create', '--name', 'Portal', '--env-out', target]);
+      expect(insecure.exitCode).not.toBe(0);
+      expect(insecure.requests.some((r) => r.method === 'POST')).toBe(false);
+      const link = join(tmp, 'link');
+      await symlink(target, link);
+      const linked = await runCli(['project', 'create', '--name', 'Portal', '--env-out', link]);
+      expect(linked.exitCode).not.toBe(0);
+      expect(linked.requests.some((r) => r.method === 'POST')).toBe(false);
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'rejects a hard-linked env file before creation',
+    async () => {
+      const tmp = await mkdtemp(join(tmpdir(), 'mcid-hardlink-'));
+      const target = join(tmp, '.env');
+      const other = join(tmp, 'other');
+      await writeFile(target, 'OTHER=value\n', { mode: 0o600 });
+      await link(target, other);
+      const result = await runCli(['project', 'create', '--name', 'Portal', '--env-out', target], {
+        routes: baseRoutes({
+          'POST /admin/projects': () =>
+            json({ apiKey: 'one-time-key', project: projectRecord }, 201),
+        }),
+      });
+      expect(result.exitCode).not.toBe(0);
+      expect(result.requests.some((r) => r.method === 'POST')).toBe(false);
+      expect(await readFile(other, 'utf8')).toBe('OTHER=value\n');
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')('rejects a hard link added after preflight', async () => {
+    const tmp = await mkdtemp(join(tmpdir(), 'mcid-hardlink-race-'));
+    const target = join(tmp, '.env');
+    const other = join(tmp, 'other');
+    await writeFile(target, 'OTHER=value\n', { mode: 0o600 });
+    const result = await runCli(
+      ['project', 'create', '--name', 'Portal', '--json', '--reveal', '--env-out', target],
+      {
+        routes: baseRoutes({
+          'POST /admin/projects': async () => {
+            await link(target, other);
+            return json({ apiKey: 'one-time-key', project: projectRecord }, 201);
+          },
+        }),
+      },
+    );
+    expect(result.exitCode).not.toBe(0);
+    expect(JSON.parse(result.stdout).apiKey).toBe('one-time-key');
+    expect(await readFile(other, 'utf8')).toBe('OTHER=value\n');
+  });
+
   it('does not print server-controlled error text after creation', async () => {
     const secret = 'mcid_live_onceonlykey123';
     const result = await runCli(
@@ -181,6 +276,77 @@ describe('project create', () => {
     expect(JSON.parse(result.stdout).apiKey).toBe(secret);
     expect(result.stderr).toContain('granting server access failed');
     expect(result.stderr).not.toContain(secret);
+  });
+
+  it('returns the key and fails if the env destination appears after preflight', async () => {
+    const tmp = await mkdtemp(join(tmpdir(), 'mcid-race-'));
+    const target = join(tmp, '.env');
+    const result = await runCli(
+      ['project', 'create', '--name', 'Portal', '--json', '--reveal', '--env-out', target],
+      {
+        routes: baseRoutes({
+          'POST /admin/projects': async () => {
+            await writeFile(target, 'RACE=do-not-overwrite\n', { mode: 0o600 });
+            return json({ apiKey: 'mcid_live_onceonlykey123', project: projectRecord }, 201);
+          },
+        }),
+      },
+    );
+    expect(result.exitCode).not.toBe(0);
+    expect(JSON.parse(result.stdout).apiKey).toBe('mcid_live_onceonlykey123');
+    expect(result.stderr).not.toContain('mcid_live_onceonlykey123');
+    expect(await readFile(target, 'utf8')).toBe('RACE=do-not-overwrite\n');
+  });
+
+  it('refuses to overwrite a changed existing file and still returns the new key', async () => {
+    const tmp = await mkdtemp(join(tmpdir(), 'mcid-change-'));
+    const target = join(tmp, '.env');
+    await writeFile(target, 'OTHER=old\n', { mode: 0o600 });
+    const result = await runCli(
+      ['project', 'create', '--name', 'Portal', '--json', '--reveal', '--env-out', target],
+      {
+        routes: baseRoutes({
+          'POST /admin/projects': async () => {
+            await writeFile(target, 'OTHER=changed\n', { mode: 0o600 });
+            return json({ apiKey: 'mcid_live_onceonlykey123', project: projectRecord }, 201);
+          },
+        }),
+      },
+    );
+    expect(result.exitCode).not.toBe(0);
+    expect(JSON.parse(result.stdout).apiKey).toBe('mcid_live_onceonlykey123');
+    expect(result.stderr).toContain('Project was created');
+    expect(await readFile(target, 'utf8')).toBe('OTHER=changed\n');
+  });
+
+  it('updates an existing private env file when --force is specified', async () => {
+    const tmp = await mkdtemp(join(tmpdir(), 'mcid-force-'));
+    const target = join(tmp, '.env');
+    await writeFile(target, 'OTHER=value\nMCID_API_KEY=old\n', { mode: 0o600 });
+    const result = await runCli(
+      [
+        'project',
+        'create',
+        '--name',
+        'Portal',
+        '--json',
+        '--reveal',
+        '--env-out',
+        target,
+        '--force',
+      ],
+      {
+        routes: baseRoutes({
+          'POST /admin/projects': () =>
+            json({ apiKey: 'mcid_live_onceonlykey123', project: projectRecord }, 201),
+        }),
+      },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(await readFile(target, 'utf8')).toBe(
+      'OTHER=value\nMCID_API_KEY=mcid_live_onceonlykey123\n',
+    );
+    await expectOwnerOnlyMode(target);
   });
 
   it('grants the listed servers with every scope by default', async () => {
@@ -230,5 +396,44 @@ describe('project create', () => {
     expect(result.exitCode).toBe(0);
     const saved = await readFile(configPath(), 'utf8').catch(() => '');
     expect(saved).not.toContain('mcid_live_onceonlykey123');
+  });
+
+  it('writes the --env-out with mode 0600', async () => {
+    const tmp = await mkdtemp(join(tmpdir(), 'mcid-create-'));
+    const target = join(tmp, '.env');
+
+    const result = await runCli(['project', 'create', '--name', 'Portal', '--env-out', target], {
+      routes: baseRoutes({
+        'POST /admin/projects': () =>
+          json({ apiKey: 'mcid_live_onceonlykey123', project: projectRecord }, 201),
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    await expectOwnerOnlyMode(target);
+  });
+
+  it('refuses to overwrite an env file that already holds a key without --force', async () => {
+    const tmp = await mkdtemp(join(tmpdir(), 'mcid-create-'));
+    const target = join(tmp, '.env');
+
+    const result = await runCli(['project', 'create', '--name', 'Portal', '--env-out', target], {
+      routes: baseRoutes({
+        'POST /admin/projects': () =>
+          json({ apiKey: 'mcid_live_secondkey456', project: projectRecord }, 201),
+      }),
+    });
+
+    // Second create into the same file: the guard must reject before overwrite.
+    const second = await runCli(['project', 'create', '--name', 'Portal', '--env-out', target], {
+      routes: baseRoutes({
+        'POST /admin/projects': () =>
+          json({ apiKey: 'mcid_live_secondkey456', project: projectRecord }, 201),
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(second.exitCode).not.toBe(0);
+    expect(second.stderr).toContain('--force');
   });
 });

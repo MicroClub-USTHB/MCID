@@ -7,6 +7,7 @@ import {
   normalizeRoleStats,
   normalizeServerStats,
   normalizeUsage,
+  unwrapArray,
 } from '../lib/api-normalize.js';
 import { ApiClient, getClient } from '../lib/client.js';
 import { confirmAction, confirmDestructive } from '../lib/confirm.js';
@@ -311,7 +312,7 @@ export function registerOpsCommand(program: Command): void {
           const logs = pageRows(allLogs, options);
 
           if (format === 'json' && !options.follow) {
-            printJson(await fetchRaw());
+            printJson(pageRows(unwrapArray(await fetchRaw(), ['logs']), options));
             return;
           }
           if (format === 'quiet' && !options.follow) {

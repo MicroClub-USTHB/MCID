@@ -1,4 +1,5 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { lstat, open } from 'node:fs/promises';
 import { Command } from 'commander';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
 import {
@@ -51,6 +52,102 @@ interface ProjectRecord {
   createdAt?: string;
   updatedAt?: string;
   serversCount?: number;
+}
+
+interface EnvDestination {
+  exists: boolean;
+  content: string;
+  dev?: number;
+  ino?: number;
+}
+
+/** Check before project creation so a predictable file error cannot strand a key. */
+async function inspectEnvDestination(path: string, force: boolean): Promise<EnvDestination> {
+  let stat;
+  try {
+    stat = await lstat(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { exists: false, content: '' };
+    throw error;
+  }
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) {
+    throw new CliError(
+      'Environment output must be a regular file with no additional hard links',
+      ExitCode.Rejected,
+    );
+  }
+  if (process.platform !== 'win32' && (stat.mode & 0o777) !== 0o600) {
+    throw new CliError(
+      'Existing environment file must have mode 0600 before it can receive a key',
+      ExitCode.Rejected,
+    );
+  }
+  const handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  try {
+    const opened = await handle.stat();
+    if (
+      !opened.isFile() ||
+      opened.nlink !== 1 ||
+      opened.ino !== stat.ino ||
+      opened.dev !== stat.dev ||
+      (process.platform !== 'win32' && (opened.mode & 0o777) !== 0o600)
+    ) {
+      throw new CliError('Environment file changed during validation', ExitCode.Rejected);
+    }
+    const content = await handle.readFile('utf8');
+    if (/^\s*MCID_API_KEY\s*=/m.test(content) && !force) {
+      throw new CliError(
+        `File "${path}" already contains MCID_API_KEY\n  hint: pass --force to overwrite`,
+        ExitCode.Rejected,
+      );
+    }
+    return { exists: true, content, dev: opened.dev, ino: opened.ino };
+  } finally {
+    await handle.close();
+  }
+}
+
+async function writeEnvDestination(
+  path: string,
+  dest: EnvDestination,
+  content: string,
+): Promise<void> {
+  const noFollow = constants.O_NOFOLLOW ?? 0;
+  const flags = dest.exists
+    ? constants.O_RDWR | noFollow
+    : constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | noFollow;
+  const handle = await open(path, flags, 0o600);
+  try {
+    const stat = await handle.stat();
+    if (
+      !stat.isFile() ||
+      stat.nlink !== 1 ||
+      (process.platform !== 'win32' && (stat.mode & 0o777) !== 0o600)
+    ) {
+      throw new CliError('Environment output is not a private regular file', ExitCode.Rejected);
+    }
+    if (dest.exists) {
+      if (
+        stat.dev !== dest.dev ||
+        stat.ino !== dest.ino ||
+        (await handle.readFile('utf8')) !== dest.content
+      ) {
+        throw new CliError(
+          'Environment file changed after validation; save the key and retry manually',
+          ExitCode.Rejected,
+        );
+      }
+      await handle.truncate(0);
+    }
+    const bytes = Buffer.from(content, 'utf8');
+    for (let offset = 0; offset < bytes.length;) {
+      const result = await handle.write(bytes, offset, bytes.length - offset, offset);
+      if (result.bytesWritten === 0) throw new Error('Could not write environment file');
+      offset += result.bytesWritten;
+    }
+  } finally {
+    await handle.close();
+  }
 }
 
 export function registerProjectCommand(program: Command): void {
@@ -255,6 +352,10 @@ export function registerProjectCommand(program: Command): void {
             throw new CliError('Project name is required (--name <name>)', ExitCode.Usage);
           }
 
+          const envDestination = options.envOut
+            ? await inspectEnvDestination(options.envOut, Boolean(options.force))
+            : undefined;
+
           // Resolve before creating anything, so a typo cannot leave a half-set-up project.
           const grantServers = [];
           for (const serverArg of serverArgs ?? []) {
@@ -335,28 +436,22 @@ export function registerProjectCommand(program: Command): void {
             `MCID_REDIRECT_URI=${primaryUri}`,
           ].join('\n');
 
-          if (options.envOut) {
-            let existing = '';
-            try {
-              existing = await readFile(options.envOut, 'utf8');
-            } catch {
-              // file doesn't exist
-            }
-
+          if (options.envOut && envDestination) {
+            const existing = envDestination.content;
             const hasApiKey = /^\s*MCID_API_KEY\s*=/m.test(existing);
-            if (hasApiKey && !options.force) {
-              throw new CliError(
-                `File "${options.envOut}" already contains MCID_API_KEY\n  hint: pass --force to overwrite`,
-                ExitCode.Rejected,
-              );
-            }
-
             const newContent = hasApiKey
               ? `${existing.replace(/^\s*MCID_API_KEY\s*=.*$/m, `MCID_API_KEY=${res.apiKey}`).trimEnd()}\n`
               : existing
                 ? `${existing.trimEnd()}\n\n${envBlock}\n`
                 : `${envBlock}\n`;
-            await writeFile(options.envOut, newContent, { encoding: 'utf8', mode: 0o600 });
+            try {
+              await writeEnvDestination(options.envOut, envDestination, newContent);
+            } catch (err) {
+              process.stderr.write(
+                'Project was created, but the environment file could not be saved. Save the API key from the output and repair the file manually.\n',
+              );
+              throw err;
+            }
             if (!options.json) printSuccess(`Saved environment configuration to ${options.envOut}`);
           } else if (!options.json) {
             process.stdout.write(`${colors.dim('.env configuration block:')}\n`);

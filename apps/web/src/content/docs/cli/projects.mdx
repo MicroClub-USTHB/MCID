@@ -29,8 +29,10 @@ MCID_REDIRECT_URI=http://localhost:3000/callback
   `--scope` the grant has every scope except opt-in scopes (`manage_roles`, `manage_channels`, `manage_events`); pass `--scope manage_roles`, `--scope manage_channels`, or `--scope manage_events` to add them.
 - Run `project create` with no flags in a terminal and it asks for the name, the
   redirect URI and whether to grant the main server.
-- `--env-out` writes the block with owner-only permissions and refuses to replace an
-  existing `MCID_API_KEY` unless you pass `--force`.
+- `--env-out` writes the block to a new owner-only file. An existing file must be a
+  regular file with no other hard links, not a symlink, and on POSIX must already have mode `0600`. The command
+  refuses to replace an existing `MCID_API_KEY` unless you pass `--force`. It checks
+  the file before creating the project and checks again before writing.
 - If the project is created but a server grant, redirect URI, or file write fails, the
   command returns a nonzero status. Save the one-time key from stdout and follow the
   error on stderr; do not create the project again blindly.
@@ -72,3 +74,5 @@ mcid-cli project access log --project portal
 request. When you omit `--operation` it keeps the operations the grant already has.
 
 Source: `apps/cli/src/commands/project.ts`, `apps/cli/src/commands/dev.ts`.
+
+> File-safety limits: the hard-link and mode checks are best-effort with a TOCTOU window. Concurrent writers are not locked out, and a write failure after truncation can leave a partial file. Windows ACLs are not checked.

@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
 import { confirmAction } from '../lib/confirm.js';
-import { normalizeRoleStats } from '../lib/api-normalize.js';
+import { normalizeRoleStats, unwrapArray } from '../lib/api-normalize.js';
 import { getClient } from '../lib/client.js';
 import {
   listOutputFormat,
@@ -56,7 +56,8 @@ export function registerRoleCommand(program: Command): void {
       const raw = await client.get(
         `/admin/stats/roles?serverId=${encodeURIComponent(resolvedServer.id)}`,
       );
-      const roles = pageRows(normalizeRoleStats(raw), options);
+      const rawRoles = pageRows(unwrapArray<Record<string, unknown>>(raw, ['roles']), options);
+      const roles = normalizeRoleStats(rawRoles);
 
       if (outFormat === 'quiet') {
         printQuiet(roles.map((r) => r.id));
@@ -64,7 +65,7 @@ export function registerRoleCommand(program: Command): void {
       }
 
       if (outFormat === 'json') {
-        printJson(raw);
+        printJson(rawRoles);
         return;
       }
       if (outFormat === 'csv') {

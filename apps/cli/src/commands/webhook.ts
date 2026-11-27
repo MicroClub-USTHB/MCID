@@ -1,23 +1,24 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
 import { Command } from 'commander';
 import { configPath, loadConfig, resolveProfileName } from '../config.js';
 import { defaultKeyProvider, decrypt, webhookSecretContext } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
 import { unwrapArray } from '../lib/api-normalize.js';
 import { getClient } from '../lib/client.js';
-import { pageRows } from '../lib/help.js';
+import { positiveInt } from '../lib/help.js';
+import { promptIfMissing } from '../lib/prompts.js';
 import { signBody } from '../lib/signature.js';
 import {
   formatAge,
+  listOutputFormat,
   printJson,
-  printKeyValue,
   printQuiet,
+  printKeyValue,
   printSuccess,
   printTable,
   toCsv,
+  writeExportFile,
 } from '../lib/output.js';
-import { promptIfMissing } from '../lib/prompts.js';
 import { resolveWebhook } from '../lib/resolver.js';
 import { parseSince } from '../lib/time.js';
 import { buildExamplePayload, validatePayload, type FormSchema } from '@mcid/form-schema';
@@ -358,7 +359,7 @@ export function registerWebhookCommand(program: Command): void {
     cmd
       .option('--since <date>', 'Filter submissions since (ISO timestamp or 30m, 24h, 7d)')
       .option('--until <date>', 'Filter submissions until (ISO timestamp or 30m, 24h, 7d)')
-      .option('--limit <n>', 'Maximum submissions to return (default 30)', '30')
+      .option('--limit <n>', 'Rows per page (default 30)', '30')
       .option('--page <n>', 'Page number (default 1)')
       .option('--all', 'Show every submission')
       .option('-q, --quiet', 'Only print submission IDs')
@@ -378,41 +379,58 @@ export function registerWebhookCommand(program: Command): void {
       columns?: string;
       profile?: string;
       json?: boolean;
-      output?: 'table' | 'json' | 'csv';
+      output?: string;
     },
   ): Promise<void> => {
     try {
-      const client = await getClient(options.profile);
-      const resolved = await resolveWebhook(client, webhookArg);
-
-      const params = new URLSearchParams({ limit: options.limit });
+      const outFormat = listOutputFormat(options);
+      const limit = positiveInt(options.limit, 30, '--limit');
+      const pageNumber = positiveInt(options.page, 1, '--page');
+      const start = options.all ? 0 : (pageNumber - 1) * limit;
+      if (!Number.isSafeInteger(start))
+        throw new CliError('Requested page is too large', ExitCode.Usage);
+      const params = new URLSearchParams();
       if (options.since) params.set('dateFrom', parseSince(options.since, '--since'));
       if (options.until) params.set('dateTo', parseSince(options.until, '--until'));
-
-      const raw = await client.get(
-        `/inbound-webhooks/${resolved.id}/submissions?${params.toString()}`,
-      );
-      const flattened = unwrapArray<Record<string, unknown>>(raw, ['submissions', 'data']).map(
-        flattenSubmission,
-      );
-
-      const rows = pageRows(flattened, options);
-      if (options.quiet) {
-        printQuiet(rows.map((row) => String(row.id)));
-        return;
+      const client = await getClient(options.profile);
+      const resolved = await resolveWebhook(client, webhookArg);
+      const rows: Record<string, unknown>[] = [];
+      for (;;) {
+        const chunkSize = Math.min(200, options.all ? 200 : limit - rows.length);
+        const offset = start + rows.length;
+        params.set('limit', String(chunkSize));
+        params.set('offset', String(offset));
+        const raw = await client.get(
+          `/inbound-webhooks/${resolved.id}/submissions?${params.toString()}`,
+        );
+        const chunk = unwrapArray<Record<string, unknown>>(raw, ['submissions', 'data']);
+        rows.push(...chunk);
+        const total =
+          raw && typeof raw === 'object' && 'total' in raw ? Number(raw.total) : undefined;
+        if (
+          chunk.length === 0 ||
+          chunk.length < chunkSize ||
+          (total !== undefined && Number.isFinite(total) && offset + chunk.length >= total) ||
+          (!options.all && rows.length >= limit)
+        )
+          break;
       }
-      const outFormat = options.json ? 'json' : options.output || 'table';
       if (outFormat === 'json') {
         printJson(rows);
         return;
       }
+      if (outFormat === 'quiet') {
+        printQuiet(rows.map((row) => String(row.id)));
+        return;
+      }
+      const flattened = rows.map(flattenSubmission);
       if (outFormat === 'csv') {
         const cols = options.columns ? options.columns.split(',') : undefined;
-        process.stdout.write(toCsv(rows, cols));
+        process.stdout.write(toCsv(flattened, cols));
         return;
       }
 
-      if (rows.length === 0) {
+      if (flattened.length === 0) {
         process.stdout.write(colors.dim('No submissions found.\n'));
         return;
       }
@@ -506,6 +524,13 @@ export function registerWebhookCommand(program: Command): void {
         },
       ) => {
         try {
+          if (
+            options.output !== undefined &&
+            options.output !== 'csv' &&
+            options.output !== 'json'
+          ) {
+            throw new CliError('--output must be csv or json', ExitCode.Usage);
+          }
           const client = await getClient(options.profile);
           const resolved = await resolveWebhook(client, webhookArg);
           const pageSize = 200;
@@ -523,6 +548,12 @@ export function registerWebhookCommand(program: Command): void {
             if (page.length < pageSize || (total !== undefined && rows.length >= total)) {
               break;
             }
+            if (offset + pageSize >= pageSize * 100) {
+              throw new CliError(
+                'Export would be incomplete: the 20,000 submission safety limit was reached',
+                ExitCode.Rejected,
+              );
+            }
           }
 
           const flattened = rows.map(flattenSubmission);
@@ -532,14 +563,8 @@ export function registerWebhookCommand(program: Command): void {
             options.file ||
             `submissions-${resolved.slug}-${new Date().toISOString().slice(0, 10)}.${format}`;
 
-          if (options.file && !options.force && existsSync(options.file)) {
-            throw new CliError(
-              `File "${options.file}" already exists\n  hint: pass --force to overwrite`,
-              ExitCode.Rejected,
-            );
-          }
-          // Submissions can hold personal information: owner-only mode.
-          await writeFile(target, content, { encoding: 'utf8', mode: 0o600 });
+          // Submissions can hold personal information: use the shared safe writer.
+          await writeExportFile(target, content, options.force);
           printSuccess(`Exported ${flattened.length} submission(s) to ${target}`);
         } catch (err) {
           exitWithError('webhook submissions export', err);
