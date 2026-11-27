@@ -19,6 +19,7 @@ import { registerServerCommand } from '../commands/server.js';
 import { registerSyncCommand } from '../commands/sync.js';
 import { registerWebhookCommand } from '../commands/webhook.js';
 import { registerWhoamiCommand } from '../commands/whoami.js';
+import { enablePromptableArgs } from '../lib/promptable.js';
 
 export type RouteHandler = (url: URL, init: RequestInit) => Response | Promise<Response>;
 
@@ -88,6 +89,7 @@ export function buildProgram(): Command {
   registerAccessCommand(program);
   registerOpsCommand(program);
   registerDevCommand(program);
+  enablePromptableArgs(program);
   return program;
 }
 
