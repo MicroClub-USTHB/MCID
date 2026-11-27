@@ -1,7 +1,18 @@
+import { configPath, loadConfig, resolveProfileName } from '../config.js';
+import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode } from '../errors.js';
+import { resolveSession } from '../session.js';
 import type { Session } from '../session.js';
 import { mapApiError } from './error-mapping.js';
 import { colors } from './tui.js';
+
+/** Builds an authenticated client from the active (or named) profile. */
+export async function getClient(profile?: string): Promise<ApiClient> {
+  const config = await loadConfig(configPath());
+  const name = resolveProfileName(config, profile);
+  const session = await resolveSession(config, name, defaultKeyProvider());
+  return new ApiClient(session);
+}
 
 export interface RequestOptions {
   headers?: Record<string, string> | undefined;

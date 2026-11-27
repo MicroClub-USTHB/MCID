@@ -247,3 +247,27 @@ describe('status', () => {
     expect(result.stdout).not.toContain('never');
   });
 });
+
+describe('discord-webhook list output formats', () => {
+  it('outputs a selected page as CSV', async () => {
+    const result = await runCli(
+      ['discord-webhook', 'list', '--project', 'Portal', '-o', 'csv', '--limit', '1'],
+      {
+        routes: baseRoutes({
+          'GET /admin/projects/:projectId/webhooks': () =>
+            json({
+              webhooks: [
+                { id: '1', name: 'first' },
+                { id: '2', name: 'second' },
+              ],
+              total: 2,
+            }),
+        }),
+      },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('id,name');
+    expect(result.stdout).toContain('1,first');
+    expect(result.stdout).not.toContain('second');
+  });
+});

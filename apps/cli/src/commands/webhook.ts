@@ -5,12 +5,15 @@ import { configPath, loadConfig, resolveProfileName } from '../config.js';
 import { defaultKeyProvider, decrypt, webhookSecretContext } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
 import { unwrapArray } from '../lib/api-normalize.js';
-import { ApiClient } from '../lib/client.js';
+import { getClient } from '../lib/client.js';
+import { positiveInt } from '../lib/help.js';
 import { signBody } from '../lib/signature.js';
 import {
   formatAge,
+  listOutputFormat,
   printJson,
   printKeyValue,
+  printQuiet,
   printSuccess,
   printTable,
   toCsv,
@@ -19,7 +22,6 @@ import { resolveWebhook } from '../lib/resolver.js';
 import { parseSince } from '../lib/time.js';
 import { buildExamplePayload, validatePayload, type FormSchema } from '@mcid/form-schema';
 import { colors } from '../lib/tui.js';
-import { resolveSession } from '../session.js';
 import {
   defaultWebhookDeps,
   webhookCreate,
@@ -105,6 +107,7 @@ export function registerWebhookCommand(program: Command): void {
     .command('list')
     .alias('ls')
     .description('List webhooks')
+    .option('-o, --output <format>', 'output format (table|json|csv)', 'table')
     .option('--project <projectId>', 'filter by project id')
     .option('--profile <name>', 'profile to use')
     .option('--json', 'emit machine-readable JSON')
@@ -350,7 +353,10 @@ export function registerWebhookCommand(program: Command): void {
     cmd
       .option('--since <date>', 'Filter submissions since (ISO timestamp or 30m, 24h, 7d)')
       .option('--until <date>', 'Filter submissions until (ISO timestamp or 30m, 24h, 7d)')
-      .option('--limit <n>', 'Maximum submissions to return (default 30)', '30')
+      .option('--limit <n>', 'Rows per page, 1-200 (default 30)', '30')
+      .option('--page <n>', 'Page number (default 1)')
+      .option('--all', 'Show every submission')
+      .option('-q, --quiet', 'Only print submission IDs')
       .option('--columns <cols>', 'Comma-separated columns to display')
       .option('--profile <name>', 'Profile to use')
       .option('--json', 'Output as JSON')
@@ -361,6 +367,9 @@ export function registerWebhookCommand(program: Command): void {
       since?: string;
       until?: string;
       limit: string;
+      page?: string;
+      all?: boolean;
+      quiet?: boolean;
       columns?: string;
       profile?: string;
       json?: boolean;
@@ -368,32 +377,50 @@ export function registerWebhookCommand(program: Command): void {
     },
   ): Promise<void> => {
     try {
+      const outFormat = listOutputFormat(options);
+      // The API pages with limit (at most 200) and offset, so page there, not on one fetched page
+      const limit = positiveInt(options.limit, 30, '--limit', 200);
+      const page = positiveInt(options.page, 1, '--page');
       const client = await getClient(options.profile);
       const resolved = await resolveWebhook(client, webhookArg);
 
-      const params = new URLSearchParams({ limit: options.limit });
-      if (options.since) params.set('dateFrom', parseSince(options.since, '--since'));
-      if (options.until) params.set('dateTo', parseSince(options.until, '--until'));
+      const fetchPage = async (pageLimit: number, offset: number) => {
+        const params = new URLSearchParams({ limit: String(pageLimit), offset: String(offset) });
+        if (options.since) params.set('dateFrom', parseSince(options.since, '--since'));
+        if (options.until) params.set('dateTo', parseSince(options.until, '--until'));
+        const raw = await client.get(
+          `/inbound-webhooks/${resolved.id}/submissions?${params.toString()}`,
+        );
+        return unwrapArray<Record<string, unknown>>(raw, ['submissions', 'data']);
+      };
 
-      const raw = await client.get(
-        `/inbound-webhooks/${resolved.id}/submissions?${params.toString()}`,
-      );
-      const flattened = unwrapArray<Record<string, unknown>>(raw, ['submissions', 'data']).map(
-        flattenSubmission,
-      );
+      const submissions: Record<string, unknown>[] = [];
+      if (options.all) {
+        for (let offset = 0; ; offset += 200) {
+          const batch = await fetchPage(200, offset);
+          submissions.push(...batch);
+          if (batch.length < 200) break;
+        }
+      } else {
+        submissions.push(...(await fetchPage(limit, (page - 1) * limit)));
+      }
+      const rows = submissions.map(flattenSubmission);
 
-      const outFormat = options.json ? 'json' : options.output || 'table';
+      if (outFormat === 'quiet') {
+        printQuiet(rows.map((row) => String(row.id)));
+        return;
+      }
       if (outFormat === 'json') {
-        printJson(flattened);
+        printJson(rows);
         return;
       }
       if (outFormat === 'csv') {
         const cols = options.columns ? options.columns.split(',') : undefined;
-        process.stdout.write(toCsv(flattened, cols));
+        process.stdout.write(toCsv(rows, cols));
         return;
       }
 
-      if (flattened.length === 0) {
+      if (rows.length === 0) {
         process.stdout.write(colors.dim('No submissions found.\n'));
         return;
       }
@@ -421,7 +448,7 @@ export function registerWebhookCommand(program: Command): void {
 
       printTable({
         columns: cols,
-        data: flattened,
+        data: rows,
       });
     } catch (err) {
       exitWithError('webhook submissions', err);
@@ -701,13 +728,6 @@ async function resolveWebhookId(
 ): Promise<string> {
   const client = await getClient(profileFlag);
   return (await resolveWebhook(client, idOrSlug)).id;
-}
-
-async function getClient(profileFlag?: string): Promise<ApiClient> {
-  const config = await loadConfig(configPath());
-  const profileName = resolveProfileName(config, profileFlag);
-  const session = await resolveSession(config, profileName, defaultKeyProvider());
-  return new ApiClient(session);
 }
 
 async function getStoredSigningSecret(

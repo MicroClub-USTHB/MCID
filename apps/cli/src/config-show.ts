@@ -44,6 +44,8 @@ export function redactProfile(profile: Profile): Record<string, unknown> {
 
 export interface ConfigShowOptions {
   profile?: string;
+  /** Explicit opt-in for machine-readable output (this command is always JSON). */
+  json?: boolean;
 }
 
 /** Offline (PRD §6.1): reads the config file only, never writes it, never decrypts a secret. */

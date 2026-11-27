@@ -1,11 +1,11 @@
 import { Command } from 'commander';
 import { configPath, loadConfig, normalizeBaseUrl, resolveProfileName } from '../config.js';
-import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
-import { ApiClient } from '../lib/client.js';
+import { ApiClient, getClient } from '../lib/client.js';
 import {
   formatAge,
   formatDate,
+  listOutputFormat,
   printJson,
   printQuiet,
   printSuccess,
@@ -16,7 +16,6 @@ import {
 import { normalizeMemberDetail, normalizeMemberList, unwrapArray } from '../lib/api-normalize.js';
 import { resolveMember, resolveRole, resolveServer } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
-import { resolveSession } from '../session.js';
 import { resolveProjectKey } from './dev.js';
 
 function sourceOf(
@@ -58,17 +57,18 @@ export function registerMemberCommand(program: Command): void {
     quiet?: boolean;
   }) => {
     try {
+      const format = listOutputFormat(options);
       const client = await getClient(options.profile);
 
       if (options.crossServer) {
         const raw = await client.get('/admin/members/cross-server');
         const res = normalizeMemberList(raw);
 
-        if (options.quiet) {
+        if (format === 'quiet') {
           printQuiet(res.map((m) => m.memberId));
           return;
         }
-        if (options.json || options.output === 'json') {
+        if (format === 'json') {
           printJson(raw);
           return;
         }
@@ -80,7 +80,7 @@ export function registerMemberCommand(program: Command): void {
           servers: m.serverNames.join(', '),
         }));
 
-        if (options.output === 'csv') {
+        if (format === 'csv') {
           process.stdout.write(toCsv(crossServerRows));
           return;
         }
@@ -119,13 +119,12 @@ export function registerMemberCommand(program: Command): void {
         if (!options.all || pageRows.length < limit) break;
       }
 
-      if (options.quiet) {
+      if (format === 'quiet') {
         printQuiet(members.map((m) => m.memberId));
         return;
       }
 
-      const outFormat = options.json ? 'json' : options.output || 'table';
-      if (outFormat === 'json') {
+      if (format === 'json') {
         printJson(members);
         return;
       }
@@ -138,7 +137,7 @@ export function registerMemberCommand(program: Command): void {
         joinedAt: m.joinedAt,
       }));
 
-      if (outFormat === 'csv') {
+      if (format === 'csv') {
         process.stdout.write(toCsv(tableRows));
         return;
       }
@@ -411,7 +410,7 @@ export function registerMemberCommand(program: Command): void {
           const content =
             typeof data === 'string'
               ? data
-              : format === 'json'
+              : options.output === 'json'
                 ? JSON.stringify(data, null, 2)
                 : toCsv(data);
           const defaultFilename = `members-${resolvedServer.id}-${new Date().toISOString().slice(0, 10)}.${format}`;
@@ -438,11 +437,4 @@ async function resolveRoleIds(
   const ids: string[] = [];
   for (const role of roles ?? []) ids.push((await resolveRole(client, serverId, role)).id);
   return ids;
-}
-
-async function getClient(profileFlag?: string): Promise<ApiClient> {
-  const config = await loadConfig(configPath());
-  const profileName = resolveProfileName(config, profileFlag);
-  const session = await resolveSession(config, profileName, defaultKeyProvider());
-  return new ApiClient(session);
 }

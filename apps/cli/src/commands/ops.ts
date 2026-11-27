@@ -1,6 +1,4 @@
 import { Command } from 'commander';
-import { configPath, loadConfig, resolveProfileName } from '../config.js';
-import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
 import {
   normalizeAuditLogs,
@@ -10,11 +8,12 @@ import {
   normalizeServerStats,
   normalizeUsage,
 } from '../lib/api-normalize.js';
-import { ApiClient } from '../lib/client.js';
+import { ApiClient, getClient } from '../lib/client.js';
 import { confirmAction, confirmDestructive } from '../lib/confirm.js';
 import {
   formatAge,
   formatDate,
+  listOutputFormat,
   printJson,
   printKeyValue,
   printQuiet,
@@ -23,11 +22,15 @@ import {
   toCsv,
   writeExportFile,
 } from '../lib/output.js';
-import { type ListPaging, pageRows } from '../lib/help.js';
+import {
+  addFullListOptions,
+  type ListOutputFlags,
+  type ListPaging,
+  pageRows,
+} from '../lib/help.js';
 import { resolveMember, resolveProject, resolveServer } from '../lib/resolver.js';
 import { parseSince } from '../lib/time.js';
 import { colors, formatSparkline } from '../lib/tui.js';
-import { resolveSession } from '../session.js';
 
 interface HealthResponse {
   api: { status: string; uptime: number; responseTime: number };
@@ -258,10 +261,9 @@ export function registerOpsCommand(program: Command): void {
   // ── audit ──────────────────────────────────────────────────────────
   const auditCmd = program.command('audit').description('Inspect audit logs of admin activities');
 
-  auditCmd
-    .command('list')
-    .alias('ls')
-    .description('List recent audit log entries')
+  addFullListOptions(
+    auditCmd.command('list').alias('ls').description('List recent audit log entries'),
+  )
     .option('--actor <member>', 'Filter by admin actor')
     .option('--action <category>', `Filter by action category (${AUDIT_CATEGORIES.join(', ')})`)
     .option('--resource <resource>', 'Filter by resource/entity type')
@@ -269,19 +271,22 @@ export function registerOpsCommand(program: Command): void {
     .option('--until <date>', 'End date')
     .option('--follow', 'Poll for new entries continuously')
     .option('--profile <name>', 'Profile to use')
-    .option('--json', 'Output as JSON')
     .action(
-      async (options: {
-        actor?: string;
-        action?: string;
-        resource?: string;
-        since?: string;
-        until?: string;
-        follow?: boolean;
-        profile?: string;
-        json?: boolean;
-      }) => {
+      async (
+        options: {
+          actor?: string;
+          action?: string;
+          resource?: string;
+          since?: string;
+          until?: string;
+          follow?: boolean;
+          profile?: string;
+          json?: boolean;
+        } & ListPaging &
+          ListOutputFlags,
+      ) => {
         try {
+          const format = listOutputFormat(options);
           const client = await getClient(options.profile);
 
           const filters = await auditFilters(client, options);
@@ -301,10 +306,27 @@ export function registerOpsCommand(program: Command): void {
               : rows;
           };
 
-          const logs = await fetchLogs();
+          const allLogs = await fetchLogs();
+          const logs = pageRows(allLogs, options);
 
-          if (options.json && !options.follow) {
+          if (format === 'json' && !options.follow) {
             printJson(await fetchRaw());
+            return;
+          }
+          if (format === 'quiet' && !options.follow) {
+            printQuiet(logs.map((row) => String(row.id)));
+            return;
+          }
+          if (format === 'csv' && !options.follow) {
+            process.stdout.write(
+              toCsv(logs as unknown as Record<string, unknown>[], [
+                'id',
+                'timestamp',
+                'actor',
+                'action',
+                'entity',
+              ]),
+            );
             return;
           }
 
@@ -777,6 +799,7 @@ export function registerOpsCommand(program: Command): void {
     .command('list')
     .alias('ls')
     .description('List Discord webhooks for a project')
+    .option('-o, --output <format>', 'Output format (table|json|csv)', 'table')
     .requiredOption('--project <project>', 'Project name or ID')
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as JSON')
@@ -791,9 +814,11 @@ export function registerOpsCommand(program: Command): void {
           profile?: string;
           json?: boolean;
           quiet?: boolean;
+          output?: string;
         } & ListPaging,
       ) => {
         try {
+          const format = listOutputFormat(options);
           const client = await getClient(options.profile);
           const resolved = await resolveProject(client, options.project);
           // The endpoint returns {webhooks, total, limit, offset}; page until done.
@@ -817,15 +842,19 @@ export function registerOpsCommand(program: Command): void {
 
           const webhooks = pageRows(allWebhooks, options);
 
-          if (options.quiet) {
+          if (format === 'quiet') {
             printQuiet(webhooks.map((w) => String(w['id'])));
             return;
           }
-          if (options.json) {
+          if (format === 'json') {
             printJson(webhooks);
             return;
           }
 
+          if (format === 'csv') {
+            process.stdout.write(toCsv(webhooks, ['id', 'name', 'channelId']));
+            return;
+          }
           printTable({
             columns: [
               { header: 'ID', key: 'id', format: (v) => colors.dim(String(v)) },
@@ -915,11 +944,4 @@ async function auditFilters(
   if (options.since) params.set('dateFrom', parseSince(options.since, '--since'));
   if (options.until) params.set('dateTo', parseSince(options.until, '--until'));
   return params;
-}
-
-async function getClient(profileFlag?: string): Promise<ApiClient> {
-  const config = await loadConfig(configPath());
-  const profileName = resolveProfileName(config, profileFlag);
-  const session = await resolveSession(config, profileName, defaultKeyProvider());
-  return new ApiClient(session);
 }
