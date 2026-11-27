@@ -45,12 +45,9 @@ import { ListProjectsByServerDto } from './dto/list-projects-by-server.dto';
 import { ListAccessMatrixDto } from './dto/list-access-matrix.dto';
 import { AuditAction, ListAuditDto } from './dto/list-audit.dto';
 
+/** `AdminAccessGuard` sets `memberId` once the admin session is validated. */
 type RequestWithUser = Request & {
-  user?: {
-    id?: string;
-    email?: string;
-    username?: string;
-  };
+  memberId?: string;
 };
 
 @ApiTags('Projects')
@@ -66,9 +63,7 @@ export class ProjectsController {
 
   private resolveActor(req: RequestWithUser): string {
     return (
-      req.user?.id ??
-      req.user?.email ??
-      req.user?.username ??
+      req.memberId ??
       (this.configService.get<string>('app.nodeEnv') === 'development'
         ? 'dev-admin'
         : 'unknown-admin')

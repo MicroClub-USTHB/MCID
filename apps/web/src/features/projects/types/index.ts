@@ -116,7 +116,10 @@ export interface AccessAuditEntry {
   action: AccessAuditAction;
   operationsBefore: AccessOperations | null;
   operationsAfter: AccessOperations | null;
+  /** Member ID of the admin who made the change. */
   changedBy: string;
+  /** Username of that member, or null when the ID matches no member. */
+  changedByUsername: string | null;
   changedAt: string;
 }
 

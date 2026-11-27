@@ -5,6 +5,7 @@ import { DRIZZLE } from '../../database/database.module';
 import { DrizzleDB } from '../../database/database.constants';
 import * as schema from '../../database/entities';
 import {
+  members,
   projectServerAccessAudit,
   projectServers,
   projects,
@@ -647,9 +648,23 @@ export class ProjectsRepository {
       );
     }
 
+    // changed_by holds the admin's member ID. Older rows may hold a
+    // placeholder ('unknown-admin', 'dev-admin'), which matches no member,
+    // so changedByUsername comes back null for them.
     const query = this.db
-      .select()
+      .select({
+        id: projectServerAccessAudit.id,
+        projectId: projectServerAccessAudit.projectId,
+        serverId: projectServerAccessAudit.serverId,
+        action: projectServerAccessAudit.action,
+        operationsBefore: projectServerAccessAudit.operationsBefore,
+        operationsAfter: projectServerAccessAudit.operationsAfter,
+        changedBy: projectServerAccessAudit.changedBy,
+        changedByUsername: members.username,
+        changedAt: projectServerAccessAudit.changedAt,
+      })
       .from(projectServerAccessAudit)
+      .leftJoin(members, eq(members.id, projectServerAccessAudit.changedBy))
       .orderBy(desc(projectServerAccessAudit.changedAt))
       .limit(safeLimit);
 
