@@ -14,13 +14,34 @@ mcid-cli whoami
 ```
 
 For each resource, `explain` prints the effective level and its source: a role, an
-override, or root. `whoami` shows the same levels for the signed-in admin.
+override, or root. An override also names the admin who set it and how long ago.
+
+```text
+RESOURCE   LEVEL   SOURCE
+projects   write   from role "Dev Lead"
+members    read    from role "HR"
+settings   none    override set by @bob 2d ago
+```
+
+One `access member set` replaces all of a member's overrides, so every override it
+writes shows the same admin and time. `whoami` shows the same levels for the
+signed-in admin.
+
+## Roles
+
+```bash
+mcid-cli access roles
+```
+
+`access roles` prints a grid with one row per main-server role and one column per
+resource that some role grants. A dash means the role has no grant there. Root roles
+are marked `(root)` and hold `manage` everywhere. `--json` returns the raw roles, with
+their IDs.
 
 ## Change grants
 
 ```bash
 mcid-cli access catalog
-mcid-cli access roles
 mcid-cli access role set "Dev Lead" projects=write members=read
 mcid-cli access member get @alice
 mcid-cli access member set @alice settings=read
@@ -36,4 +57,8 @@ not exist is rejected with the closest valid name.
 Root members hold every permission, so their overrides cannot be edited, and the
 command says so.
 
-Source: `apps/cli/src/commands/access.ts`, `apps/cli/src/whoami.ts`.
+The hyphenated forms from earlier releases (`access role-set`, `access member-get`,
+`access member-set`, `access member-unset`) still run, so existing scripts keep working,
+but they are hidden from `--help`. Use the nested forms above.
+
+Source: `apps/cli/src/commands/access.ts`, `apps/cli/src/whoami.ts`, `apps/api/src/modules/admin-access/admin-access-grants.service.ts`.

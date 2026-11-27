@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, inArray } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { alias } from 'drizzle-orm/pg-core';
 import type {
   AccessLevel,
   AccessResource,
@@ -12,6 +13,15 @@ import type {
 } from '../../common/permissions/resolve-access';
 import { DRIZZLE } from '../../database/database.module';
 import * as schema from '../../database/entities';
+
+export interface MemberOverrideAuthor {
+  resource: AccessResource;
+  setAt: Date;
+  /** Member ID of the admin who set it; null for rows written without one. */
+  setById: string | null;
+  /** Null when setById matches no member. */
+  setByUsername: string | null;
+}
 
 export interface ServerRoleRow {
   id: string;
@@ -74,6 +84,27 @@ export class AdminAccessRepository {
       resource: r.resource as AccessResource,
       level: r.level,
     }));
+  }
+
+  /**
+   * Who last wrote each of a member's overrides, and when. A PUT replaces the
+   * whole set, so every override of that PUT shares the same author and time.
+   */
+  async findMemberOverrideAuthors(
+    memberId: string,
+  ): Promise<MemberOverrideAuthor[]> {
+    const setter = alias(schema.members, 'setter');
+    const rows = await this.db
+      .select({
+        resource: schema.adminMemberAccess.resource,
+        setAt: schema.adminMemberAccess.updatedAt,
+        setById: schema.adminMemberAccess.updatedBy,
+        setByUsername: setter.username,
+      })
+      .from(schema.adminMemberAccess)
+      .leftJoin(setter, eq(setter.id, schema.adminMemberAccess.updatedBy))
+      .where(eq(schema.adminMemberAccess.memberId, memberId));
+    return rows.map((r) => ({ ...r, resource: r.resource as AccessResource }));
   }
 
   async listServerRoles(serverId: string): Promise<ServerRoleRow[]> {
