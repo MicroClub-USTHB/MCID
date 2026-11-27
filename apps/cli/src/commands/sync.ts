@@ -102,9 +102,9 @@ export function registerSyncCommand(program: Command): void {
 
             if (statusRes.status === 'success') {
               if (process.stdout.isTTY) process.stdout.write('\r\x1b[2K');
-              const deltas = await memberDeltas(client, syncLogId);
+              const deltas = await syncDeltas(client, syncLogId);
               printSuccess(
-                `Synced ${resolved.name} in ${elapsedSec}s: ${statusRes.membersSynced} members${deltas}, ${statusRes.rolesSynced} roles`,
+                `Synced ${resolved.name} in ${elapsedSec}s: ${statusRes.membersSynced} members${deltas.members}, ${statusRes.rolesSynced} roles${deltas.roles}`,
               );
               if (options.json) {
                 printJson(statusRes);
@@ -391,17 +391,25 @@ async function fetchSyncChanges(
 }
 
 /** "(+12, -3)" for the members a sync added and removed, or "" when the change log is unavailable. */
-async function memberDeltas(client: ApiClient, syncLogId: string): Promise<string> {
-  if (!syncLogId) return '';
+/** Member and role deltas for the `--wait` summary (#230). */
+async function syncDeltas(
+  client: ApiClient,
+  syncLogId: string,
+): Promise<{ members: string; roles: string }> {
+  const empty = { members: '', roles: '' };
+  if (!syncLogId) return empty;
   try {
-    const members = (await fetchSyncChanges(client, syncLogId)).filter(
-      (c) => String(c['entityType']) === 'member',
-    );
-    const added = members.filter((c) => String(c['action']) === 'added').length;
-    const removed = members.filter((c) => String(c['action']) === 'removed').length;
-    return ` (+${added}, -${removed})`;
+    const changes = await fetchSyncChanges(client, syncLogId);
+    const count = (entityType: string, action: string) =>
+      changes.filter(
+        (c) => String(c['entityType']) === entityType && String(c['action']) === action,
+      ).length;
+    return {
+      members: ` (+${count('member', 'added')}, -${count('member', 'removed')})`,
+      roles: ` (+${count('role', 'added')}, -${count('role', 'removed')})`,
+    };
   } catch {
-    return '';
+    return empty;
   }
 }
 

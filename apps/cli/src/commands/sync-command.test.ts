@@ -87,6 +87,7 @@ describe('sync run', () => {
               { entityType: 'member', entityId: '2', action: 'added' },
               { entityType: 'member', entityId: '3', action: 'removed' },
               { entityType: 'role', entityId: '4', action: 'added' },
+              { entityType: 'role', entityId: '5', action: 'removed' },
             ],
           }),
         'GET /admin/sync/status': () =>
@@ -100,7 +101,7 @@ describe('sync run', () => {
     });
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toMatch(/Synced .* 1204 members \(\+2, -1\), 58 roles/);
+    expect(result.stdout).toMatch(/Synced .* 1204 members \(\+2, -1\), 58 roles \(\+1, -1\)/);
   });
 
   it('exits non-zero when the sync itself fails under --wait', async () => {
