@@ -30,7 +30,10 @@ mcid-cli audit export --action access --since 7d --file access-audit.csv
 Dates accept an ISO timestamp, or a relative value such as `30m`, `24h` or `7d`.
 `audit export` takes the same `--actor`, `--action`, `--since` and `--until` filters as
 `audit list`. The `--action` value is the audit category: `auth`, `project`, `server`,
-`role`, `webhook`, `member`, `sync`, `permission` or `access`.
+`role`, `webhook`, `member`, `sync`, `permission` or `access`. Report exports refuse to
+replace files without `--force`. A forced destination must be a regular file without
+other hard links and, on POSIX, already have mode `0600`; symlinks are rejected. Windows
+file ACLs are not checked.
 
 ## Statistics
 
@@ -55,8 +58,11 @@ mcid-cli settings reset
 
 ```bash
 mcid-cli discord-webhook list --project portal
+mcid-cli discord-webhook list --project portal -o csv --all
 mcid-cli discord-webhook get 1a2b3c
 mcid-cli discord-webhook delete 1a2b3c
 ```
 
 Source: `apps/cli/src/commands/ops.ts`.
+
+> File-safety limits: the hard-link and mode checks are best-effort with a TOCTOU window. Concurrent writers are not locked out, and a write failure after truncation can leave a partial file. Windows ACLs are not checked.
