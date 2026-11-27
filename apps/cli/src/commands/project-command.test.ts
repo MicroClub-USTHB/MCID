@@ -9,6 +9,60 @@ import { expectOwnerOnlyMode } from '../test-support/fs.js';
 
 afterEach(cleanupCliTest);
 
+describe('project list pagination', () => {
+  const projects = Array.from({ length: 35 }, (_, index) => ({
+    ...projectRecord,
+    id: `project-${index + 1}`,
+    name: `Project ${index + 1}`,
+  }));
+
+  const routes = baseRoutes({
+    'GET /admin/projects': () => json(projects),
+  });
+
+  it('shows the first 30 projects by default', async () => {
+    const result = await runCli(['project', 'list', '--json'], { routes });
+
+    const output = JSON.parse(result.stdout) as { id: string }[];
+
+    expect(result.exitCode).toBe(0);
+    expect(output).toHaveLength(30);
+    expect(output[0]?.id).toBe('project-1');
+    expect(output[29]?.id).toBe('project-30');
+    expect(result.stderr).toContain('Showing 1-30 of 35');
+  });
+
+  it('shows the requested page and limit', async () => {
+    const result = await runCli(['project', 'list', '--limit', '5', '--page', '2', '--json'], {
+      routes,
+    });
+
+    const output = JSON.parse(result.stdout) as { id: string }[];
+
+    expect(result.exitCode).toBe(0);
+    expect(output.map((project) => project.id)).toEqual([
+      'project-6',
+      'project-7',
+      'project-8',
+      'project-9',
+      'project-10',
+    ]);
+    expect(result.stderr).toContain('Showing 6-10 of 35');
+  });
+
+  it('shows every project when --all is provided', async () => {
+    const result = await runCli(['project', 'list', '--all', '--json'], { routes });
+
+    const output = JSON.parse(result.stdout) as { id: string }[];
+
+    expect(result.exitCode).toBe(0);
+    expect(output).toHaveLength(35);
+    expect(output[0]?.id).toBe('project-1');
+    expect(output[34]?.id).toBe('project-35');
+    expect(result.stderr).toBe('');
+  });
+});
+
 describe('project access grant', () => {
   const existingGrants = [
     {
