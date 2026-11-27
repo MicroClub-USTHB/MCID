@@ -61,6 +61,13 @@ describe('profileList', () => {
     ]);
   });
 
+  it('prints an empty JSON array, not the hint, for --json when there are none', async () => {
+    const path = await tempConfigPath({ version: 1, activeProfile: null, profiles: {} });
+    const out = collect();
+    await profileList(fakeDeps(path, { out: out.out }), { json: true });
+    expect(out.lines).toEqual(['[]']);
+  });
+
   it('shows the active marker, base URL, session state, and secret count for each profile', async () => {
     const now = new Date('2026-10-05T12:00:00.000Z');
     let config = addProfile(

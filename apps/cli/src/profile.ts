@@ -61,9 +61,13 @@ export async function profileList(
   deps: ProfileDeps,
   options: ListPaging & ListOutputFlags = {},
 ): Promise<void> {
+  const format = listOutputFormat(options);
   const config = await loadConfig(deps.configPath);
   const names = Object.keys(config.profiles);
   if (names.length === 0) {
+    // Machine-readable formats stay parseable when there is nothing to list
+    if (format === 'json') deps.out('[]');
+    if (format !== 'table') return;
     deps.out(
       'No profiles configured; run `mcid-cli profile add <name> --base-url <url>` or `mcid-cli login`.',
     );
@@ -71,7 +75,6 @@ export async function profileList(
   }
   const now = (deps.now ?? (() => new Date()))();
   const page = pageRows(names, options);
-  const format = listOutputFormat(options);
   const records = page.map((name) => {
     const profile = config.profiles[name]!;
     return {
