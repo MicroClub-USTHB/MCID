@@ -33,7 +33,7 @@ function memberPagesRoute(total = 3) {
     const page = Number(url.searchParams.get('page') ?? 1);
     const limit = Number(url.searchParams.get('limit') ?? 20);
     const start = (page - 1) * limit;
-    const data = Array.from({ length: Math.min(limit, total - start) }, (_, i) =>
+    const data = Array.from({ length: Math.max(0, Math.min(limit, total - start)) }, (_, i) =>
       memberRow(start + i + 1),
     );
     return json({ data, total, page, limit, totalPages: Math.ceil(total / limit) });
@@ -49,7 +49,7 @@ describe('member list pagination', () => {
     expect(result.exitCode).toBe(0);
     const get = result.requests.find((r) => r.path === '/admin/members');
     expect(get).toBeDefined();
-    expect(Number(get?.query['limit'])).toBe(100);
+    expect(Number(get?.query['limit'])).toBe(30);
     expect(get?.query['page']).toBeDefined();
   });
 
@@ -152,5 +152,75 @@ describe('member export', () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('member list cross-server pagination', () => {
+  it('honors filters and the selected page and preserves raw JSON fields', async () => {
+    const result = await runCli(
+      [
+        'member',
+        'list',
+        '--cross-server',
+        '--search',
+        'member',
+        '--joined-after',
+        '2026-01-01',
+        '--limit',
+        '2',
+        '--page',
+        '2',
+        '--json',
+      ],
+      { routes: baseRoutes({ 'GET /admin/members/cross-server': memberPagesRoute(5) }) },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual([memberRow(3), memberRow(4)]);
+    const request = result.requests.find((r) => r.path === '/admin/members/cross-server');
+    expect(request?.query).toMatchObject({
+      page: '2',
+      limit: '2',
+      search: 'member',
+      joinedAfter: '2026-01-01',
+    });
+  });
+
+  it('fetches every cross-server page with --all', async () => {
+    const result = await runCli(
+      ['member', 'list', '--cross-server', '--all', '--limit', '2', '--json'],
+      {
+        routes: baseRoutes({ 'GET /admin/members/cross-server': memberPagesRoute(5) }),
+      },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toHaveLength(5);
+    expect(result.requests.filter((r) => r.path === '/admin/members/cross-server')).toHaveLength(3);
+  });
+
+  it.each(['0', '-1', 'abc', '2.5', '101'])(
+    'rejects invalid limit %s without querying members',
+    async (limit) => {
+      const result = await runCli(['member', 'list', '--cross-server', '--limit', limit], {
+        routes: baseRoutes({ 'GET /admin/members/cross-server': memberPagesRoute(3) }),
+      });
+      expect(result.exitCode).toBe(64);
+      expect(result.requests.some((r) => r.path === '/admin/members/cross-server')).toBe(false);
+    },
+  );
+});
+
+describe('member list raw output', () => {
+  it('returns raw paginated records and reports additional pages', async () => {
+    const result = await runCli(['member', 'list', '--limit', '2', '--json'], {
+      routes: baseRoutes({ 'GET /admin/members': memberPagesRoute(3) }),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual([memberRow(1), memberRow(2)]);
+    expect(result.stderr).toContain('--page 2');
+  });
+  it('rejects an invalid page before member requests', async () => {
+    const result = await runCli(['member', 'list', '--page', '0']);
+    expect(result.exitCode).toBe(64);
+    expect(result.requests).toHaveLength(0);
   });
 });
