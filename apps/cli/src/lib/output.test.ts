@@ -1,8 +1,8 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
-import { formatAge, formatDate, toCsv, writeExportFile } from './output.js';
+import { describe, expect, it, vi } from 'vitest';
+import { formatAge, formatDate, printJson, toCsv, writeExportFile } from './output.js';
 
 describe('output formatters', () => {
   it('formats relative ages cleanly', () => {
@@ -59,6 +59,51 @@ describe('writeExportFile', () => {
       expect(await readFile(target, 'utf8')).toBe('new');
     } finally {
       await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('JSON secret redaction', () => {
+  it('keeps public key fields while redacting credential-shaped names', () => {
+    const output = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      printJson({
+        levels: [{ key: 'read', description: 'Read access' }],
+        nested: {
+          apiKey: 'tiny',
+          refresh_token: 'other',
+          password: 'pw',
+          secretCount: 2,
+        },
+      });
+      expect(JSON.parse(String(output.mock.calls[0]?.[0]))).toEqual({
+        levels: [{ key: 'read', description: 'Read access' }],
+        nested: {
+          apiKey: '[REDACTED]',
+          refresh_token: '[REDACTED]',
+          password: '[REDACTED]',
+          secretCount: 2,
+        },
+      });
+    } finally {
+      output.mockRestore();
+    }
+  });
+
+  it('redacts short and nested secret values without exposing prefixes', () => {
+    const output = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      printJson({
+        apiKey: 'tiny',
+        nested: { accessToken: 'long-sensitive-token', secret: { value: 'abc' } },
+      });
+      const parsed = JSON.parse(String(output.mock.calls[0]?.[0]));
+      expect(parsed).toEqual({
+        apiKey: '[REDACTED]',
+        nested: { accessToken: '[REDACTED]', secret: '[REDACTED]' },
+      });
+    } finally {
+      output.mockRestore();
     }
   });
 });

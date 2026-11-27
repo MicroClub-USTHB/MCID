@@ -118,12 +118,12 @@ schema file, stored signing secrets, submissions, and signed test sends.
 ```bash
 mcid-cli dev sso --project Portal --port 3210
 mcid-cli dev token validate <token> --api-key pk_...
-mcid-cli dev token refresh <refresh-token> --token <session-token>
+mcid-cli dev token refresh <refresh-token> --token <session-token> --reveal
 mcid-cli dev check @john_doe members.read --server "Micro Club"
 mcid-cli dev env --project Portal --file .env     # written with owner-only permissions
 ```
 
-`dev token refresh` prints the new token pair in full: the old pair is invalidated
+`dev token refresh` requires `--reveal` before the request and prints the new token pair in full: the old pair is invalidated
 server-side the moment the refresh succeeds, so masking the only surviving
 credentials would lose the session.
 

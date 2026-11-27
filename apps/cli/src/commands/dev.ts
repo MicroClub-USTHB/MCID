@@ -317,6 +317,12 @@ export function registerDevCommand(program: Command): void {
     options: { token?: string; profile?: string; reveal?: boolean; json?: boolean },
   ): Promise<void> => {
     try {
+      if (!options.reveal) {
+        throw new CliError(
+          'Token refresh requires --reveal: it invalidates the old tokens and returns the new pair once',
+          ExitCode.Usage,
+        );
+      }
       const cfg = await loadConfig(configPath());
       const profile = resolveProfileName(cfg, options.profile);
       const baseUrl = normalizeBaseUrl(
@@ -358,6 +364,7 @@ export function registerDevCommand(program: Command): void {
     cmd
       .requiredOption('--token <sessionToken>', 'Active session token')
       .option('--profile <name>', 'Profile to use')
+      .option('--reveal', 'Explicitly display the new one-time token pair')
       .option('--json', 'Output as JSON');
 
   tokenRefreshOptions(tokenCmd.command('refresh <refreshToken>'))

@@ -31,8 +31,12 @@ MCID_REDIRECT_URI=http://localhost:3000/callback
   redirect URI and whether to grant the main server.
 - `--env-out` writes the block with owner-only permissions and refuses to replace an
   existing `MCID_API_KEY` unless you pass `--force`.
-- The key is never written to the CLI config file, and `--json` always includes it
-  because it cannot be shown again.
+- If the project is created but a server grant, redirect URI, or file write fails, the
+  command returns a nonzero status. Save the one-time key from stdout and follow the
+  error on stderr; do not create the project again blindly.
+- The key is never written to the CLI config file. For JSON output, pass both `--json`
+  and `--reveal`: the API returns the key only once. Without `--reveal`, the command
+  fails before creating the project. Update scripts that previously used `--json` alone.
 
 ## Redirect URIs
 

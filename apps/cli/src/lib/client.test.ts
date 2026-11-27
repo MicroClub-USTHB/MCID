@@ -45,6 +45,41 @@ describe('ApiClient', () => {
     });
   });
 
+  it('does not log query values or network error text in debug mode', async () => {
+    const secret = 'secret-query-token';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error(`connection failed for ${secret}`);
+      }),
+    );
+    const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      const client = new ApiClient(session, { debug: true });
+      const error = await client
+        .request('GET', `/admin/projects?token=${secret}`)
+        .catch((err) => err);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).not.toContain(secret);
+      expect(write.mock.calls.map((call) => String(call[0])).join('')).not.toContain(secret);
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it('omits query values from successful debug logs', async () => {
+    stubFetch(new Response('{}', { headers: { 'content-type': 'application/json' } }));
+    const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      await new ApiClient(session, { debug: true }).get('/admin/projects?token=private-value');
+      const log = write.mock.calls.map((call) => String(call[0])).join('');
+      expect(log).toContain('[debug] GET /admin/projects');
+      expect(log).not.toContain('private-value');
+    } finally {
+      write.mockRestore();
+    }
+  });
+
   it('prints request timings on stderr when debug is on', async () => {
     stubFetch(
       new Response(JSON.stringify({ ok: true }), {
