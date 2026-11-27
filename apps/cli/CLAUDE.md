@@ -41,6 +41,7 @@ for its interactive terminal UI widgets.
 - Standard verbs: `list` (alias `ls`), `get`, `create`, `update`, `delete` (alias `rm`).
 - Every command supports `--json`, `-q, --quiet`, and `-o, --output table|json|csv`.
 - Non-interactive safety: Destructive actions require confirmation or `--yes`. In non-TTY environments without `--yes`, commands exit with code 64 (Usage).
+- Missing resource/name arguments prompt on a TTY (picker for resources, text for names); on a non-TTY they fail with a usage error naming the flag before any request. Secrets, tokens, local file paths, shell names and permission/grant lists stay explicitly required; `--profile` on state-changing commands is never guessed.
 - Resolvers: Names, slugs, or IDs are accepted. Discord members accept `@username` or snowflake ID. `--server` defaults to main guild.
 - CI authentication: Supports `MCID_TOKEN` and `MCID_API_URL` environment variables.
 - Exit codes are part of the contract: `0` completed (even when the answer is negative), `1` precheck failed, `2` rejected/aborted, `3` auth, `4` not found, `5` unexpected, `6` a `--wait` timed out, `64` usage.
