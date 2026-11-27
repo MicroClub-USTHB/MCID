@@ -25,6 +25,28 @@ export async function writeExportFile(path: string, content: string, force = fal
 
 export type OutputFormat = 'table' | 'json' | 'csv' | 'quiet';
 
+/** Validate a list format before performing network requests. */
+export function listOutputFormat(options: {
+  output?: string | undefined;
+  json?: boolean | undefined;
+  quiet?: boolean | undefined;
+}): OutputFormat {
+  if (options.output && !['table', 'json', 'csv'].includes(options.output)) {
+    throw new CliError('--output must be table, json, or csv', ExitCode.Usage);
+  }
+  if (options.quiet && (options.json || (options.output && options.output !== 'table'))) {
+    throw new CliError('--quiet cannot be combined with JSON or CSV output', ExitCode.Usage);
+  }
+  if (options.json && options.output && options.output !== 'table' && options.output !== 'json') {
+    throw new CliError('--json cannot be combined with CSV output', ExitCode.Usage);
+  }
+  return options.quiet
+    ? 'quiet'
+    : options.json
+      ? 'json'
+      : ((options.output as OutputFormat | undefined) ?? 'table');
+}
+
 export interface Column<T = Record<string, unknown>> {
   header: string;
   key?: keyof T | string | undefined;

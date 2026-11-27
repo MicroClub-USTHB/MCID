@@ -172,3 +172,16 @@ describe('sync run', () => {
     expect(result.stderr).toContain('Sync timed out');
   });
 });
+
+describe('sync logs output formats', () => {
+  it('outputs the selected page as CSV', async () => {
+    const result = await runCli(['sync', 'logs', '--limit', '1', '-o', 'csv'], {
+      routes: baseRoutes({
+        'GET /admin/sync/logs': () => json({ logs: [{ id: '1', status: 'success' }], total: 1 }),
+      }),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('id,status');
+    expect(result.stdout).toContain('1,success');
+  });
+});

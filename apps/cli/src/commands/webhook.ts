@@ -5,12 +5,14 @@ import { configPath, loadConfig, resolveProfileName } from '../config.js';
 import { defaultKeyProvider, decrypt, webhookSecretContext } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
 import { unwrapArray } from '../lib/api-normalize.js';
-import { ApiClient } from '../lib/client.js';
+import { getClient } from '../lib/client.js';
+import { pageRows } from '../lib/help.js';
 import { signBody } from '../lib/signature.js';
 import {
   formatAge,
   printJson,
   printKeyValue,
+  printQuiet,
   printSuccess,
   printTable,
   toCsv,
@@ -19,7 +21,6 @@ import { resolveWebhook } from '../lib/resolver.js';
 import { parseSince } from '../lib/time.js';
 import { buildExamplePayload, validatePayload, type FormSchema } from '@mcid/form-schema';
 import { colors } from '../lib/tui.js';
-import { resolveSession } from '../session.js';
 import {
   defaultWebhookDeps,
   webhookCreate,
@@ -105,6 +106,7 @@ export function registerWebhookCommand(program: Command): void {
     .command('list')
     .alias('ls')
     .description('List webhooks')
+    .option('-o, --output <format>', 'output format (table|json|csv)', 'table')
     .option('--project <projectId>', 'filter by project id')
     .option('--profile <name>', 'profile to use')
     .option('--json', 'emit machine-readable JSON')
@@ -351,6 +353,9 @@ export function registerWebhookCommand(program: Command): void {
       .option('--since <date>', 'Filter submissions since (ISO timestamp or 30m, 24h, 7d)')
       .option('--until <date>', 'Filter submissions until (ISO timestamp or 30m, 24h, 7d)')
       .option('--limit <n>', 'Maximum submissions to return (default 30)', '30')
+      .option('--page <n>', 'Page number (default 1)')
+      .option('--all', 'Show every submission')
+      .option('-q, --quiet', 'Only print submission IDs')
       .option('--columns <cols>', 'Comma-separated columns to display')
       .option('--profile <name>', 'Profile to use')
       .option('--json', 'Output as JSON')
@@ -361,6 +366,9 @@ export function registerWebhookCommand(program: Command): void {
       since?: string;
       until?: string;
       limit: string;
+      page?: string;
+      all?: boolean;
+      quiet?: boolean;
       columns?: string;
       profile?: string;
       json?: boolean;
@@ -382,18 +390,23 @@ export function registerWebhookCommand(program: Command): void {
         flattenSubmission,
       );
 
+      const rows = pageRows(flattened, options);
+      if (options.quiet) {
+        printQuiet(rows.map((row) => String(row.id)));
+        return;
+      }
       const outFormat = options.json ? 'json' : options.output || 'table';
       if (outFormat === 'json') {
-        printJson(flattened);
+        printJson(rows);
         return;
       }
       if (outFormat === 'csv') {
         const cols = options.columns ? options.columns.split(',') : undefined;
-        process.stdout.write(toCsv(flattened, cols));
+        process.stdout.write(toCsv(rows, cols));
         return;
       }
 
-      if (flattened.length === 0) {
+      if (rows.length === 0) {
         process.stdout.write(colors.dim('No submissions found.\n'));
         return;
       }
@@ -701,13 +714,6 @@ async function resolveWebhookId(
 ): Promise<string> {
   const client = await getClient(profileFlag);
   return (await resolveWebhook(client, idOrSlug)).id;
-}
-
-async function getClient(profileFlag?: string): Promise<ApiClient> {
-  const config = await loadConfig(configPath());
-  const profileName = resolveProfileName(config, profileFlag);
-  const session = await resolveSession(config, profileName, defaultKeyProvider());
-  return new ApiClient(session);
 }
 
 async function getStoredSigningSecret(

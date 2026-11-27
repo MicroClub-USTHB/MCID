@@ -1,11 +1,10 @@
 import { Command } from 'commander';
-import { configPath, loadConfig, resolveProfileName } from '../config.js';
-import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
 import { confirmAction } from '../lib/confirm.js';
 import { normalizeRoleStats } from '../lib/api-normalize.js';
-import { ApiClient } from '../lib/client.js';
+import { getClient } from '../lib/client.js';
 import {
+  listOutputFormat,
   printJson,
   printKeyValue,
   printQuiet,
@@ -13,10 +12,15 @@ import {
   printTable,
   toCsv,
 } from '../lib/output.js';
-import { addListPaging, pageRows, type ListPaging } from '../lib/help.js';
+import {
+  addFullListOptions,
+  addListPaging,
+  type ListOutputFlags,
+  pageRows,
+  type ListPaging,
+} from '../lib/help.js';
 import { resolveRole, resolveServer } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
-import { resolveSession } from '../session.js';
 
 interface RolePermissionItem {
   id: number;
@@ -46,6 +50,7 @@ export function registerRoleCommand(program: Command): void {
     } & ListPaging,
   ) => {
     try {
+      const outFormat = listOutputFormat(options);
       const client = await getClient(options.profile);
       const resolvedServer = await resolveServer(client, options.server);
       const raw = await client.get(
@@ -53,12 +58,11 @@ export function registerRoleCommand(program: Command): void {
       );
       const roles = pageRows(normalizeRoleStats(raw), options);
 
-      if (options.quiet) {
+      if (outFormat === 'quiet') {
         printQuiet(roles.map((r) => r.id));
         return;
       }
 
-      const outFormat = options.json ? 'json' : options.output || 'table';
       if (outFormat === 'json') {
         printJson(raw);
         return;
@@ -139,15 +143,16 @@ export function registerRoleCommand(program: Command): void {
   // role permissions group
   const permCmd = roleCmd.command('permissions').description('Manage role permissions');
 
-  permCmd
-    .command('list <role>')
-    .alias('ls')
-    .description('List permissions assigned to a role')
+  addFullListOptions(
+    permCmd.command('list <role>').alias('ls').description('List permissions assigned to a role'),
+  )
     .option('--server <server>', 'Discord server (defaults to main server)')
     .option('--profile <name>', 'Profile to use')
-    .option('--json', 'Output as JSON')
     .action(
-      async (roleArg: string, options: { server?: string; profile?: string; json?: boolean }) => {
+      async (
+        roleArg: string,
+        options: { server?: string; profile?: string } & ListPaging & ListOutputFlags,
+      ) => {
         try {
           const client = await getClient(options.profile);
           const resolvedServer = await resolveServer(client, options.server);
@@ -157,9 +162,22 @@ export function registerRoleCommand(program: Command): void {
             `/permissions/admin/servers/${encodeURIComponent(resolvedServer.id)}/roles/${encodeURIComponent(resolvedRole.id)}/permissions`,
           );
 
-          const list = res.permissions || [];
-          if (options.json) {
-            printJson(list);
+          const list = pageRows(res.permissions || [], options);
+          const format = listOutputFormat(options);
+          if (format === 'json') {
+            // Project onto the documented DTO so unexpected fields cannot leak.
+            // `key` is a public permission identifier and is no longer redacted.
+            printJson(list.map(({ id, key, description }) => ({ id, key, description })));
+            return;
+          }
+          if (format === 'quiet') {
+            printQuiet(list.map((item) => String(item.id)));
+            return;
+          }
+          if (format === 'csv') {
+            process.stdout.write(
+              toCsv(list as unknown as Record<string, unknown>[], ['id', 'key', 'description']),
+            );
             return;
           }
 
@@ -333,45 +351,54 @@ export function registerRoleCommand(program: Command): void {
     .command('inheritance')
     .description('Manage role permission inheritance rules');
 
-  inheritCmd
-    .command('list')
-    .alias('ls')
-    .description('List role inheritance rules')
+  addFullListOptions(
+    inheritCmd.command('list').alias('ls').description('List role inheritance rules'),
+  )
     .option('--server <server>', 'Filter by server')
     .option('--profile <name>', 'Profile to use')
-    .option('--json', 'Output as JSON')
-    .action(async (options: { server?: string; profile?: string; json?: boolean }) => {
-      try {
-        const client = await getClient(options.profile);
-        let path = '/permissions/inheritance-rules';
-        if (options.server) {
-          const s = await resolveServer(client, options.server);
-          path += `?serverId=${encodeURIComponent(s.id)}`;
-        }
-        const rules = await client.get<Record<string, unknown>[]>(path);
+    .action(
+      async (options: { server?: string; profile?: string } & ListPaging & ListOutputFlags) => {
+        try {
+          const client = await getClient(options.profile);
+          let path = '/permissions/inheritance-rules';
+          if (options.server) {
+            const s = await resolveServer(client, options.server);
+            path += `?serverId=${encodeURIComponent(s.id)}`;
+          }
+          const rules = pageRows(await client.get<Record<string, unknown>[]>(path), options);
+          const format = listOutputFormat(options);
 
-        if (options.json) {
-          printJson(rules);
-          return;
-        }
+          if (format === 'json') {
+            printJson(rules);
+            return;
+          }
+          if (format === 'quiet') {
+            printQuiet(rules.map((rule) => String(rule.id)));
+            return;
+          }
+          if (format === 'csv') {
+            process.stdout.write(toCsv(rules, ['id', 'sourceRoleId', 'targetScope']));
+            return;
+          }
 
-        printTable({
-          columns: [
-            { header: 'ID', key: 'id', format: (v) => colors.dim(String(v)) },
-            { header: 'SOURCE ROLE', key: 'sourceRoleId', format: (v) => colors.bold(String(v)) },
-            { header: 'TARGET SCOPE', key: 'targetScope', format: (v) => String(v) },
-            {
-              header: 'STATUS',
-              format: (_, r) =>
-                r.enabled !== false ? colors.green('enabled') : colors.dim('disabled'),
-            },
-          ],
-          data: rules,
-        });
-      } catch (err) {
-        exitWithError('role inheritance list', err);
-      }
-    });
+          printTable({
+            columns: [
+              { header: 'ID', key: 'id', format: (v) => colors.dim(String(v)) },
+              { header: 'SOURCE ROLE', key: 'sourceRoleId', format: (v) => colors.bold(String(v)) },
+              { header: 'TARGET SCOPE', key: 'targetScope', format: (v) => String(v) },
+              {
+                header: 'STATUS',
+                format: (_, r) =>
+                  r.enabled !== false ? colors.green('enabled') : colors.dim('disabled'),
+              },
+            ],
+            data: rules,
+          });
+        } catch (err) {
+          exitWithError('role inheritance list', err);
+        }
+      },
+    );
 
   inheritCmd
     .command('set <sourceRole>')
@@ -408,11 +435,4 @@ export function registerRoleCommand(program: Command): void {
         }
       },
     );
-}
-
-async function getClient(profileFlag?: string): Promise<ApiClient> {
-  const config = await loadConfig(configPath());
-  const profileName = resolveProfileName(config, profileFlag);
-  const session = await resolveSession(config, profileName, defaultKeyProvider());
-  return new ApiClient(session);
 }

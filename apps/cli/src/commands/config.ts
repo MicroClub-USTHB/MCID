@@ -20,7 +20,8 @@ export function registerConfigCommand(program: Command): void {
     .command('show')
     .description('Print a profile with secrets redacted')
     .option('--profile <name>', 'profile to show')
-    .action(async (options: { profile?: string }) => {
+    .option('--json', 'Output as JSON')
+    .action(async (options: { profile?: string; json?: boolean }) => {
       try {
         await configShow(options, defaultConfigDeps());
       } catch (err) {

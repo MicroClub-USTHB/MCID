@@ -123,3 +123,34 @@ describe('webhook watch', () => {
     expect(written()).toContain('Cy');
   });
 });
+
+describe('webhook list output formats', () => {
+  it('outputs CSV with quoted values and only selected rows', async () => {
+    const result = await runCli(['webhook', 'list', '-o', 'csv', '--limit', '1'], {
+      routes: baseRoutes({
+        'GET /admin/inbound-webhooks': () =>
+          json([
+            {
+              id: '1',
+              name: 'one, two',
+              slug: 'one',
+              projectId: 'p',
+              isActive: true,
+              submissionCount: 0,
+            },
+            {
+              id: '2',
+              name: 'other',
+              slug: 'other',
+              projectId: 'p',
+              isActive: true,
+              submissionCount: 0,
+            },
+          ]),
+      }),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('"one, two"');
+    expect(result.stdout).not.toContain('other');
+  });
+});

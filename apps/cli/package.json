@@ -44,6 +44,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:ci": "vitest run --coverage",
+    "test:bin": "node --test bin-smoke.mjs",
     "generate:api-types": "openapi-typescript ../api/openapi.json -o src/generated/api.d.ts",
     "clean": "rm -rf dist coverage",
     "prepublishOnly": "pnpm --dir ../.. exec turbo run lint typecheck test build --filter=mcid-cli"

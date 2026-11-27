@@ -1,6 +1,4 @@
 import { Command } from 'commander';
-import { configPath, loadConfig, resolveProfileName } from '../config.js';
-import { defaultKeyProvider } from '../crypto-store.js';
 import { CliError, ExitCode, exitWithError } from '../errors.js';
 import {
   normalizeSyncChanges,
@@ -8,9 +6,10 @@ import {
   normalizeSyncStatus,
   unwrapArray,
 } from '../lib/api-normalize.js';
-import { ApiClient } from '../lib/client.js';
+import { ApiClient, getClient } from '../lib/client.js';
 import {
   formatAge,
+  listOutputFormat,
   printJson,
   printQuiet,
   printSuccess,
@@ -20,7 +19,6 @@ import {
 import { type ListPaging, pageRows } from '../lib/help.js';
 import { resolveServer } from '../lib/resolver.js';
 import { colors } from '../lib/tui.js';
-import { resolveSession } from '../session.js';
 
 export function registerSyncCommand(program: Command): void {
   const syncCmd = program
@@ -254,6 +252,7 @@ export function registerSyncCommand(program: Command): void {
   syncCmd
     .command('logs')
     .description('View recent sync execution logs')
+    .option('-o, --output <format>', 'Output format (table|json|csv)', 'table')
     .option('--server <server>', 'Filter by server (defaults to main server)')
     .option('--profile <name>', 'Profile to use')
     .option('--json', 'Output as JSON')
@@ -268,9 +267,11 @@ export function registerSyncCommand(program: Command): void {
           profile?: string;
           json?: boolean;
           quiet?: boolean;
+          output?: string;
         } & ListPaging,
       ) => {
         try {
+          const format = listOutputFormat(options);
           const client = await getClient(options.profile);
           const resolved = await resolveServer(client, options.server);
           const raw = await client.get(
@@ -278,12 +279,26 @@ export function registerSyncCommand(program: Command): void {
           );
           const logs = pageRows(normalizeSyncLogs(raw), options);
 
-          if (options.json) {
+          if (format === 'json') {
             printJson(raw);
             return;
           }
-          if (options.quiet) {
+          if (format === 'quiet') {
             printQuiet(logs.map((l) => String(l['id'])));
+            return;
+          }
+          if (format === 'csv') {
+            process.stdout.write(
+              toCsv(logs as unknown as Record<string, unknown>[], [
+                'id',
+                'status',
+                'serverId',
+                'syncType',
+                'startedAt',
+                'membersSynced',
+                'rolesSynced',
+              ]),
+            );
             return;
           }
 
@@ -413,11 +428,4 @@ async function syncDeltas(
   } catch {
     return empty;
   }
-}
-
-async function getClient(profileFlag?: string): Promise<ApiClient> {
-  const config = await loadConfig(configPath());
-  const profileName = resolveProfileName(config, profileFlag);
-  const session = await resolveSession(config, profileName, defaultKeyProvider());
-  return new ApiClient(session);
 }
