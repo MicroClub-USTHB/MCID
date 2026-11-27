@@ -154,3 +154,53 @@ describe('webhook list output formats', () => {
     expect(result.stdout).not.toContain('other');
   });
 });
+
+describe('webhook submissions paging', () => {
+  const path = `/inbound-webhooks/${WEBHOOK_ID}/submissions`;
+  const submission = (id: number) => ({ id: String(id), receivedAt: '2026-11-01T00:00:00Z' });
+
+  it('asks the API for the requested page instead of slicing the first one', async () => {
+    const result = await runCli(
+      ['webhook', 'submissions', 'contact-form', '--limit', '2', '--page', '3', '-q'],
+      {
+        routes: baseRoutes({
+          [`GET ${path}`]: () => json({ submissions: [submission(5), submission(6)], total: 6 }),
+        }),
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    const get = result.requests.find((r) => r.path === path);
+    expect(get?.query).toMatchObject({ limit: '2', offset: '4' });
+    expect(result.stdout.trim().split('\n')).toEqual(['5', '6']);
+  });
+
+  it('follows the API pages to the end with --all', async () => {
+    const result = await runCli(['webhook', 'submissions', 'contact-form', '--all', '-q'], {
+      routes: baseRoutes({
+        [`GET ${path}`]: (url) => {
+          const offset = Number(url.searchParams.get('offset'));
+          const count = offset === 0 ? 200 : 1;
+          return json({
+            submissions: Array.from({ length: count }, (_, i) => submission(offset + i)),
+            total: 201,
+          });
+        },
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.requests.filter((r) => r.path === path).map((r) => r.query['offset'])).toEqual([
+      '0',
+      '200',
+    ]);
+    expect(result.stdout.trim().split('\n')).toHaveLength(201);
+  });
+
+  it('rejects a --limit above the API maximum before any request', async () => {
+    const result = await runCli(['webhook', 'submissions', 'contact-form', '--limit', '500']);
+    expect(result.exitCode).toBe(64);
+    expect(result.stderr).toContain('--limit must be at most 200');
+    expect(result.requests).toHaveLength(0);
+  });
+});

@@ -6,10 +6,11 @@ import { defaultKeyProvider, decrypt, webhookSecretContext } from '../crypto-sto
 import { CliError, ExitCode, exitWithError } from '../errors.js';
 import { unwrapArray } from '../lib/api-normalize.js';
 import { getClient } from '../lib/client.js';
-import { pageRows } from '../lib/help.js';
+import { positiveInt } from '../lib/help.js';
 import { signBody } from '../lib/signature.js';
 import {
   formatAge,
+  listOutputFormat,
   printJson,
   printKeyValue,
   printQuiet,
@@ -352,7 +353,7 @@ export function registerWebhookCommand(program: Command): void {
     cmd
       .option('--since <date>', 'Filter submissions since (ISO timestamp or 30m, 24h, 7d)')
       .option('--until <date>', 'Filter submissions until (ISO timestamp or 30m, 24h, 7d)')
-      .option('--limit <n>', 'Maximum submissions to return (default 30)', '30')
+      .option('--limit <n>', 'Rows per page, 1-200 (default 30)', '30')
       .option('--page <n>', 'Page number (default 1)')
       .option('--all', 'Show every submission')
       .option('-q, --quiet', 'Only print submission IDs')
@@ -376,26 +377,39 @@ export function registerWebhookCommand(program: Command): void {
     },
   ): Promise<void> => {
     try {
+      const outFormat = listOutputFormat(options);
+      // The API pages with limit (at most 200) and offset, so page there, not on one fetched page
+      const limit = positiveInt(options.limit, 30, '--limit', 200);
+      const page = positiveInt(options.page, 1, '--page');
       const client = await getClient(options.profile);
       const resolved = await resolveWebhook(client, webhookArg);
 
-      const params = new URLSearchParams({ limit: options.limit });
-      if (options.since) params.set('dateFrom', parseSince(options.since, '--since'));
-      if (options.until) params.set('dateTo', parseSince(options.until, '--until'));
+      const fetchPage = async (pageLimit: number, offset: number) => {
+        const params = new URLSearchParams({ limit: String(pageLimit), offset: String(offset) });
+        if (options.since) params.set('dateFrom', parseSince(options.since, '--since'));
+        if (options.until) params.set('dateTo', parseSince(options.until, '--until'));
+        const raw = await client.get(
+          `/inbound-webhooks/${resolved.id}/submissions?${params.toString()}`,
+        );
+        return unwrapArray<Record<string, unknown>>(raw, ['submissions', 'data']);
+      };
 
-      const raw = await client.get(
-        `/inbound-webhooks/${resolved.id}/submissions?${params.toString()}`,
-      );
-      const flattened = unwrapArray<Record<string, unknown>>(raw, ['submissions', 'data']).map(
-        flattenSubmission,
-      );
+      const submissions: Record<string, unknown>[] = [];
+      if (options.all) {
+        for (let offset = 0; ; offset += 200) {
+          const batch = await fetchPage(200, offset);
+          submissions.push(...batch);
+          if (batch.length < 200) break;
+        }
+      } else {
+        submissions.push(...(await fetchPage(limit, (page - 1) * limit)));
+      }
+      const rows = submissions.map(flattenSubmission);
 
-      const rows = pageRows(flattened, options);
-      if (options.quiet) {
+      if (outFormat === 'quiet') {
         printQuiet(rows.map((row) => String(row.id)));
         return;
       }
-      const outFormat = options.json ? 'json' : options.output || 'table';
       if (outFormat === 'json') {
         printJson(rows);
         return;
@@ -434,7 +448,7 @@ export function registerWebhookCommand(program: Command): void {
 
       printTable({
         columns: cols,
-        data: flattened,
+        data: rows,
       });
     } catch (err) {
       exitWithError('webhook submissions', err);
