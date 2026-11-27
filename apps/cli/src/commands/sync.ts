@@ -390,8 +390,10 @@ async function fetchSyncChanges(
   return changes;
 }
 
-/** "(+12, -3)" for the members a sync added and removed, or "" when the change log is unavailable. */
-/** Member and role deltas for the `--wait` summary (#230). */
+/**
+ * Member and role deltas for the `--wait` summary (#230).
+ * Returns empty strings when there is no sync log or the change log is unavailable.
+ */
 async function syncDeltas(
   client: ApiClient,
   syncLogId: string,

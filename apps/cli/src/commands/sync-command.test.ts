@@ -81,7 +81,7 @@ describe('sync run', () => {
         'POST /admin/sync/full': () => json({ syncLogId: '4242' }),
         'GET /admin/sync/logs/:syncLogId/changes': () =>
           json({
-            total: 4,
+            total: 5,
             changes: [
               { entityType: 'member', entityId: '1', action: 'added' },
               { entityType: 'member', entityId: '2', action: 'added' },
@@ -102,6 +102,48 @@ describe('sync run', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toMatch(/Synced .* 1204 members \(\+2, -1\), 58 roles \(\+1, -1\)/);
+  });
+
+  it('shows zero role deltas when the change log only contains member changes', async () => {
+    const result = await runCli(['sync', 'run', '--wait'], {
+      routes: baseRoutes({
+        'POST /admin/sync/full': () => json({ syncLogId: '4242' }),
+        'GET /admin/sync/logs/:syncLogId/changes': () =>
+          json({
+            total: 1,
+            changes: [{ entityType: 'member', entityId: '1', action: 'added' }],
+          }),
+        'GET /admin/sync/status': () =>
+          json({
+            serverId: MAIN_SERVER_ID,
+            status: 'success',
+            membersSynced: 1,
+            rolesSynced: 0,
+          }),
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toMatch(/1 members \(\+1, -0\), 0 roles \(\+0, -0\)/);
+  });
+
+  it('omits deltas when the change log is unavailable', async () => {
+    const result = await runCli(['sync', 'run', '--wait'], {
+      routes: baseRoutes({
+        'POST /admin/sync/full': () => json({ syncLogId: '4242' }),
+        'GET /admin/sync/status': () =>
+          json({
+            serverId: MAIN_SERVER_ID,
+            status: 'success',
+            membersSynced: 42,
+            rolesSynced: 3,
+          }),
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toMatch(/42 members, 3 roles/);
+    expect(result.stdout).not.toMatch(/members \(/);
   });
 
   it('exits non-zero when the sync itself fails under --wait', async () => {
