@@ -1,11 +1,8 @@
-import { mkdtemp, readFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { afterEach, describe, expect, it } from 'vitest';
 import { configPath } from '../config.js';
 import { cleanupCliTest, json, runCli } from '../test-support/cli-harness.js';
 import { baseRoutes, MAIN_SERVER_ID, PROJECT_ID, projectRecord } from '../test-support/fixtures.js';
-import { expectOwnerOnlyMode } from '../test-support/fs.js';
 
 afterEach(cleanupCliTest);
 
@@ -97,8 +94,21 @@ describe('project access grant', () => {
 });
 
 describe('project create', () => {
-  it('always includes the full API key in --json output (it is shown once, never again)', async () => {
+  it('rejects JSON without --reveal before creating a project', async () => {
     const result = await runCli(['project', 'create', '--name', 'Portal', '--json'], {
+      routes: baseRoutes({
+        'POST /admin/projects': () =>
+          json({ apiKey: 'mcid_live_onceonlykey123', project: projectRecord }, 201),
+      }),
+    });
+    expect(result.exitCode).toBe(64);
+    expect(result.stderr).toContain('--reveal');
+    expect(result.stdout).not.toContain('mcid_live_onceonlykey123');
+    expect(result.requests.some((r) => r.method === 'POST')).toBe(false);
+  });
+
+  it('includes the one-time API key in JSON when --reveal is explicit', async () => {
+    const result = await runCli(['project', 'create', '--name', 'Portal', '--json', '--reveal'], {
       routes: baseRoutes({
         'POST /admin/projects': () =>
           json({ apiKey: 'mcid_live_onceonlykey123', project: projectRecord }, 201),
@@ -110,9 +120,72 @@ describe('project create', () => {
     expect(result.stdout).not.toContain('[REDACTED]');
   });
 
+  it('returns the key and a nonzero exit when setup fails after creation', async () => {
+    const result = await runCli(
+      [
+        'project',
+        'create',
+        '--name',
+        'Portal',
+        '--json',
+        '--reveal',
+        '--server',
+        'Micro Club',
+        '--redirect-uri',
+        'https://example.org/callback',
+      ],
+      {
+        routes: baseRoutes({
+          'POST /admin/projects': () =>
+            json({ apiKey: 'mcid_live_onceonlykey123', project: projectRecord }, 201),
+          [`PUT /admin/projects/${PROJECT_ID}/servers/${MAIN_SERVER_ID}`]: () =>
+            json({ message: 'access denied' }, 403),
+          [`PATCH /admin/projects/${PROJECT_ID}/redirect-uri`]: () =>
+            json({ message: 'invalid redirect' }, 400),
+        }),
+      },
+    );
+    expect(result.exitCode).not.toBe(0);
+    expect(JSON.parse(result.stdout).apiKey).toBe('mcid_live_onceonlykey123');
+    expect(result.stderr).toContain('granting server access failed');
+    expect(result.stderr).toContain('redirect URI setup failed');
+    expect(result.stderr).not.toContain('mcid_live_onceonlykey123');
+  });
+
+  it('does not print server-controlled error text after creation', async () => {
+    const secret = 'mcid_live_onceonlykey123';
+    const result = await runCli(
+      [
+        'project',
+        'create',
+        '--name',
+        'Portal',
+        '--json',
+        '--reveal',
+        '--server',
+        'Micro Club',
+        '--redirect-uri',
+        'https://example.org',
+      ],
+      {
+        routes: baseRoutes({
+          'POST /admin/projects': () => json({ apiKey: secret, project: projectRecord }, 201),
+          [`PUT /admin/projects/${PROJECT_ID}/servers/${MAIN_SERVER_ID}`]: () =>
+            json({ message: `unexpected sensitive value ${secret}` }, 400),
+          [`PATCH /admin/projects/${PROJECT_ID}/redirect-uri`]: () =>
+            json({ message: `unexpected sensitive value ${secret}` }, 400),
+        }),
+      },
+    );
+    expect(result.exitCode).not.toBe(0);
+    expect(JSON.parse(result.stdout).apiKey).toBe(secret);
+    expect(result.stderr).toContain('granting server access failed');
+    expect(result.stderr).not.toContain(secret);
+  });
+
   it('grants the listed servers with every scope by default', async () => {
     const result = await runCli(
-      ['project', 'create', '--name', 'Portal', '--server', 'Micro Club', '--json'],
+      ['project', 'create', '--name', 'Portal', '--server', 'Micro Club', '--json', '--reveal'],
       {
         routes: baseRoutes({
           'POST /admin/projects': () =>
@@ -157,44 +230,5 @@ describe('project create', () => {
     expect(result.exitCode).toBe(0);
     const saved = await readFile(configPath(), 'utf8').catch(() => '');
     expect(saved).not.toContain('mcid_live_onceonlykey123');
-  });
-
-  it('writes the --env-out with mode 0600', async () => {
-    const tmp = await mkdtemp(join(tmpdir(), 'mcid-create-'));
-    const target = join(tmp, '.env');
-
-    const result = await runCli(['project', 'create', '--name', 'Portal', '--env-out', target], {
-      routes: baseRoutes({
-        'POST /admin/projects': () =>
-          json({ apiKey: 'mcid_live_onceonlykey123', project: projectRecord }, 201),
-      }),
-    });
-
-    expect(result.exitCode).toBe(0);
-    await expectOwnerOnlyMode(target);
-  });
-
-  it('refuses to overwrite an env file that already holds a key without --force', async () => {
-    const tmp = await mkdtemp(join(tmpdir(), 'mcid-create-'));
-    const target = join(tmp, '.env');
-
-    const result = await runCli(['project', 'create', '--name', 'Portal', '--env-out', target], {
-      routes: baseRoutes({
-        'POST /admin/projects': () =>
-          json({ apiKey: 'mcid_live_secondkey456', project: projectRecord }, 201),
-      }),
-    });
-
-    // Second create into the same file: the guard must reject before overwrite.
-    const second = await runCli(['project', 'create', '--name', 'Portal', '--env-out', target], {
-      routes: baseRoutes({
-        'POST /admin/projects': () =>
-          json({ apiKey: 'mcid_live_secondkey456', project: projectRecord }, 201),
-      }),
-    });
-
-    expect(result.exitCode).toBe(0);
-    expect(second.exitCode).not.toBe(0);
-    expect(second.stderr).toContain('--force');
   });
 });

@@ -3,10 +3,7 @@ import { access, writeFile } from 'node:fs/promises';
 import { CliError, ExitCode } from '../errors.js';
 import { colors } from './tui.js';
 
-/**
- * Writes an exported report owner-only (0600) and refuses to clobber an
- * existing file unless --force was passed.
- */
+/** Create reports privately; forced overwrites require a private regular file. */
 export async function writeExportFile(path: string, content: string, force = false): Promise<void> {
   if (!force) {
     try {
@@ -215,16 +212,20 @@ function maskSecrets(obj: unknown): void {
   }
   const rec = obj as Record<string, unknown>;
   for (const [k, v] of Object.entries(rec)) {
+    // Only credential-shaped names are secret. A bare `key` is a public
+    // identifier in the access catalog and permission DTOs, so it stays.
+    const name = k.toLowerCase().replace(/[_-]/g, '');
     if (
-      k.toLowerCase().includes('secret') ||
-      k.toLowerCase().includes('token') ||
-      k.toLowerCase() === 'key' ||
-      k.toLowerCase() === 'apikey' ||
-      k.toLowerCase() === 'api_key'
+      name === 'apikey' ||
+      name === 'accesstoken' ||
+      name === 'refreshtoken' ||
+      name === 'sessiontoken' ||
+      name === 'secret' ||
+      name === 'password' ||
+      name.endsWith('secret') ||
+      name.endsWith('token')
     ) {
-      if (typeof v === 'string' && v.length > 8) {
-        rec[k] = `${v.slice(0, 4)}...[REDACTED]`;
-      }
+      if (v !== null && v !== undefined) rec[k] = '[REDACTED]';
     } else if (typeof v === 'object' && v !== null) {
       maskSecrets(v);
     }

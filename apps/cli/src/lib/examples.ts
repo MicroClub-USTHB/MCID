@@ -294,8 +294,8 @@ export const COMMAND_EXAMPLES: Record<string, readonly string[]> = {
     'mcid-cli dev token validate $TOKEN --api-key $MCID_API_KEY',
   ],
   'dev token refresh': [
-    'mcid-cli dev token refresh $REFRESH_TOKEN --token $TOKEN',
-    'mcid-cli dev token refresh $REFRESH_TOKEN --token $TOKEN --json',
+    'mcid-cli dev token refresh $REFRESH_TOKEN --token $TOKEN --reveal',
+    'mcid-cli dev token refresh $REFRESH_TOKEN --token $TOKEN --json --reveal',
   ],
   'dev check': [
     'mcid-cli dev check @alice projects.read',
