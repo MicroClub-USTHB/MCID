@@ -36,6 +36,10 @@ function describeOperations(operations: AccessOperations | null): string {
   return active.length > 0 ? active.join(', ') : 'no operations';
 }
 
+function describeActor(entry: AccessAuditEntry): string {
+  return entry.changedByUsername ? `@${entry.changedByUsername}` : entry.changedBy;
+}
+
 function formatTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -92,7 +96,7 @@ function AccessAuditLog({ projectId, entries, isLoading }: AccessAuditLogProps) 
               Server <code className="font-mono text-xs">{entry.serverId}</code>
             </p>
             <p className="paragraph-xs font-semibold tracking-wide text-muted-foreground">
-              by {entry.changedBy} · {describeOperations(entry.operationsBefore)} →{' '}
+              by {describeActor(entry)} · {describeOperations(entry.operationsBefore)} →{' '}
               {describeOperations(entry.operationsAfter)}
             </p>
           </div>

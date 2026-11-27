@@ -53,10 +53,43 @@ describe('ProjectsController', () => {
       project: { id: 'p1' },
     });
     const dto = { name: 'Test Project' } as any;
-    const req = { user: { id: 'admin-1' } } as any;
+    const req = { memberId: 'admin-1' } as any;
     const result = await controller.create(dto, req);
     expect(mockProjectsService.create).toHaveBeenCalledWith(dto, 'admin-1');
     expect(result).toMatchObject({ project: { id: 'p1' } });
+  });
+
+  // AdminAccessGuard puts the admin on req.memberId; the audit actor must
+  // come from there, never from a fallback.
+  it('setProjectServerAccess records the admin from req.memberId', async () => {
+    mockProjectsService.grantAccess.mockResolvedValue({});
+    const dto = { operations: { READ: true } } as any;
+    await controller.setProjectServerAccess('p1', 's1', dto, {
+      memberId: 'member-42',
+    } as any);
+    expect(mockProjectsService.grantAccess).toHaveBeenCalledWith(
+      expect.objectContaining({ changedBy: 'member-42' }),
+    );
+  });
+
+  it('revokeProjectServerAccess records the admin from req.memberId', async () => {
+    mockProjectsService.revokeAccess.mockResolvedValue({});
+    await controller.revokeProjectServerAccess('p1', 's1', {
+      memberId: 'member-42',
+    } as any);
+    expect(mockProjectsService.revokeAccess).toHaveBeenCalledWith({
+      projectId: 'p1',
+      serverId: 's1',
+      changedBy: 'member-42',
+    });
+  });
+
+  it('falls back to dev-admin in development when no member is set', async () => {
+    mockProjectsService.revokeAccess.mockResolvedValue({});
+    await controller.revokeProjectServerAccess('p1', 's1', {} as any);
+    expect(mockProjectsService.revokeAccess).toHaveBeenCalledWith(
+      expect.objectContaining({ changedBy: 'dev-admin' }),
+    );
   });
 
   it('findAll returns list from service', async () => {

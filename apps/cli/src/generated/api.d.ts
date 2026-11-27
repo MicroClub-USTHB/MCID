@@ -54,7 +54,7 @@ export interface paths {
         };
         /**
          * Explain a member's effective access
-         * @description The member's name, the resolved level per resource and where it comes from: root, an override, or the role that supplied it.
+         * @description The member's name, the resolved level per resource and where it comes from: root, an override, or the role that supplied it. An override source also carries `setBy` (`memberId` and `username` of the admin who last set it, or null) and `setAt` (ISO time). One PUT replaces all of a member's overrides, so they share the author and time of the last PUT.
          */
         get: operations["AdminAccessController_getMemberEffective"];
         put?: never;

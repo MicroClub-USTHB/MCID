@@ -802,11 +802,17 @@ describeIf('/api/admin/projects (e2e)', () => {
         });
 
       const res = await request(app.getHttpServer())
-        .get(`${BASE}/access/audit`)
+        .get(`${BASE}/access/audit?projectId=${projectId}`)
         .set('Authorization', auth())
         .expect(200);
 
       expect(Array.isArray(res.body)).toBe(true);
+      expect(res.body.length).toBeGreaterThan(0);
+      // Every entry names the logged-in admin, not a placeholder
+      for (const entry of res.body) {
+        expect(entry.changedBy).toBe(adminCtx.memberId);
+        expect(entry.changedByUsername).toBe('testadmin');
+      }
     });
 
     it('respects the limit query param', async () => {

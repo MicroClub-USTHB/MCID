@@ -435,7 +435,9 @@ export function normalizeProjectAccessLogs(response: unknown): NormalizedProject
     id: String(log['id'] ?? ''),
     timestamp: String(log['changedAt'] ?? log['createdAt'] ?? ''),
     action: String(log['action'] ?? ''),
-    actor: String(log['changedBy'] ?? log['actor'] ?? 'unknown'),
+    actor: log['changedByUsername']
+      ? `@${String(log['changedByUsername'])}`
+      : String(log['changedBy'] ?? log['actor'] ?? 'unknown'),
     projectId: String(log['projectId'] ?? ''),
     serverId: String(log['serverId'] ?? ''),
   }));

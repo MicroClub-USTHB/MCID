@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `access explain` names who set an override and when (`override set by @alice 2d ago`). It needs an API that returns `setBy` and `setAt` on override sources; an older API still shows `override`.
+- `access roles` prints a role by resource grid, with a column for each resource that some role grants. `--json` is unchanged.
+
+### Fixed
+
+- `access roles` no longer says that no role has a grant when a root role is listed. It now says that no non-root role has one, and that root roles hold `manage` on every resource.
+
 ## [1.1.0] - 2026-11-26
 
 ### Added

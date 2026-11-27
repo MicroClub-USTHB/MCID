@@ -16,6 +16,7 @@ describe('AdminAccessGrantsService', () => {
     findMemberOverrides: jest.fn(),
     memberExists: jest.fn(),
     findMemberProfile: jest.fn(),
+    findMemberOverrideAuthors: jest.fn(),
     listOverrideRows: jest.fn(),
     replaceRoleGrants: jest.fn(),
     replaceMemberOverrides: jest.fn(),
@@ -301,6 +302,77 @@ describe('AdminAccessGrantsService', () => {
         avatar: 'https://cdn.example/ada.png',
         ...resolved,
       });
+      // No override, so no extra query
+      expect(repo.findMemberOverrideAuthors).not.toHaveBeenCalled();
+    });
+
+    it('adds who set each override and when to its source', async () => {
+      access.getEffectiveAccess.mockResolvedValue({
+        root: false,
+        access: {
+          settings: { level: 'none', source: { type: 'override' } },
+          members: { level: 'read', source: { type: 'role', roleId: 'r1' } },
+        },
+      });
+      repo.findMemberOverrideAuthors.mockResolvedValue([
+        {
+          resource: 'settings',
+          setAt: new Date('2026-11-25T10:00:00.000Z'),
+          setById: 'admin-1',
+          setByUsername: 'alice',
+        },
+      ]);
+
+      const result = await service.getMemberEffective('member-9');
+
+      expect(result.access).toEqual({
+        settings: {
+          level: 'none',
+          source: {
+            type: 'override',
+            setBy: { memberId: 'admin-1', username: 'alice' },
+            setAt: '2026-11-25T10:00:00.000Z',
+          },
+        },
+        members: { level: 'read', source: { type: 'role', roleId: 'r1' } },
+      });
+    });
+
+    it('reports setBy as null for an override written without an author', async () => {
+      access.getEffectiveAccess.mockResolvedValue({
+        root: false,
+        access: { settings: { level: 'read', source: { type: 'override' } } },
+      });
+      repo.findMemberOverrideAuthors.mockResolvedValue([
+        {
+          resource: 'settings',
+          setAt: new Date('2026-11-25T10:00:00.000Z'),
+          setById: null,
+          setByUsername: null,
+        },
+      ]);
+
+      const result = await service.getMemberEffective('member-9');
+
+      expect(result.access).toEqual({
+        settings: {
+          level: 'read',
+          source: {
+            type: 'override',
+            setBy: null,
+            setAt: '2026-11-25T10:00:00.000Z',
+          },
+        },
+      });
+    });
+
+    it('skips the author lookup for a root member, whose overrides do not apply', async () => {
+      access.getEffectiveAccess.mockResolvedValue({
+        root: true,
+        access: { settings: { level: 'manage', source: { type: 'root' } } },
+      });
+      await service.getMemberEffective('member-9');
+      expect(repo.findMemberOverrideAuthors).not.toHaveBeenCalled();
     });
 
     it('returns 404 for an unknown member', async () => {
