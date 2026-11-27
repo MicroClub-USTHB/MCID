@@ -472,6 +472,20 @@ describe('API response contracts', () => {
         serverId: '990000000000100002',
       },
     ]);
+
+    expect(
+      normalizeProjectAccessLogs([
+        {
+          id: 4,
+          projectId: '41981730-d090-476c-8f8f-b908a05c2028',
+          serverId: '990000000000100002',
+          action: 'GRANT',
+          changedBy: '800000000000000001',
+          changedByUsername: 'testadmin',
+          changedAt: '2026-11-27T10:00:00.000Z',
+        },
+      ])[0]?.actor,
+    ).toBe('@testadmin');
   });
 
   it('reads the created-project envelope and revoked key state', () => {
