@@ -13,7 +13,7 @@ MCID is one repository managed with pnpm 10 workspaces and Turborepo, for Node 2
 | --- | --- | --- |
 | `apps/api` | `@mcid/api` | The NestJS 11 API. It uses Drizzle ORM with PostgreSQL, Redis, and a discord.js bot. It is built as CommonJS and shipped as a Docker image. |
 | `apps/web` | `@mcid/web` | The Next.js 16 admin panel, and these docs. It is deployed on Vercel. |
-| `apps/cli` | `mcid-cli` | The MCID command-line client for admins. It covers inbound webhooks for now. It is ESM, bundled with tsup. |
+| `apps/cli` | `mcid-cli` | The official MCID command-line client for administrators. It supports Discord authentication, project and API key management, server and member operations, role and access control, synchronization, audit and operational tools, developer utilities, and inbound webhooks. It is an ESM application bundled with tsup. |
 | `packages/form-schema` | `@mcid/form-schema` | The inbound webhook schema language: its types, the schema validator and the condition evaluator. The API and the CLI both use it, so the CLI checks a schema with the exact rules the API enforces. |
 | `packages/contracts` | `@mcid/contracts` | Types and constants shared by the API and the web app. See [Shared contracts](/docs/build/contracts). |
 | `packages/typescript-config` | `@mcid/typescript-config` | TypeScript presets the apps extend. |
